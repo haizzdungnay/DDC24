@@ -67,7 +67,7 @@ export interface SimulationController {
     sourceDraftRevisionId: string
     sourceContentSha256: string
   }) => Promise<void>
-  act: (action: SimulationAction, speed?: number) => Promise<void>
+  act: (action: SimulationAction, speed?: number, baseTickMs?: number) => Promise<void>
   setInput: (descriptor: SimulationInputDescriptor, raw: string) => Promise<void>
   stop: () => Promise<void>
   stopActive: () => Promise<void>
@@ -162,13 +162,14 @@ export function useSimulation(): SimulationController {
   }, [client])
 
   const act = useCallback<SimulationController['act']>(
-    async (action, speed) => {
+    async (action, speed, baseTickMs) => {
       const session = currentSession(sliceRef.current)
       if (!session) return
       setSlice((current) => ({ ...current, pending: action, lastDenial: null }))
       try {
         const body: Record<string, unknown> = { schemaVersion: '1.0', action }
         if (action === 'SET_SPEED' && typeof speed === 'number') body.speed = speed
+        if (action === 'SET_BASE_TICK' && typeof baseTickMs === 'number') body.baseTickMs = baseTickMs
         const readBack = await client.request<SimulationSessionView>('actProgrammingSimulationSession', {
           path: { sessionId: session.sessionId },
           body,

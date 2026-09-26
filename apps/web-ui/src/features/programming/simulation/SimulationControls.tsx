@@ -33,7 +33,7 @@ export function SimulationControls({
 }: {
   slice: SimulationSlice
   canControl: boolean
-  onAction: (action: SimulationAction, speed?: number) => void
+  onAction: (action: SimulationAction, speed?: number, baseTickMs?: number) => void
   onStop: () => void
   onStopActive?: () => void
   onStart?: () => void
@@ -83,10 +83,22 @@ export function SimulationControls({
               {pick('Thời gian ảo', 'Virtual time')}{' '}
               <span className="font-mono">{formatVirtualTime(slice.frame !== null ? slice.frame.virtualTimeMs : session.virtualTimeMs)}</span>
             </span>
-            <span className="text-[var(--c-text-dim)]">
-              {pick('Nhịp cơ sở', 'Base tick')}{' '}
-              <span className="font-mono">{session.baseTickMs === null ? '—' : `${session.baseTickMs} ms`}</span>
-            </span>
+            <label className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
+              <span>{pick('Chu kỳ', 'Base tick')}</span>
+              <select
+                value={session.baseTickMs ?? 10}
+                disabled={!canControl}
+                onChange={(e) => onAction('SET_BASE_TICK', undefined, Number(e.target.value))}
+                aria-label={pick('Chu kỳ mô phỏng', 'Simulation base tick')}
+                className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--c-text)] disabled:opacity-50"
+              >
+                {[10, 50, 100, 500, 1000, 5000].map((tick) => (
+                  <option key={tick} value={tick}>
+                    {tick >= 1000 ? (tick / 1000) + ' s' : tick + ' ms'}
+                  </option>
+                ))}
+              </select>
+            </label>
             <span className="text-[var(--c-text-dim)]">
               {pick('Tốc độ', 'Speed')} <span className="font-mono">{session.speed}×</span>
             </span>

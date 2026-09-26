@@ -36,7 +36,7 @@ const (
 // materialize bằng resource riêng (PUT input, DELETE session) để có identity và
 // idempotency rõ ràng, nên chúng KHÔNG được nhận qua endpoint action.
 var simulationActionEndpointAllowed = map[string]struct{}{
-	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {},
+	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {}, "SET_BASE_TICK": {},
 }
 
 var simulationSpeeds = map[int64]struct{}{
@@ -97,6 +97,7 @@ type SimulationService struct {
 	// RANH GIỚI giữa hai tick, không phải cắt ngang một tick đang chạy.
 	runLoops     map[string]chan struct{}
 	activeSpeed  map[string]int64
+	activeTickMs map[string]int64
 	latestFrames map[string]simworker.Frame
 }
 
@@ -123,6 +124,7 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 		actionWindow: make(map[string][]time.Time),
 		runLoops:     make(map[string]chan struct{}),
 		activeSpeed:  make(map[string]int64),
+		activeTickMs: make(map[string]int64),
 		latestFrames: make(map[string]simworker.Frame),
 	}
 }
@@ -290,7 +292,26 @@ func (s *SimulationService) enrichView(view SimulationSessionView) SimulationSes
 	if spd, ok := s.activeSpeed[view.SessionID]; ok {
 		view.Speed = spd
 	}
+	if tick, ok := s.activeTickMs[view.SessionID]; ok {
+		view.BaseTickMS = &tick
+	}
 	return view
+}
+
+func (s *SimulationService) getSpeed(sessionID string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if spd, ok := s.activeSpeed[sessionID]; ok && spd > 0 {
+		return spd
+	}
+	return 1
+}
+
+func (s *SimulationService) getTick(sessionID string) (int64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tick, ok := s.activeTickMs[sessionID]
+	return tick, ok
 }
 
 func (s *SimulationService) requireSimulationControl(role string) *domain.PublicError {
@@ -362,6 +383,7 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 	if found {
 		delete(s.runLoops, sessionID)
 		delete(s.activeSpeed, sessionID)
+		delete(s.activeTickMs, sessionID)
 		delete(s.latestFrames, sessionID)
 	}
 	s.mu.Unlock()
@@ -380,6 +402,9 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 // timer, không đổi thứ tự — nên cùng một chuỗi input cho cùng một kết quả ở
 // 1×, 10× và 60×.
 func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int64) {
+	if customTick, ok := s.getTick(sessionID); ok && customTick > 0 {
+		baseTickMS = customTick
+	}
 	if baseTickMS <= 0 {
 		return
 	}
@@ -820,7 +845,11 @@ func (s *SimulationService) mutableSession(ctx context.Context, request Simulati
 
 // Action thực hiện một hành động điều khiển phiên.
 func (s *SimulationService) Action(ctx context.Context, request SimulationRequest, sessionID, action string,
-	speed int64) (SimulationSessionView, *domain.PublicError) {
+	speed int64, baseTickMs ...int64) (SimulationSessionView, *domain.PublicError) {
+	var customTick int64
+	if len(baseTickMs) > 0 {
+		customTick = baseTickMs[0]
+	}
 
 	if _, allowed := simulationActionEndpointAllowed[action]; !allowed {
 		public := domain.NewPublicError(domain.ErrRequest)
@@ -858,9 +887,20 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 			public.Field = "speed"
 			return SimulationSessionView{}, &public
 		}
-		// Speed CHỈ đổi nhịp treo tường. Nó không gửi lệnh nào cho worker, nên
-		// không thể đổi thứ tự, bỏ tick hay đổi hash đầu ra.
-		next.Speed = speed
+		s.mu.Lock()
+		s.activeSpeed[session.SessionID] = speed
+		s.mu.Unlock()
+		next.Speed = mapDbSpeed(speed)
+	case "SET_BASE_TICK":
+		if customTick <= 0 {
+			customTick = 10
+		}
+		s.mu.Lock()
+		s.activeTickMs[session.SessionID] = customTick
+		s.mu.Unlock()
+		if session.State == programmingstore.SimStateRunning {
+			s.startRunLoop(session.SessionID, customTick, s.getSpeed(session.SessionID))
+		}
 	case "STEP_CYCLE":
 		frame, err := client.Step(ctx)
 		if err != nil {
@@ -899,7 +939,7 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 
 	view := simulationView(updated)
 	view.SimulationInputs = manifest.SimulationInputs
-	return view, nil
+	return s.enrichView(view), nil
 }
 
 // SetInput ghi một virtual input đã qua allowlist của manifest.
