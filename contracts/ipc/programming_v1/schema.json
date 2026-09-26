@@ -179,6 +179,108 @@
         }
       ]
     },
+    "activateProgramIntent": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "ADR-062 — intent Enable/Disable ĐÃ LƯU của một Program, web chụp từ `program_runtime_intents` lúc kích hoạt. Không phải lệnh vận hành mới và không tạo audit PROGRAM_ENABLE.",
+      "prefixItems": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "instanceId"
+        },
+        {
+          "type": "boolean",
+          "title": "desiredEnabled"
+        }
+      ]
+    },
+    "activatePayload": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 5,
+      "description": "Payload ACTIVATE. Phần tử thứ năm `programIntents` là tuỳ chọn (ADR-062): vắng mặt thì Core dùng luật T59-305/405 cũ. Web chỉ gửi nó khi CAPABILITIES công bố `ACTIVATE_PROGRAM_INTENTS`.",
+      "prefixItems": [
+        {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128,
+          "title": "expectedActiveRevisionId"
+        },
+        {
+          "type": "string",
+          "maxLength": 128,
+          "title": "stagedToken"
+        },
+        {
+          "type": "string",
+          "const": "PROGRAM_ONLY",
+          "title": "cutover"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "planHash"
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/activateProgramIntent"
+          },
+          "title": "programIntents"
+        }
+      ]
+    },
+    "capabilitiesPayload": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 5,
+      "description": "Payload response CAPABILITIES. Phần tử thứ năm `features` (ADR-062) là danh sách tính năng Core hỗ trợ; Core cũ trả 4 phần tử và phải được đọc là không có tính năng nào.",
+      "prefixItems": [
+        {
+          "type": "string",
+          "const": "MK-DDC-24-REV-A",
+          "title": "profile"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "title": "maxFrameBytes"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "title": "maxQueueDepth"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": "allowedPeriodMs"
+        },
+        {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ACTIVATE_PROGRAM_INTENTS"
+            ]
+          },
+          "title": "features"
+        }
+      ]
+    },
     "request": {
       "type": "array",
       "minItems": 12,
@@ -347,6 +449,12 @@
     }
   },
   "x-mkddc-action-payloads": {
+    "CAPABILITIES": {
+      "responsePayload": {
+        "$ref": "#/$defs/capabilitiesPayload"
+      },
+      "backwardCompatibleReader": "Web đọc phần tử thứ năm nếu có; 4 phần tử, lỗi IPC hoặc payload không đọc được đều nghĩa là Core KHÔNG có tính năng nào, và web phải gửi ACTIVATE 4 phần tử."
+    },
     "STATUS": {
       "sinceProtocolMinor": 3,
       "responsePayload": {
@@ -359,6 +467,15 @@
       "responsePayload": {
         "$ref": "#/$defs/runtimeStatusPayloadV3"
       }
+    },
+    "ACTIVATE": {
+      "requestPayload": {
+        "$ref": "#/$defs/activatePayload"
+      },
+      "featureGate": "ACTIVATE_PROGRAM_INTENTS",
+      "decision": "ADR-062",
+      "coreSemantics": "Core áp `programIntents` lên shadow sau COMMIT_INTENT và trước arm: false → Disabled; true → Enabled theo thứ tự gói trong trần maxProgramsEnabled, phần vượt trần giữ Disabled và không chặn kích hoạt; Program không có phần tử giữ luật T59-305/405; instance không có trong gói bị bỏ qua; sai kiểu, quá 32, id sai định dạng hoặc trùng → REJECTED/IPC-PAYLOAD trước mọi thay đổi.",
+      "backwardCompatibleReader": "Core mới nhận cả 4 và 5 phần tử. Core cũ chỉ nhận 4 phần tử, nên web không bao giờ gửi 5 phần tử khi CAPABILITIES không công bố tính năng. protocolMinor giữ nguyên vì web cũ từ chối response có minor cao hơn."
     }
   },
   "x-mkddc-actions": {

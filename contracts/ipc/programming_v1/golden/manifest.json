@@ -2,7 +2,7 @@
   "protocolMajor": 1,
   "protocolMinor": 4,
   "schemaVersion": "1.0",
-  "schemaSha256": "297be2e13b2df01d9d0290cec89d9c3ecec845b198a0cbd7317f1adc38b17496",
+  "schemaSha256": "e0ee7e447019857ff434c8a55c6ad0f83d0e7c50568f0b0631141fcf74a7c08d",
   "files": {
     "request_capabilities.hex": {
       "sha256": "42c2be1b67b6d6cf54119acc88f9e4d64552d73c7e9b79df8ff0b01d998df22c",
@@ -15,6 +15,10 @@
     "request_unknown_major.hex": {
       "sha256": "0d206eb7ce7faedb7890a1cffaa4d4fe9a56af6cd265aa2560b3280809de1783",
       "description": "Negative fixture: major=2, phải reject"
+    },
+    "request_activate_program_intents.hex": {
+      "sha256": "b13b3fa2c4b583dfde94a7be2414729593c7891a8a95f404e99e297d85304c92",
+      "description": "Request ACTIVATE 5 phần tử mang programIntents (ADR-062): P_ahu Enable, P_boiler Disable. Go sinh, Core C++ phải nhận và áp đúng"
     }
   }
 }
