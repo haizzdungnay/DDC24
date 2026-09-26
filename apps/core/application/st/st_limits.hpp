@@ -110,6 +110,13 @@ struct RevAProfileError {
     std::string constraint;
 };
 
+/* ADR-061 4.5 — dải freshness của Published Signal, ms. Dải cũ 1000..90000 ms
+ * không chứa được publisher 10..500 ms (freshness hợp lý của nó dưới 1 s) lẫn
+ * publisher 50 000 ms (freshness hợp lý của nó trên 90 s). Một nguồn duy nhất
+ * cho runtime bus, writer và loader package. Ràng buộc "freshness >= chu kỳ
+ * publisher" là luật Check phía API. */
+constexpr uint32_t kMinSignalFreshnessMs = 10u;
+constexpr uint32_t kMaxSignalFreshnessMs = 150000u;
 
 /* ADR-061 C1 — chu kỳ được phép TẠO MỚI: đúng tập `allowedPeriodMs` của profile
  * đang build. Mọi đường cấu hình Task/Program mới (add_task, writer package,

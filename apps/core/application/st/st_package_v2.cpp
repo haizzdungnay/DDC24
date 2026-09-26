@@ -264,8 +264,11 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
             return fail(error, "signal '" + signal.name + "' trỏ publisher không có trong PROGRAM_TABLE");
         if (!valid_signal_type(signal.data_type))
             return fail(error, "signal '" + signal.name + "' có dataType không hợp lệ");
-        if (signal.freshness_ms < 1000u || signal.freshness_ms > 90000u)
-            return fail(error, "signal '" + signal.name + "' có freshness ngoài dải 1000..90000 ms");
+        if (signal.freshness_ms < st_limits::kMinSignalFreshnessMs ||
+            signal.freshness_ms > st_limits::kMaxSignalFreshnessMs)
+            return fail(error, "signal '" + signal.name + "' có freshness ngoài dải " +
+                                   std::to_string(st_limits::kMinSignalFreshnessMs) + ".." +
+                                   std::to_string(st_limits::kMaxSignalFreshnessMs) + " ms");
         if (signal.stale_policy > 2u ||
             (signal.stale_policy == 1u) != signal.has_fallback ||
             !valid_fallback_bits(signal.data_type, signal.fallback_bits,
@@ -860,7 +863,8 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 const uint64_t fallback_bits = read_u64(payload, cursor + 6);
                 const bool has_fallback = stale_policy == 1u;
                 if (!valid_signal_identifier(name) || !valid_signal_type(data_type) ||
-                    freshness_ms < 1000u || freshness_ms > 90000u ||
+                    freshness_ms < st_limits::kMinSignalFreshnessMs ||
+                    freshness_ms > st_limits::kMaxSignalFreshnessMs ||
                     stale_policy > 2u ||
                     !valid_fallback_bits(data_type, fallback_bits, has_fallback))
                     return reject(error_code, st_pkg_error::kBadRecord);
