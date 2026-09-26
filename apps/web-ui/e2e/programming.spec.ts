@@ -89,6 +89,29 @@ interface MockState {
   }
 }
 
+/**
+ * Khung quan sát tất định của phiên mô phỏng mock — MỘT nguồn cho cả
+ * `GET …/observations` lẫn luồng `…/ws/simulation`, để hai đường đọc không thể
+ * nói hai câu khác nhau về cùng một nhịp.
+ */
+function simulationObservationFrame(simulation: NonNullable<MockState['simulation']>) {
+  const session = simulation.session
+  return {
+    virtualTimeMs: session?.virtualTimeMs ?? 0,
+    snapshotSequence: session?.tick ?? 0,
+    resetEpoch: 0,
+    observations: session === null || session.tick === 0 ? [] : [
+      { observationId: 'AHU.Setpoint', programId: PROGRAM_ID, variable: 'Setpoint',
+        kind: 'INPUT', dataType: 'REAL', quality: 'GOOD', value: 22.5 },
+      { observationId: 'AHU.FanCommand', programId: PROGRAM_ID, variable: 'FanCommand',
+        kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
+      /* Một ô CHƯA tính được. Nó phải hiện `—`, không bao giờ `0`. */
+      { observationId: 'AHU.HeatDemand', programId: PROGRAM_ID, variable: 'HeatDemand',
+        kind: 'OUTPUT', dataType: 'REAL', quality: 'UNAVAILABLE', value: null },
+    ],
+  }
+}
+
 interface BrowserFailures {
   consoleErrors: string[]
   pageErrors: string[]
@@ -249,6 +272,52 @@ function draftWithFbdProblem() {
   return draft
 }
 
+/**
+ * Một POU FBD RỘNG hơn nhiều lần khung nhìn: `count` khối AND không nối dây và
+ * KHÔNG có toạ độ lưu, nên `autoPositions` dựng mỗi khối một cột (bước
+ * `FBD_COLUMN_GAP` = 220 px) — 25 khối là một hàng rộng ~5 900 px.
+ *
+ * `TC-FBD-NAV-001` từng tự soạn 25 khối bằng phím Insert và dựa vào đúng hình
+ * dạng này. Từ `99f4ae8f` khối mới đặt ở tâm khung nhìn (có chủ đích, unit
+ * `StructuredFbdEditor.test.tsx` khoá), nên 25 lần Insert cho một cụm gọn
+ * quanh tâm chứ không còn là một hàng dài: sơ đồ chỉ rộng ~1,25 khung nhìn, và
+ * bấm ở 30% Mini Map đúng ra KHÔNG cần cuộn. Phép đo điều hướng cần một sơ đồ
+ * rộng xác định, không phụ thuộc chính sách đặt khối.
+ */
+function draftWithWideFbd(count = 25) {
+  const draft = initialDraft()
+  const document = structuredClone(GOLDEN_FBD)
+  const id = (prefix: string, index: number) => `${prefix}-0000-4000-8000-${String(index).padStart(12, '0')}`
+  document.networks = [{
+    ...document.networks[0],
+    wires: [],
+    nodes: Array.from({ length: count }, (_, index) => ({
+      id: id('31000000', index),
+      kind: 'FUNCTION' as const,
+      typeRef: 'AND',
+      executionOrder: index,
+      parameters: {},
+      ports: [
+        { id: id('41000000', index * 3), name: 'IN1', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+        { id: id('41000000', index * 3 + 1), name: 'IN2', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 1 },
+        { id: id('41000000', index * 3 + 2), name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+      ],
+    })),
+  }]
+  draft.programs.push({
+    objectId: POU_OBJECT_ID,
+    programId: PROGRAM_ID,
+    name: 'FBD_WIDE',
+    kind: 'PROGRAM',
+    language: 'FBD',
+    document: JSON.stringify(document),
+    executionOrder: 0,
+    functionalTags: [],
+  })
+  draft.task.programOrder = [PROGRAM_ID]
+  return draft
+}
+
 function draftETag(state: MockState): string {
   return `"33333333-3333-4333-8333-333333333333:${state.etagGeneration}"`
 }
@@ -267,6 +336,30 @@ async function installProgrammingMocks(page: Page, state: MockState) {
   // nghĩa cho các lỗi P5 thật.
   await page.routeWebSocket('**/api/v1/ws/monitor', (ws) => {
     ws.onMessage(() => undefined)
+  })
+  /* `73674477` thêm luồng quan sát mô phỏng qua WebSocket (`GET
+     /api/v1/ws/simulation`, `apps/web-api/internal/app/ws_simulation.go`); khi
+     nó mở được, FE thôi poll `…/observations`. Không mock thì bắt tay WS thật
+     tới preview thất bại và in lỗi console — đúng lý do đã mock `/ws/monitor`.
+     Mock bám hành vi server: cứ 40 ms đọc khung, chỉ đẩy `op: "frame"` khi
+     khung có quan sát VÀ `snapshotSequence`/`virtualTimeMs` đổi. */
+  // Regex, không phải glob: URL mang `?sessionId=…`, và glob `**/…/simulation`
+  // không khớp phần query nên bắt tay rơi thẳng xuống preview.
+  await page.routeWebSocket(/\/api\/v1\/ws\/simulation(?:\?|$)/, (ws) => {
+    ws.onMessage(() => undefined)
+    let lastSequence = -1
+    let lastVirtualTime = -1
+    const timer = setInterval(() => {
+      const simulation = state.simulation
+      if (!simulation?.supported) return
+      const frame = simulationObservationFrame(simulation)
+      if (frame.observations.length === 0) return
+      if (frame.snapshotSequence === lastSequence && frame.virtualTimeMs === lastVirtualTime) return
+      lastSequence = frame.snapshotSequence
+      lastVirtualTime = frame.virtualTimeMs
+      ws.send(JSON.stringify({ op: 'frame', sessionId: SIM_SESSION_ID, ...frame }))
+    }, 40)
+    ws.onClose(() => clearInterval(timer))
   })
   await page.route('**/api/v1/programming/**', async (route) => {
     const request = route.request()
@@ -427,21 +520,7 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         return json(route, view(), 201)
       }
       if (method === 'GET' && path.endsWith('/observations')) {
-        const session = simulation.session
-        return json(route, {
-          virtualTimeMs: session?.virtualTimeMs ?? 0,
-          snapshotSequence: session?.tick ?? 0,
-          resetEpoch: 0,
-          observations: session === null || session.tick === 0 ? [] : [
-            { observationId: 'AHU.Setpoint', programId: PROGRAM_ID, variable: 'Setpoint',
-              kind: 'INPUT', dataType: 'REAL', quality: 'GOOD', value: 22.5 },
-            { observationId: 'AHU.FanCommand', programId: PROGRAM_ID, variable: 'FanCommand',
-              kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
-            /* Một ô CHƯA tính được. Nó phải hiện `—`, không bao giờ `0`. */
-            { observationId: 'AHU.HeatDemand', programId: PROGRAM_ID, variable: 'HeatDemand',
-              kind: 'OUTPUT', dataType: 'REAL', quality: 'UNAVAILABLE', value: null },
-          ],
-        })
+        return json(route, simulationObservationFrame(simulation))
       }
       if (method === 'POST' && path.endsWith('/actions')) {
         const session = simulation.session
@@ -925,6 +1004,14 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.keyboard.press('Enter')
     await page.getByRole('menuitem', { name: 'Program · ST' }).focus()
     await page.keyboard.press('Enter')
+    /* `af6becd3` thêm hộp thoại đặt tên trước khi tạo POU (và sửa `createPou`
+       theo), nhưng bỏ sót nhánh bàn phím này. Hộp thoại đặt tiêu điểm sẵn vào
+       ô `Tên POU` và Enter gửi form — nên đường bàn phím vẫn trọn vẹn: gõ tên
+       rồi Enter, không cần chuột. */
+    const pouNameInput = page.getByLabel('Tên POU')
+    await expect(pouNameInput).toBeFocused()
+    await page.keyboard.type('NewProgram')
+    await page.keyboard.press('Enter')
     await expect(page.getByRole('heading', { name: 'NewProgram' })).toBeVisible()
     const sourceBox = page.getByLabel(/Mã nguồn ST/)
     await sourceBox.fill('AO1 := UI1 * 2.0;')
@@ -937,12 +1024,14 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await sourceBox.fill('AO1 := UI1 * 2.0; (* dở dang *)')
     await expect(page.getByRole('tablist', { name: /Tab workspace Thiết kế/ })).toHaveCount(0)
     await expect(page.getByTestId('draft-dirty-indicator')).toContainText(/Chưa lưu/)
-    /* `DEV-PROG-009` đưa `Kiểm tra` lên header nữa, nên có HAI nút cho cùng
-       hành động — đúng ý đồ ("giữ ở toolbar, nơi chính là header"). Tên truy
-       cập khác nhau (`Kiểm tra` vs `Kiểm tra gói`) nên phép chọn phải nói rõ
-       nó nhắm nút nào; cả hai đều phải bị khoá khi Draft còn bẩn. */
-    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeDisabled()
+    /* `c77e0064` tách hai lệnh từng cùng tên: lệnh GÓI ở header nay là `Build`
+       (seal bản đã lưu và mở PGM-05) và PHẢI bị khoá khi Draft còn bẩn — seal
+       một bản chưa lưu là seal thứ người dùng không nhìn thấy. `Kiểm tra` trên
+       toolbar là lệnh MỚI: kiểm tra POU đang mở trên chính buffer đang gõ
+       (`projectPendingProgramSources`), không seal gì, nên nó cố ý KHÔNG bị
+       khoá bởi buffer bẩn. Phép kiểm khoá đúng từng vế thay vì gộp hai lệnh. */
+    await expect(page.getByRole('button', { name: 'Build', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toHaveAttribute('title', /POU đang mở/)
     await sourceBox.press('Control+s')
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
 
@@ -1069,9 +1158,9 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
-    // FBD không lặp lệnh Kiểm tra trong editor; dùng lệnh chung ở header.
-    await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeEnabled()
-    await page.getByRole('button', { name: 'Kiểm tra gói', exact: true }).click()
+    // Kiểm tra GÓI là lệnh chung ở header — từ `c77e0064` tên là `Build`.
+    await expect(page.getByRole('button', { name: 'Build', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Build', exact: true }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
     await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
     await page.getByRole('button', { name: 'Kiểm tra' }).click()
@@ -1443,6 +1532,27 @@ test.describe('PGM-01 Overview — a11y, RBAC và số đo khổ màn hình (T60
 
 const UNKNOWN_PROJECT_ID = '99999999-9999-4999-8999-999999999999'
 
+/**
+ * Mở khay bàn làm việc (nếu đang thu gọn) và trả về cột Watch thường trực.
+ *
+ * Watch KHÔNG còn là một tab: `e0c80723` gỡ "tab Watch trùng lặp ở cột 1" vì
+ * ảnh chuẩn `PGM-02B` đặt bảng Runtime Watch ở cột giữa khay đáy, hiện thường
+ * trực (`ProgrammingWorkbench.test.tsx` `TC-WBENCH-TABS-3` khoá điều đó). Cột
+ * chỉ được dựng khi khay MỞ, và khay chỉ mở sẵn từ 1440 px — dưới đó người dùng
+ * bấm nút mở rộng của khay, nên phép đo cũng đi đúng đường ấy thay vì bấm một
+ * tab không còn tồn tại.
+ */
+async function openWorkbenchWatch(page: Page) {
+  const workbench = page.getByRole('region', { name: 'Bàn làm việc' })
+  await expect(workbench).toBeVisible()
+  const toggle = workbench.locator('button[aria-expanded]').first()
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  const column = page.getByTestId('workbench-watch-column')
+  await expect(column).toBeVisible()
+  return column
+}
+
 /** Mọi mutation của Programming đều đi qua đây; GET không phải mutation. */
 function observeProgrammingWrites(page: Page): string[] {
   const writes: string[] = []
@@ -1557,9 +1667,18 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     const fbdToolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
     await expect(fbdToolbar).toBeVisible()
 
-    // HEADER-001: FBD chỉ có lệnh chung ở header, không dựng bản sao trong shell.
+    /* HEADER-001: FBD chỉ có lệnh chung ở header, không dựng bản sao trong shell.
+     *
+     * `c77e0064` tách hai lệnh từng trùng tên: header giữ lệnh GÓI và đổi tên
+     * thành `Build` (mở PGM-05), còn toolbar editor có `Kiểm tra` là lệnh MỚI —
+     * kiểm tra POU đang mở cùng các khối/hàm nó gọi, không mở PGM-05. Bản sao
+     * mà HEADER-001 cấm là bản sao của lệnh HEADER, nên danh sách cấm đi theo
+     * tên hiện hành của header; còn `Kiểm tra` trong shell phải chứng minh được
+     * nó là lệnh cục bộ chứ không phải `Build` đội tên khác. */
     await expect(page.getByRole('button', { name: 'Lưu bản nháp', exact: true })).toHaveCount(1)
-    await expect(shell.getByRole('button', { name: /^(Lưu|Kiểm tra|Làm mới)$/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Build', exact: true })).toHaveCount(1)
+    await expect(shell.getByRole('button', { name: /^(Lưu|Lưu bản nháp|Build|Làm mới)$/ })).toHaveCount(0)
+    await expect(shell.getByRole('button', { name: 'Kiểm tra', exact: true })).toHaveAttribute('title', /POU đang mở/)
 
     /* MỘT canvas (`#674`). Bản trước bấm `Network` để có network thứ hai rồi
      * đối chiếu `SELECTED`/`ALL` = 1/2 article. Quyết định chủ sở hữu
@@ -1780,19 +1899,16 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
      * mặc định 1280 px của project desktop chỉ kiểm nhánh inline trong
      * FbdCanvas và từng cho kết quả xanh giả đối với thay đổi ở Cột 3. */
     await page.setViewportSize({ width: 1920, height: 1080 })
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    /* Sơ đồ rộng dựng sẵn, xem `draftWithWideFbd` — phép đo này cần một mặt vẽ
+       rộng hơn khung nhìn một cách XÁC ĐỊNH. Soạn khối bằng bàn phím vẫn có
+       bằng chứng riêng ở `UJ-PROG-01..08` (Insert/Arrow/Enter/Delete/Ctrl+Z). */
+    const state: MockState = { etagGeneration: 1, draft: draftWithWideFbd(25), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     const failures = observeBrowserFailures(page)
     const writes = observeProgrammingWrites(page)
     await login(page)
-    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
-    await createPou(page, 'Program · FBD')
-    const editor = page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]')
-    await editor.focus()
-    for (let index = 0; index < 25; index += 1) await page.keyboard.press('Insert')
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
     await expect(page.getByTestId('fbd-block-count')).toContainText('25/256')
-    await expect.poll(() => writes.length).toBeGreaterThan(0)
-    writes.splice(0, writes.length)
 
     const minimap = page.locator('[data-fbd-minimap="true"]')
     await expect(minimap).toBeVisible()
@@ -1984,10 +2100,11 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     const failures = observeBrowserFailures(page)
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=LIVE`)
-    await page.getByRole('tab', { name: /Watch/ }).click()
-    await expect(page.getByText('Mất kết nối')).toHaveAttribute('data-quality', 'OFFLINE')
-    await expect(page.getByRole('tabpanel')).toContainText('—')
-    await expect(page.getByRole('tabpanel').getByText(/^0(?:\.0+)?$/)).toHaveCount(0)
+    const watch = await openWorkbenchWatch(page)
+    await expect(watch).toContainText('Watch (Trực tiếp)')
+    await expect(watch.getByText('Mất kết nối')).toHaveAttribute('data-quality', 'OFFLINE')
+    await expect(watch).toContainText('—')
+    await expect(watch.getByText(/^0(?:\.0+)?$/)).toHaveCount(0)
     expectNoBrowserFailures(failures, 'FBD Watch offline')
   })
 
@@ -2063,9 +2180,15 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
       `mép dưới dải tab vượt màn hình đầu (${Math.round(box!.y + box!.height)}px > 800px)`,
     ).toBeLessThanOrEqual(800)
 
+    /* Năm khay, theo đúng thứ tự: `c77e0064` thêm `Trạng thái` và `Log &
+       Output`, còn `e0c80723` đưa Watch ra cột thường trực nên nó KHÔNG còn là
+       tab (hợp đồng unit `TC-WBENCH-TABS-3`). Khoá cả TÊN chứ không chỉ số
+       lượng: đếm đúng 5 mà sai tab thì vẫn là một dải tab khác hợp đồng. */
     const tabs = tablist.getByRole('tab')
     const count = await tabs.count()
-    expect(count, 'workbench phải có đủ bốn khay').toBe(4)
+    expect(count, 'workbench phải có đủ năm khay').toBe(5)
+    const names = (await tabs.allTextContents()).map((text) => text.trim().replace(/\s*\(\d+\)$/, ''))
+    expect(names).toEqual(['Vấn đề', 'Trạng thái', 'Log & Output', 'Tìm kiếm', 'Tham chiếu'])
     for (let index = 0; index < count; index += 1) {
       const tab = tabs.nth(index)
       const name = (await tab.textContent())?.trim() ?? ''
@@ -2323,12 +2446,29 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
 
-    const watchTab = page.getByRole('tab', { name: 'Watch' })
-    await expect(watchTab).toBeVisible()
-    await watchTab.focus()
+    /* Watch không còn là tab (`e0c80723`, xem `openWorkbenchWatch`), nên lối
+       vào bằng bàn phím là một tab THẬT của khay: Enter trên tab mở khay và
+       chọn đúng tab đó. Khay mở thì cột Watch thường trực hiện cạnh nó. */
+    const searchTab = page.getByRole('tab', { name: /^Tìm kiếm/ })
+    await expect(searchTab).toBeVisible()
+    await searchTab.focus()
     await page.keyboard.press('Enter')
-    // Tab chưa có capability phải GIẢI THÍCH, không hiện danh sách rỗng.
-    await expect(page.getByText(/cần nguồn giá trị runtime/)).toBeVisible()
+    await expect(searchTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tabpanel')).toBeVisible()
+    // Khay tự khai nguồn: EDIT đọc Draft của đúng POU đang mở.
+    await expect(page.getByText(/^EDIT · Draft · Điều khiển AHU$/)).toBeVisible()
+
+    // Cột chưa có nguồn giá trị phải GIẢI THÍCH, không hiện danh sách rỗng.
+    const watch = page.getByTestId('workbench-watch-column')
+    await expect(watch.getByText(/Chưa có nguồn giá trị runtime cho chế độ này/)).toBeVisible()
+    // Thu gọn rồi mở lại cột Watch hoàn toàn bằng bàn phím.
+    await watch.getByRole('button', { name: 'Thu gọn Watch' }).focus()
+    await page.keyboard.press('Enter')
+    const expandWatch = page.getByRole('button', { name: 'Mở rộng Watch' })
+    await expect(expandWatch).toBeVisible()
+    await expandWatch.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('button', { name: 'Thu gọn Watch' })).toBeVisible()
 
     const handle = page.getByRole('separator', { name: /Kéo để đổi chiều cao/ })
     const before = await handle.getAttribute('aria-valuenow')
@@ -2370,8 +2510,9 @@ test.describe('PGM-02 LIVE (T59-811)', () => {
 
     // Khay workbench khai đúng chế độ, và Watch nay có nguồn.
     await expect(page.getByText(/^LIVE · /)).toBeVisible()
-    await page.getByRole('tab', { name: /Watch/ }).click()
-    await expect(page.getByText(/Watch cần nguồn giá trị runtime/)).toHaveCount(0)
+    const watch = await openWorkbenchWatch(page)
+    await expect(watch).toContainText('Watch (Trực tiếp)')
+    await expect(watch.getByText(/Chưa có nguồn giá trị runtime/)).toHaveCount(0)
 
     // Trace không còn là tab trong workbench (T9-03).
     await expect(page.getByRole('tab', { name: 'Trace' })).toHaveCount(0)
@@ -2498,9 +2639,11 @@ test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
        vào giao diện: một nút bị ẩn vẫn không chứng minh được rằng không có
        đường nào khác gọi tới. */
     const controlPathCalls: string[] = []
+    const activeSessionProbes: string[] = []
     page.on('request', (request) => {
       const url = new URL(request.url())
       const method = request.method()
+      if (method === 'GET' && url.pathname.endsWith('/simulation/sessions/active')) activeSessionProbes.push(url.pathname)
       if (method === 'GET') return
       if (!url.pathname.startsWith('/api/v1/programming')) return
       if (url.pathname.includes('/simulation/')) return
@@ -2518,11 +2661,9 @@ test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
 
     await page.getByRole('button', { name: /^(Một nhịp|Step)$/ }).click()
 
-    /* Khay Watch của workbench dùng chung phải khai nguồn là MÔ PHỎNG. */
-    const watchTab = page.getByRole('tab', { name: /Watch \((Mô phỏng|Simulation)\)/ })
-    await expect(watchTab).toBeVisible()
-    await watchTab.click()
-    const panel = page.getByRole('tabpanel')
+    /* Cột Watch của workbench dùng chung phải khai nguồn là MÔ PHỎNG. */
+    const panel = await openWorkbenchWatch(page)
+    await expect(panel).toContainText(/Watch \((Mô phỏng|Simulation)\)/)
     await expect(panel.getByText('22.5')).toBeVisible()
     // `UNAVAILABLE` phải hiện `—`. Vẽ nó thành 0 tạo một cú rơi thẳng đứng
     // trông hệt như thiết bị vừa tắt.
@@ -2534,7 +2675,14 @@ test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
     expect(state.commissionCount).toBe(0)
     expect(state.restoreCount).toBe(0)
     expect(state.retainResetCount).toBe(0)
-    expectNoBrowserFailures(failures, 'phiên SIMULATE')
+    /* Mở SIMULATE thì FE dò phiên đang sống ĐÚNG MỘT lần (`4b30299a`: F5 phải
+       lấy lại được quyền điều khiển phiên cũ thay vì kẹt `PRG-SIM-QUOTA`).
+       Khi không có phiên nào, server trả `404` (`SimulationService.GetSession`
+       với `active`) và FE coi đó là "không có gì để khôi phục"; Chrome vẫn in
+       mọi phản hồi 4xx thành một dòng console. Chỉ đúng path của lần dò này
+       được bỏ qua — mọi lỗi console khác, kể cả WebSocket, vẫn làm đỏ. */
+    expect(activeSessionProbes, 'SIMULATE phải dò phiên đang sống đúng một lần').toHaveLength(1)
+    expectNoBrowserFailures(failures, 'phiên SIMULATE', ['/programming/simulation/sessions/active'])
   })
 
   test('bề mặt SIMULATE không có vi phạm axe nghiêm trọng', async ({ page }) => {
