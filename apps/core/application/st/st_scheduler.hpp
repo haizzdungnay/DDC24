@@ -93,15 +93,38 @@ constexpr uint32_t    kMinPeriodMs = 50;
 constexpr uint32_t    kMaxPeriodMs = 60000;
 } // namespace st_sched_limits
 
-/* Base step thuộc nền tảng, KHÔNG thuộc Task. Các giá trị này là quyết định
- * ADR-027/028; Task period vẫn chỉ do profile machine-readable quy định. */
+/* Base step thuộc nền tảng, KHÔNG thuộc Task. ADR-061 C1 supersede dải
+ * 500..2000 ms của ADR-027/028: base step sản phẩm là ĐÚNG 10 ms, bằng chu kỳ
+ * nhỏ nhất của profile, nên mọi chu kỳ trong tập (chuỗi bội 10..50000 ms) là bội
+ * nguyên của nó. `--scan-ms` vẫn là override dev và được log WARN khi ra ngoài
+ * dải này; Task period vẫn chỉ do profile machine-readable quy định. */
 namespace st_base_step {
-constexpr uint32_t kDefaultMs = 1000;
-constexpr uint32_t kMinMs = 500;
-constexpr uint32_t kMaxMs = 2000;
+constexpr uint32_t kDefaultMs = 10;
+constexpr uint32_t kMinMs = 10;
+constexpr uint32_t kMaxMs = 10;
+constexpr uint64_t kDefaultNs = static_cast<uint64_t>(kDefaultMs) * 1000000ull;
 /* Trần budget là quyết định profile, không phải hằng riêng của base step:
  * giữ hai bản sao thì mỗi lần profile đổi lại có một phía nói số cũ. */
 constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetPercent;
+/* ADR-061 4.3: trần ngân sách mỗi base step = 20% base step = 2000 µs, tính bằng
+ * µs vì đơn vị ms không biểu diễn được. Luật `< 20%` (OD-PROG-012) giữ nguyên nên
+ * trần là LOẠI TRỪ; Task `main` khai `kDefaultBudgetUs` = trần - 1 µs, cùng khuôn
+ * 199/200 ms của Task 1000 ms trước ADR-061. */
+constexpr uint32_t kBudgetCeilingUs = kDefaultMs * 1000u * kMaxTaskBudgetPercent / 100u;
+static_assert(kBudgetCeilingUs == 2000u, "ADR-061 4.3: trần budget base step 10 ms = 2000 us");
+constexpr uint32_t kDefaultBudgetUs = kBudgetCeilingUs - 1u;
+
+static_assert(kMinMs <= kDefaultMs && kDefaultMs <= kMaxMs, "base step mặc định nằm trong dải");
+/* Base step phải CHIA HẾT mọi chu kỳ của profile: nếu không, một Program sẽ bị
+ * xét ở các tick lệch pha với deadline và lỡ nhịp có hệ thống (C3). */
+constexpr bool divides_every_allowed_period(uint32_t step_ms)
+{
+    for (const uint32_t period : st_profile_generated::kAllowedPeriodMs)
+        if (step_ms == 0 || period % step_ms != 0) return false;
+    return true;
+}
+static_assert(divides_every_allowed_period(kDefaultMs),
+              "ADR-061 C1: base step phải chia hết mọi chu kỳ của profile");
 } // namespace st_base_step
 
 /* Hold-last TTL — ADR-051, DDD-CTRL-PROG-001 §6/§15.
@@ -374,7 +397,13 @@ struct StTaskConfig {
     std::string id;
     uint8_t     priority = 0;       /* 0 = cao nhất */
     uint32_t    period_ms = 1000;
-    uint32_t    budget_ms = 200;
+    /* ADR-061 4.3 — ngân sách tính bằng MICRO GIÂY. Trần của Task `main` 10 ms
+     * là 2000 µs (20%, loại trừ), con số mà đơn vị ms cũ không biểu diễn được:
+     * `budget_ms` chỉ cho 1 ms, vì 2 ms = đúng 20% bị luật `< 20%` từ chối. Không
+     * giữ song song `budget_ms` trong cấu hình: hai trường cho cùng một con số là
+     * hai nguồn sự thật. Snapshot vẫn công bố `budgetMs` (làm tròn xuống) cho
+     * người đọc cũ. */
+    uint32_t    budget_us = 200000;
     bool        enabled = true;
     uint32_t    overrun_threshold = 3;
 };
@@ -494,6 +523,10 @@ public:
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
+    /* Base step thật mà scheduler đang được nhịp (ns). Trace giá trị dùng số này
+     * để công bố chu kỳ lấy mẫu HIỆU LỰC: không thể lấy mẫu nhanh hơn một base
+     * step, nên hứa nhanh hơn là hứa suông (ADR-061 4.6). */
+    uint64_t base_step_ns() const { return base_step_ns_; }
     /* Base step thật của ScanLoop; truyền xuống mọi Task (kể cả Task thêm sau)
      * để dung sai so hạn không vượt nửa base step. Gọi ngoài RT. */
     void set_base_step_ns(uint64_t ns);

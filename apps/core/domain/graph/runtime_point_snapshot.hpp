@@ -36,7 +36,10 @@ struct RuntimeTaskSnapshot {
     bool present = false;
     std::array<char, 33> id{};
     uint32_t period_ms = 0;
+    /* ADR-061 4.3 — `budget_ms` = `budget_us / 1000` làm tròn XUỐNG, chỉ để
+     * người đọc cũ còn đọc được. Nguồn sự thật là `budget_us`. */
     uint32_t budget_ms = 0;
+    uint32_t budget_us = 0;
     std::array<char, 12> state{};
     uint32_t run_count = 0;
     uint32_t missed_release_count = 0;
@@ -108,6 +111,10 @@ struct RuntimeProgramSnapshot {
      * từ lần activate gần nhất. */
     uint64_t last_run_mono_ns = 0;
     uint8_t  lane = 0;
+    /* ADR-061 — true khi chu kỳ của Program thuộc tập profile CŨ nhưng ngoài tập
+     * hiện hành (30 000 ms). Gói vẫn chạy để không mất điều khiển lúc nâng cấp,
+     * nhưng phải lộ ra để người vận hành biết cần Commission lại. */
+    bool     legacy_period = false;
 };
 
 struct RuntimePointSnapshot {

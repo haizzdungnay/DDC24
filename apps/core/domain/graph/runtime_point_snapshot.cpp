@@ -218,6 +218,7 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append_escaped(snapshot.task.id.data(), fixed_length(snapshot.task.id));
         writer.append("\",\"periodMs\":"); writer.append_uint(snapshot.task.period_ms);
         writer.append(",\"budgetMs\":"); writer.append_uint(snapshot.task.budget_ms);
+        writer.append(",\"budgetUs\":"); writer.append_uint(snapshot.task.budget_us);
         writer.append(",\"state\":\"");
         writer.append_escaped(snapshot.task.state.data(), fixed_length(snapshot.task.state));
         writer.append("\",\"runCount\":"); writer.append_uint(snapshot.task.run_count);
@@ -269,6 +270,8 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append_uint(program.consecutive_missed_release);
         writer.append(",\"lastRunMonoNs\":"); writer.append_uint(program.last_run_mono_ns);
         writer.append(",\"lane\":"); writer.append_uint(program.lane);
+        writer.append(",\"legacyPeriod\":");
+        writer.append(program.legacy_period ? "true" : "false");
         writer.append("}");
     }
     writer.append("],\"programsTruncated\":");

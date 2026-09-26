@@ -1,6 +1,7 @@
 #include "st/st_scheduler.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <new>
 #include <utility>
 
@@ -206,16 +207,23 @@ bool StScheduler::add_task(const StTaskConfig& cfg, std::string* error)
     if (cfg.id.empty() || cfg.id.size() > 16) return fail("task id must be 1..16 characters");
     if (cfg.priority > 7) return fail("task priority must be 0..7");
     if (profile_ == StSchedulerProfile::REV_A) {
+        /* Task là cấu hình MỚI: chỉ tập của profile hiện hành, không nhận chu kỳ
+         * legacy (legacy chỉ dành cho đường nạp gói đã Commission). */
         if (!st_limits::RevAAllowsPeriod(cfg.period_ms))
-            return fail("task period_ms is not allowed by profile '" +
+            return fail(std::string(st_diag_code::kSchedulePeriodNotAllowed) +
+                        " task period_ms " + std::to_string(cfg.period_ms) +
+                        " is not allowed by profile '" +
                         std::string(st_profile_generated::kProfileId) + "'");
-        /* OD-PROG-012: budget phải NHỎ HƠN 20%, không phải <=20%.
+        /* OD-PROG-012: budget phải NHỎ HƠN 20%, không phải <=20% — giữ nguyên
+         * luật, chỉ đổi đơn vị sang µs (ADR-061 4.3). Ở đơn vị ms, Task 10 ms chỉ
+         * khai được 1 ms (2 ms = đúng 20% bị từ chối); ở µs trần là 2000 µs loại
+         * trừ, Task `main` khai 1999 µs như 199 ms của Task 1000 ms cũ.
          * Nhân trên uint64 để tránh overflow nếu input đối kháng. */
-        if (cfg.budget_ms == 0 ||
-            static_cast<uint64_t>(cfg.budget_ms) * 100ull >=
-                static_cast<uint64_t>(cfg.period_ms) *
+        if (cfg.budget_us == 0 ||
+            static_cast<uint64_t>(cfg.budget_us) * 100ull >=
+                static_cast<uint64_t>(cfg.period_ms) * 1000ull *
                     st_base_step::kMaxTaskBudgetPercent)
-            return fail("task budget_ms must be >0 and <20% of period_ms for Rev A");
+            return fail("task budget_us must be >0 and <20% of period for Rev A");
     } else {
         if (cfg.period_ms < st_sched_limits::kMinPeriodMs ||
             cfg.period_ms > st_sched_limits::kMaxPeriodMs)
@@ -225,8 +233,9 @@ bool StScheduler::add_task(const StTaskConfig& cfg, std::string* error)
         if (cfg.period_ms % st_sched_limits::kBaseTickMs != 0)
             return fail("task period_ms must be a multiple of base tick " +
                         std::to_string(st_sched_limits::kBaseTickMs) + " ms");
-        if (cfg.budget_ms == 0 || cfg.budget_ms > cfg.period_ms)
-            return fail("task budget_ms must be in 1..period_ms");
+        if (cfg.budget_us == 0 ||
+            static_cast<uint64_t>(cfg.budget_us) > static_cast<uint64_t>(cfg.period_ms) * 1000ull)
+            return fail("task budget_us must be in 1..period");
     }
     if (cfg.overrun_threshold < 1 || cfg.overrun_threshold > 100)
         return fail("overrun_threshold must be 1..100");
@@ -437,9 +446,14 @@ bool StScheduler::prepare_program_set(const std::string& task_id,
         const StProgramSetEntry& entry = entries[index];
         if (entry.instance_id.empty() || entry.instance_id.size() > 64)
             return fail("instance id must be 1..64 characters");
+        /* Đường NẠP (stage gói mới lẫn khôi phục Active/LKG sau reboot đều đi
+         * qua đây): nhận tập mới ∪ legacy 30000 ms. Từ chối legacy ở đây là làm
+         * bộ điều khiển đang chạy gói cũ mất chương trình ngay lúc nâng cấp. */
         if (profile_ == StSchedulerProfile::REV_A && entry.period_ms != 0 &&
-            !st_limits::RevAAllowsPeriod(entry.period_ms))
-            return fail("program period_ms is not allowed by Rev A profile");
+            !st_limits::RevALoaderAllowsPeriod(entry.period_ms))
+            return fail(std::string(st_diag_code::kSchedulePeriodNotAllowed) +
+                        " program period_ms " + std::to_string(entry.period_ms) +
+                        " is not allowed by Rev A profile");
         for (std::size_t prior = 0; prior < index; ++prior) {
             if (entries[prior].instance_id == entry.instance_id)
                 return fail("duplicate instance id '" + entry.instance_id + "'");
@@ -556,6 +570,16 @@ bool StScheduler::swap_prepared_program_set_at_boundary(
         program->pending_retain_generation = 0;
         program->pending_commit_requested.store(false, std::memory_order_relaxed);
         program->has_pending.store(false, std::memory_order_release);
+        /* ADR-061 — gói đã Commission với chu kỳ của profile cũ vẫn CHẠY (mất
+         * chương trình lúc nâng cấp là lỗi an toàn), nhưng phải NÓI RA ở mỗi lần
+         * activate: chu kỳ legacy chạy im lặng thì không ai biết gói cần được
+         * Commission lại theo tập mới. Một dòng mỗi Program mỗi lần activate,
+         * không phải mỗi tick, và chuỗi định dạng không cấp phát. */
+        if (profile_ == StSchedulerProfile::REV_A && st_limits::RevAIsLegacyPeriod(program->period_ms))
+            std::fprintf(stderr,
+                         "WARN  programming.legacy_period instance=%s period_ms=%u"
+                         " (ngoai tap chu ky ADR-061; chay tuong thich, can Commission lai)\n",
+                         program->instance_id.c_str(), program->period_ms);
     }
     task->programs().swap(*prepared);
     return true;
@@ -1118,7 +1142,7 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
     task.stats_.run_count++;
     task.stats_.last_exec_ns = exec_ns;
     if (exec_ns > task.stats_.max_exec_ns) task.stats_.max_exec_ns = exec_ns;
-    task.monitor_.record(exec_ns, static_cast<uint64_t>(task.config().budget_ms) * 1000000ull);
+    task.monitor_.record(exec_ns, static_cast<uint64_t>(task.config().budget_us) * 1000ull);
 
     /* OD-PROG-012 / DDD-CTRL-PROG-001 §9: 3 overrun liên tiếp làm ĐÚNG Task
      * đó FAULT, không phải lỗi riêng một Program và KHÔNG plant-wide safe —

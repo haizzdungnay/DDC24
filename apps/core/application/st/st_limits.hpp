@@ -110,7 +110,30 @@ struct RevAProfileError {
     std::string constraint;
 };
 
+
+/* ADR-061 C1 — chu kỳ được phép TẠO MỚI: đúng tập `allowedPeriodMs` của profile
+ * đang build. Mọi đường cấu hình Task/Program mới (add_task, writer package,
+ * CLI đóng gói) chỉ được hỏi hàm này. */
 bool RevAAllowsPeriod(uint32_t period_ms);
+
+/* Tập chu kỳ của profile Rev A v2.1 (`{1000, 5000, 30000}` ms) — bản ghi LỊCH
+ * SỬ, không sinh từ contract vì contract hiện hành đã bỏ nó. Chỉ tồn tại để
+ * gói đã Commission trước ADR-061 (Active/LKG trên bo) vẫn nạp được sau khi
+ * nâng cấp Core: từ chối nạp nghĩa là bộ điều khiển đang chạy mất chương trình
+ * ngay lúc deploy, và mất điều khiển kiểu đó là lỗi an toàn. */
+constexpr uint32_t kRevAV21PeriodsMs[] = {1000u, 5000u, 30000u};
+
+/* true khi `period_ms` thuộc tập cũ nhưng KHÔNG thuộc tập mới (Rev A v2.2 còn
+ * đúng 30000 ms). Loader dùng hàm này để nạp tương thích VÀ để nói ra: một chu
+ * kỳ cũ chạy im lặng thì người vận hành không biết gói của mình cần Commission
+ * lại. */
+bool RevAIsLegacyPeriod(uint32_t period_ms);
+
+/* Đường NẠP (loader PROGRAM_TABLE, prepare_program_set khi stage/khôi phục):
+ * tập mới ∪ legacy. Core không phân biệt được "gói cũ" với "gói mới" ở tầng
+ * loader, nên việc chặn chu kỳ cũ cho Revision mới thuộc về Check/API. */
+bool RevALoaderAllowsPeriod(uint32_t period_ms);
+
 bool ValidateRevAProfile(const RevAProfileUsage& usage, RevAProfileError* error);
 
 } // namespace st_limits
