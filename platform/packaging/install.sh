@@ -357,6 +357,9 @@ inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" "$LIBEXECDI
 # ADR-061 4.11: mkddc-core.service ExecStartPre dồn workqueue + kernel thread
 # không gắn CPU khỏi CPU của vòng quét.
 inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/rt-housekeeping.sh" "$LIBEXECDIR/rt-housekeeping"
+# ADR-061 4.11 / F17: mkddc-core.service ExecStartPre/ExecStopPost giữ governor
+# `performance` cho cụm CPU của vòng quét.
+inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/rt-cpufreq.sh" "$LIBEXECDIR/rt-cpufreq"
 inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" "$SHAREDIR/avahi/mkddc-web.service"
 if [ -e "$UNITDIR/mkddc-web-pi.service" ]; then
     inst -d -m 0755 "$UNITDIR/mkddc-web-pi.service.d"

@@ -209,6 +209,27 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
         dropin = (ROOT / "platform/systemd/system-mkddc-rt.conf").read_text(encoding="utf-8")
         self.assertIn("CPUAffinity=0-2", _uncommented_lines(dropin))
 
+    def test_cum_cpu_vong_quet_giu_tan_so_co_dinh(self) -> None:
+        """ADR-061 4.11 / F17: cụm CPU chứa CPU3 giữ governor `performance`.
+
+        RV1126B có một policy cpufreq cho cả 4 lõi; `schedutil` đổi tần số theo
+        tải ở CPU0–2 làm cả cụm khựng và vòng quét thức dậy trễ quá 100 µs. Unit
+        core phải `hold` lúc start, `release` lúc dừng, và install.sh phải cài
+        script vào đúng đường dẫn unit gọi — thiếu mảnh nào cũng hỏng im lặng.
+        """
+        unit_lines = _uncommented_lines(
+            (ROOT / "platform/systemd/mkddc-core.service").read_text(encoding="utf-8"))
+        self.assertIn("ExecStartPre=-+/usr/libexec/mkddc/rt-cpufreq hold 3", unit_lines)
+        self.assertIn("ExecStopPost=-+/usr/libexec/mkddc/rt-cpufreq release 3", unit_lines)
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        self.assertTrue(
+            any("rt-cpufreq.sh" in l and '"$LIBEXECDIR/rt-cpufreq"' in l for l in install),
+            "install.sh phải cài rt-cpufreq.sh vào $LIBEXECDIR/rt-cpufreq — đúng đường dẫn unit gọi",
+        )
+        script = ROOT / "platform/packaging/rt-cpufreq.sh"
+        self.assertTrue(script.exists() and script.stat().st_mode & 0o111,
+                        "rt-cpufreq.sh phải tồn tại và executable")
+
     def test_unit_core_khong_co_lenh_chay_song_song_voi_vong_quet(self) -> None:
         """F16: mọi `Exec*` của unit nhận `CPUAffinity=3` + SCHED_FIFO 80 của core.
 

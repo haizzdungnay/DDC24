@@ -26,6 +26,14 @@ ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_re
 # sang CPU0–2. Cùng lý do với `system.conf.d/mkddc-rt.conf`: trên kernel non-RT,
 # việc nền trên CPU3 làm vòng quét thức dậy trễ. Xem đầu script để có số đo.
 ExecStartPre=-+/usr/libexec/mkddc/rt-housekeeping 0-2 7
+# ADR-061 4.11 / F17: cụm CPU chứa CPU3 giữ tần số cố định (governor
+# `performance`). RV1126B có MỘT policy cpufreq cho cả 4 lõi; `schedutil` đổi tần
+# số ~100 lần/giây theo tải ở CPU0–2, và mỗi lần đổi cả cụm khựng — lần thức dậy
+# của vòng quét trễ 109–163 µs dù CPU3 rảnh. A/B trên Foxlinx 2026-09-26 cùng tải
+# I/O: `schedutil` +3/+7 lần vượt 100 µs, `performance` +0/+0. `release` trả lại
+# governor cũ khi core dừng. Core tự log `rt.cpufreq_scaling` khi thiếu.
+ExecStartPre=-+/usr/libexec/mkddc/rt-cpufreq hold 3
+ExecStopPost=-+/usr/libexec/mkddc/rt-cpufreq release 3
 # F16: KHÔNG thêm ExecStartPost (hay lệnh Exec* nào chạy trong lúc core đang
 # chạy). Mọi Exec* nhận CPUAffinity=3 + SCHED_FIFO 80 của unit này, tức chạy trên
 # CPU của vòng quét với cùng mức ưu tiên và chặn nó cho tới khi xong: một
