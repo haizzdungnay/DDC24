@@ -26,10 +26,11 @@ type packageProgramTopology struct {
 	// bằng một phép so trường chứ không bằng niềm tin vào thứ tự JSON.
 	Order    int   `json:"order"`
 	PeriodMs int64 `json:"periodMs"`
-	// BudgetUs là ngân sách WCET một lần release, đơn vị µs (DDD §4.3). Đây là
-	// TRẦN suy từ profile (`maxTaskBudgetPercent` của chu kỳ), KHÔNG phải số đo
-	// WCET thật — `budget.source` nói rõ điều đó để không ai đọc nhầm nó thành
-	// một phép đo.
+	// BudgetUs là ngân sách WCET một lần release, đơn vị µs (ADR-061 mục 4.3).
+	// Đây là PHẦN CHIA của ngân sách một base step cho Program này theo kịch
+	// bản xấu nhất (mọi Program release cùng một step), KHÔNG phải số đo WCET
+	// thật — `budget.source` nói rõ điều đó để không ai đọc nhầm nó thành một
+	// phép đo.
 	BudgetUs int64 `json:"budgetUs"`
 	// DesiredEnabled LUÔN false cho Program mới (DDD §0/§4.3). Package không
 	// được tự bật thứ vừa được nạp: bật là một quyết định vận hành riêng, có
@@ -40,7 +41,8 @@ type packageProgramTopology struct {
 type packagePeriodBudget struct {
 	PeriodMs     int64 `json:"periodMs"`
 	ProgramCount int   `json:"programCount"`
-	// BudgetUs là trần µs cho MỘT Program của lớp chu kỳ này.
+	// BudgetUs là trần µs cho MỘT Program của lớp chu kỳ này. Theo ADR-061 mục
+	// 4.3 mọi lớp có cùng trần: ngân sách là của BASE STEP, không của chu kỳ.
 	BudgetUs int64 `json:"budgetUs"`
 }
 
@@ -51,23 +53,61 @@ type packageBudget struct {
 	// Source nói ngân sách tới TỪ ĐÂU. Một con số không có nguồn gốc sẽ bị đọc
 	// như một phép đo, và một trần profile bị hiểu nhầm là WCET đo được là đúng
 	// loại nhầm lẫn dẫn tới ký release trên bằng chứng không tồn tại.
-	Source  string                `json:"source"`
-	Periods []packagePeriodBudget `json:"periods"`
+	Source string `json:"source"`
+	// BaseStepMs là nhịp Core mà mọi Program release theo (ADR-061 C1).
+	BaseStepMs int64 `json:"baseStepMs"`
+	// StepBudgetUs là ngân sách MỘT base step: 20% base step = 2000 µs.
+	StepBudgetUs int64 `json:"stepBudgetUs"`
+	// WorstCaseStepUs là tổng `budgetUs` của mọi Program — kịch bản xấu nhất
+	// khi mọi Program release cùng một step (t = siêu chu kỳ 50 s). Phải NHỎ
+	// HƠN `stepBudgetUs`, cùng dấu `<` với Core (`budget·100 < period·20`).
+	WorstCaseStepUs int64                 `json:"worstCaseStepUs"`
+	Periods         []packagePeriodBudget `json:"periods"`
 }
 
 // budgetSourceProfileCeiling — ngân sách suy từ trần profile, chưa có số đo WCET
 // thật trên phần cứng. Đo thật thuộc `T59-702`/`T59-703` (target).
 const budgetSourceProfileCeiling = "PROFILE_CEILING"
 
-// programBudgetUs suy trần WCET của một chu kỳ: `maxTaskBudgetPercent`% của chu
-// kỳ, quy sang µs. Chu kỳ ngoài ba lớp profile trả 0 — caller đã có
-// `packageTopologyDiagnostics` để từ chối nó, và trả một con số cho dữ liệu sai
-// là hợp thức hoá dữ liệu sai.
-func programBudgetUs(periodMs int64) int64 {
-	if periodMs <= 0 {
+// Mô hình ngân sách ADR-061 mục 4.3.
+//
+// Trước ADR-061 mỗi Program được cấp 20% CHU KỲ CỦA NÓ, trong khi Core chỉ đo
+// cả Task ở mỗi base step. Với tập chu kỳ mới, tại t = 50 s mọi Program cùng
+// release và tổng ngân sách kiểu cũ lên tới hàng giây — gấp hàng trăm lần một
+// base step 10 ms (X4). Ngân sách vì vậy thuộc về BASE STEP: tổng WCET của mọi
+// Program release trong một step phải nằm trong 20% của step đó.
+const (
+	// baseStepMs là base step Core (ADR-061 C1), bằng chu kỳ nhỏ nhất của tập
+	// — `TestBaseStepIsFastestPeriodClass` canh hai con số không rời nhau.
+	baseStepMs = 10
+	// stepBudgetUs = 20% × 10 ms = 2000 µs.
+	stepBudgetUs = baseStepMs * 1000 * domain.MaxTaskBudgetPercent / 100
+	// detailCodeScheduleOutOfSet là mã chẩn đoán riêng của C1 (ADR-061 mục
+	// 4.12): chu kỳ ngoài tập cho phép. Không dùng lại `ST-LIM-009` — mã đó nói
+	// "quá nhiều Program", và người đọc sẽ đi sửa sai chỗ.
+	detailCodeScheduleOutOfSet = "ST-SCHED-001"
+)
+
+// programBudgetUs chia ngân sách một base step cho `programCount` Program theo
+// kịch bản xấu nhất. Tổng các phần phải NHỎ HƠN `stepBudgetUs` (cùng dấu `<`
+// với Core), nên phần chia lấy từ `stepBudgetUs - 1`: với một Program là
+// 1999 µs, với 32 Program là 62 µs. `programCount <= 0` trả 0 — không có
+// Program nào để cấp.
+func programBudgetUs(programCount int) int64 {
+	if programCount <= 0 {
 		return 0
 	}
-	return periodMs * 1000 * int64(domain.MaxTaskBudgetPercent) / 100
+	return (stepBudgetUs - 1) / int64(programCount)
+}
+
+// allowedPeriodClass trả true khi chu kỳ thuộc ĐÚNG tập của profile (C1).
+func allowedPeriodClass(periodMs int64) bool {
+	for _, period := range domain.AllowedPeriodMs {
+		if period == periodMs {
+			return true
+		}
+	}
+	return false
 }
 
 // packageTopology dựng topology TẤT ĐỊNH từ các POU kind PROGRAM.
@@ -115,11 +155,25 @@ func packageTopology(documentSchemaVersion int, objects []revisionObjectView) ([
 		}
 		topology = append(topology, packageProgramTopology{
 			ObjectID: object.ObjectID, ProgramID: programID, Name: payload.Name,
-			PeriodMs: period, BudgetUs: programBudgetUs(period), DesiredEnabled: false})
+			PeriodMs: period, DesiredEnabled: false})
 	}
 	sort.Slice(topology, func(left, right int) bool { return topology[left].ObjectID < topology[right].ObjectID })
+	// Phần chia chỉ tính trên Program ĐÃ schedule: Program chu kỳ 0 bị
+	// `ST-POU-005` chặn, và cấp ngân sách cho nó là hợp thức hoá một ghost POU.
+	scheduled := 0
+	for _, item := range topology {
+		if item.PeriodMs > 0 {
+			scheduled++
+		}
+	}
+	share := programBudgetUs(scheduled)
+	worstCase := int64(0)
 	for index := range topology {
 		topology[index].Order = index
+		if topology[index].PeriodMs > 0 {
+			topology[index].BudgetUs = share
+			worstCase += share
+		}
 	}
 
 	counts := make(map[int64]int, len(domain.AllowedPeriodMs))
@@ -129,13 +183,16 @@ func packageTopology(documentSchemaVersion int, objects []revisionObjectView) ([
 	periods := make([]packagePeriodBudget, 0, len(domain.AllowedPeriodMs))
 	for _, period := range domain.AllowedPeriodMs {
 		periods = append(periods, packagePeriodBudget{PeriodMs: period, ProgramCount: counts[period],
-			BudgetUs: programBudgetUs(period)})
+			BudgetUs: share})
 	}
 	budget := packageBudget{
 		MaxProgramsTotal:     domain.MaxProgramsTotal,
 		MaxProgramsEnabled:   domain.MaxProgramsEnabled,
 		MaxTaskBudgetPercent: domain.MaxTaskBudgetPercent,
 		Source:               budgetSourceProfileCeiling,
+		BaseStepMs:           baseStepMs,
+		StepBudgetUs:         stepBudgetUs,
+		WorstCaseStepUs:      worstCase,
 		Periods:              periods,
 	}
 	return topology, budget
@@ -176,32 +233,39 @@ func packageTopologyDiagnostics(topology []packageProgramTopology) []DiagnosticV
 	if len(topology) > domain.MaxProgramsTotal {
 		diagnostics = append(diagnostics, programLimitDiagnostic(len(topology), domain.MaxProgramsTotal))
 	}
-	allowed := make(map[int64]struct{}, len(domain.AllowedPeriodMs))
-	for _, period := range domain.AllowedPeriodMs {
-		allowed[period] = struct{}{}
+	scheduled := 0
+	for _, item := range topology {
+		if item.PeriodMs > 0 {
+			scheduled++
+		}
 	}
+	share := programBudgetUs(scheduled)
+	worstCase := int64(0)
 	for _, item := range topology {
 		if item.PeriodMs == 0 {
 			diagnostics = append(diagnostics, packageDiagnostic("ST-POU-005",
 				map[string]any{"programId": item.ProgramID}, nil))
 			continue
 		}
-		if _, ok := allowed[item.PeriodMs]; !ok {
-			// Chu kỳ ngoài ba lớp của profile nghĩa là một lớp lập lịch không tồn
-			// tại; chấp nhận nó ở đây sẽ đẩy lỗi xuống runtime.
-			diagnostics = append(diagnostics, packageDiagnostic("ST-LIM-009",
+		worstCase += item.BudgetUs
+		if !allowedPeriodClass(item.PeriodMs) {
+			// C1 (ADR-061): chu kỳ ngoài tập nghĩa là một lớp lập lịch không tồn
+			// tại; chấp nhận nó ở đây sẽ đẩy lỗi xuống runtime. Revision cũ mang
+			// 30000 ms (profile 2.1) rơi đúng vào nhánh này khi Check LẠI — còn
+			// Restore dùng artifact đã PASSED nên không đi qua đây.
+			diagnostics = append(diagnostics, packageDiagnostic(detailCodeScheduleOutOfSet,
 				map[string]any{"programId": item.ProgramID},
-				map[string]any{"actual": int(item.PeriodMs), "limit": int(domain.AllowedPeriodMs[len(domain.AllowedPeriodMs)-1])}))
+				map[string]any{"profile": checkTargetProfile}))
 			continue
 		}
-		// Ngân sách vượt trần `maxTaskBudgetPercent` của chu kỳ là một Program
-		// được hứa nhiều thời gian hơn lớp lập lịch của nó có (DDD §4.3). Kiểm ở
-		// đây chứ không chỉ ở validator manifest vì Check là chỗ người dùng đọc
-		// được lý do; validator là lưới an toàn cho dữ liệu tới từ nơi khác.
-		if item.BudgetUs <= 0 || item.BudgetUs > programBudgetUs(item.PeriodMs) {
+		// Phần chia vượt trần là một Program được hứa nhiều thời gian hơn base
+		// step có (ADR-061 mục 4.3). Kiểm ở đây chứ không chỉ ở validator
+		// manifest vì Check là chỗ người dùng đọc được lý do; validator là lưới
+		// an toàn cho dữ liệu tới từ nơi khác.
+		if item.BudgetUs <= 0 || item.BudgetUs > share {
 			diagnostics = append(diagnostics, packageDiagnostic("ST-LIM-009",
 				map[string]any{"programId": item.ProgramID},
-				map[string]any{"actual": int(item.BudgetUs), "limit": int(programBudgetUs(item.PeriodMs))}))
+				map[string]any{"actual": int(item.BudgetUs), "limit": int(share)}))
 		}
 		if item.DesiredEnabled {
 			// Không có đường nào đặt cờ này true ở đây; kiểm vẫn giữ vì nó là
@@ -210,6 +274,14 @@ func packageTopologyDiagnostics(topology []packageProgramTopology) []DiagnosticV
 			diagnostics = append(diagnostics, packageDiagnostic("ST-POU-004",
 				map[string]any{"programId": item.ProgramID}, nil))
 		}
+	}
+	// Kịch bản xấu nhất: mọi Program release cùng một base step. Tổng phải NHỎ
+	// HƠN ngân sách step — cùng dấu `<` với Core (X5), để không có package nào
+	// Go cho qua mà Core từ chối ở lúc nạp.
+	if worstCase >= stepBudgetUs {
+		diagnostics = append(diagnostics, packageDiagnostic("ST-LIM-009",
+			map[string]any{},
+			map[string]any{"actual": int(worstCase), "limit": int(stepBudgetUs - 1)}))
 	}
 	return diagnostics
 }

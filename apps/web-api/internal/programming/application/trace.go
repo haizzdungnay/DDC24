@@ -114,17 +114,21 @@ type TracePinView struct {
 }
 
 type TraceView struct {
-	TraceID        string            `json:"traceId"`
-	State          string            `json:"state"`
-	Pin            TracePinView      `json:"pin"`
-	VariableIDs    []string          `json:"variableIds"`
-	DurationMS     int               `json:"durationMs"`
-	SamplePeriodMS int               `json:"samplePeriodMs"`
-	StartedAt      string            `json:"startedAt"`
-	UpdatedAt      string            `json:"updatedAt"`
-	StopReason     *string           `json:"stopReason"`
-	DroppedSamples uint32            `json:"droppedSamples"`
-	Samples        []TraceSampleView `json:"samples"`
+	TraceID        string       `json:"traceId"`
+	State          string       `json:"state"`
+	Pin            TracePinView `json:"pin"`
+	VariableIDs    []string     `json:"variableIds"`
+	DurationMS     int          `json:"durationMs"`
+	SamplePeriodMS int          `json:"samplePeriodMs"`
+	// EffectiveSamplePeriodMS là chu kỳ lấy mẫu THẬT = max(yêu cầu, base step
+	// Core) (ADR-061 mục 4.6). Core chỉ lấy mẫu được ở ranh giới base step, nên
+	// hứa một chu kỳ nhanh hơn là hứa những mẫu không tồn tại.
+	EffectiveSamplePeriodMS int               `json:"effectiveSamplePeriodMs"`
+	StartedAt               string            `json:"startedAt"`
+	UpdatedAt               string            `json:"updatedAt"`
+	StopReason              *string           `json:"stopReason"`
+	DroppedSamples          uint32            `json:"droppedSamples"`
+	Samples                 []TraceSampleView `json:"samples"`
 }
 
 type traceSession struct {
@@ -202,8 +206,9 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 		return TraceAccepted{}, fmt.Errorf("trace id generator không trả UUID: %w", err)
 	}
 	now := s.now().UTC()
+	effectivePeriod := effectiveTraceSamplePeriodMS(request.SamplePeriodMS, monitor.Task)
 	maxSamples := maxTraceValueCells / len(request.VariableIDs)
-	requestedSamples := request.DurationMS/request.SamplePeriodMS + 1
+	requestedSamples := request.DurationMS/effectivePeriod + 1
 	if maxSamples > requestedSamples {
 		maxSamples = requestedSamples
 	}
@@ -215,7 +220,8 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 			// lần đọc và phiên sẽ neo vào một tuple khác tuple đã kiểm.
 			Pin:        TracePinView{RevisionID: monitor.ActiveRevisionID, Producer: monitor.Producer},
 			DurationMS: request.DurationMS, SamplePeriodMS: request.SamplePeriodMS,
-			StartedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+			EffectiveSamplePeriodMS: effectivePeriod,
+			StartedAt:               now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 			Samples: make([]TraceSampleView, 0, maxSamples),
 		},
 		actor: actor, correlationID: correlationID, requestHash: requestHash,
@@ -265,7 +271,9 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	// Core nhận phiên thì KHÔNG lấy mẫu đầu bằng poll: mẫu đầu sẽ tới từ ring
 	// cùng nguồn với mọi mẫu sau. Trộn hai nguồn trong một dãy tạo ra một đồ thị
 	// mà điểm đầu tiên đến từ nơi khác các điểm còn lại.
-	if !s.startCoreTrace(ctx, traceID, request, monitor) {
+	coreRequest := request
+	coreRequest.SamplePeriodMS = effectivePeriod
+	if !s.startCoreTrace(ctx, traceID, coreRequest, monitor) {
 		if !s.captureTraceSample(traceID, monitor) {
 			_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
 			return traceAcceptedFrom(session, correlationID), nil
@@ -275,10 +283,31 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	return traceAcceptedFrom(session, correlationID), nil
 }
 
+// Dải chu kỳ lấy mẫu Trace (ADR-061 mục 4.6): từ một base step 10 ms tới chu kỳ
+// chậm nhất 50 000 ms của tập — khớp OpenAPI `ProgrammingTraceRequest`.
+const (
+	traceMinSamplePeriodMS = baseStepMs
+	traceMaxSamplePeriodMS = 50000
+)
+
+// effectiveTraceSamplePeriodMS = max(yêu cầu, base step Core). Base step đọc từ
+// `baseStepUs` mà Core công bố khi có (làm tròn lên ms); Core đời cũ không gửi
+// khoá đó thì dùng base step của profile (10 ms).
+func effectiveTraceSamplePeriodMS(requested int, task *TaskMetricsView) int {
+	baseStep := baseStepMs
+	if task != nil && task.BaseStepUS != nil && *task.BaseStepUS > 0 {
+		baseStep = int((*task.BaseStepUS + 999) / 1000)
+	}
+	if requested < baseStep {
+		return baseStep
+	}
+	return requested
+}
+
 func validateTraceRequest(request TraceRequest) error {
 	if request.SchemaVersion != "1.0" || len(request.VariableIDs) < 1 || len(request.VariableIDs) > 32 ||
 		request.DurationMS < 1000 || request.DurationMS > 600000 ||
-		request.SamplePeriodMS < 100 || request.SamplePeriodMS > 30000 {
+		request.SamplePeriodMS < traceMinSamplePeriodMS || request.SamplePeriodMS > traceMaxSamplePeriodMS {
 		return ErrInvalidRequest
 	}
 	seen := make(map[string]struct{}, len(request.VariableIDs))
@@ -341,7 +370,13 @@ func (s *RuntimeService) runTrace(traceID string) {
 	if session == nil {
 		return
 	}
-	ticker := time.NewTicker(time.Duration(session.view.SamplePeriodMS) * time.Millisecond)
+	// Nhịp poll theo chu kỳ HIỆU LỰC (ADR-061 mục 4.6): nhanh hơn base step Core
+	// chỉ đọc lại cùng một snapshot và tốn IPC mà không thêm mẫu nào mới.
+	tickPeriod := session.view.EffectiveSamplePeriodMS
+	if tickPeriod <= 0 {
+		tickPeriod = session.view.SamplePeriodMS
+	}
+	ticker := time.NewTicker(time.Duration(tickPeriod) * time.Millisecond)
 	timer := time.NewTimer(time.Duration(session.view.DurationMS) * time.Millisecond)
 	defer ticker.Stop()
 	defer timer.Stop()
@@ -758,6 +793,9 @@ func (s *RuntimeService) commitTraceAudit(ctx context.Context, session *traceSes
 		"variableIds":    session.view.VariableIDs,
 		"durationMs":     session.view.DurationMS,
 		"samplePeriodMs": session.view.SamplePeriodMS,
+		// Chu kỳ THẬT được ghi kèm: audit chỉ ghi số yêu cầu sẽ nói một phiên
+		// 10 ms trong khi thiết bị lấy mẫu mỗi base step của nó.
+		"effectiveSamplePeriodMs": session.view.EffectiveSamplePeriodMS,
 	})
 	_, err := s.store.CommitAudit(ctx, programmingstore.AuditInput{
 		AuditID: s.newID(), ActorID: session.actor.ID, Role: session.actor.Role,

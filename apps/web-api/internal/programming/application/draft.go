@@ -280,7 +280,7 @@ func validateDraftDocument(document map[string]any) error {
 		return ErrInvalidRequest
 	}
 	period, ok := task["periodMs"].(float64)
-	if !ok || (period != 1000 && period != 5000 && period != 30000) {
+	if !ok || !storedPeriodMs(period) {
 		return ErrInvalidRequest
 	}
 	order, ok := task["programOrder"].([]any)

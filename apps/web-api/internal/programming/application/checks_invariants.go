@@ -50,11 +50,15 @@ type packageSignal struct {
 // packageInvariantDiagnostics gộp mọi vi phạm cấp package. Nó KHÔNG dừng ở lỗi
 // đầu tiên vì cùng lý do `compilerInputs` không dừng: người dùng phải thấy hết
 // trong một lần Check.
-func packageInvariantDiagnostics(objects []revisionObjectView) []DiagnosticView {
+func packageInvariantDiagnostics(objects []revisionObjectView, topology []packageProgramTopology) []DiagnosticView {
 	bindings, signals, programIDs := collectPackageObjects(objects)
+	publisherPeriods := make(map[string]int64, len(topology))
+	for _, item := range topology {
+		publisherPeriods[item.ProgramID] = item.PeriodMs
+	}
 	diagnostics := make([]DiagnosticView, 0)
 	diagnostics = append(diagnostics, outputOwnerDiagnostics(bindings)...)
-	diagnostics = append(diagnostics, signalDiagnostics(signals, programIDs)...)
+	diagnostics = append(diagnostics, signalDiagnostics(signals, programIDs, publisherPeriods)...)
 	return diagnostics
 }
 
@@ -244,8 +248,22 @@ func physicalPointKey(binding packageBinding) string {
 	return binding.category + ":" + strings.ToUpper(binding.pointID)
 }
 
-// signalDiagnostics kiểm bốn luật của Published Signal (DDD §4.5/§10).
-func signalDiagnostics(signals []packageSignal, programIDs map[string]struct{}) []DiagnosticView {
+// Dải hạn tươi Published Signal (ADR-061 mục 4.5): từ một base step 10 ms tới
+// 3 × chu kỳ chậm nhất 50 000 ms. Cùng dải với CHECK của migration `0016`,
+// OpenAPI và IPC schema — mọi lớp phải nói cùng một con số, nếu không lớp trên
+// nhận rồi lớp dưới chối.
+const (
+	signalFreshnessMinMs = 10
+	signalFreshnessMaxMs = 150000
+)
+
+// signalDiagnostics kiểm các luật của Published Signal (DDD §4.5/§10).
+//
+// `publisherPeriods` (programId → chu kỳ ms) đến từ CHÍNH topology của package
+// để luật "freshness ≥ chu kỳ publisher" dùng đúng chu kỳ sẽ chạy; `nil` bỏ qua
+// luật đó (caller chưa có topology).
+func signalDiagnostics(signals []packageSignal, programIDs map[string]struct{},
+	publisherPeriods map[string]int64) []DiagnosticView {
 	sorted := append([]packageSignal(nil), signals...)
 	sort.Slice(sorted, func(left, right int) bool {
 		if !strings.EqualFold(sorted[left].name, sorted[right].name) {
@@ -277,10 +295,21 @@ func signalDiagnostics(signals []packageSignal, programIDs map[string]struct{}) 
 		}
 		// 3. Freshness nằm trong dải mà store và runtime cùng dùng. Ngoài dải
 		// nghĩa là một chính sách stale không thực thi được.
-		if signal.freshnessMs < 1000 || signal.freshnessMs > 90000 {
+		if signal.freshnessMs < signalFreshnessMinMs || signal.freshnessMs > signalFreshnessMaxMs {
 			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-003",
 				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
-				map[string]any{"name": signal.name, "freshnessMs": int(signal.freshnessMs)}))
+				map[string]any{"signalId": signal.signalID, "actual": int(signal.freshnessMs),
+					"limit": signalFreshnessMaxMs}))
+		} else if period := publisherPeriods[signal.publisherID]; period > 0 &&
+			signal.freshnessMs < float64(period) {
+			// 3b. ADR-061 mục 4.5: hạn tươi phải ≥ chu kỳ publisher. Ngắn hơn
+			// nghĩa là signal stale GIỮA hai lần publish hợp lệ — consumer rơi
+			// vào chính sách stale ở trạng thái vận hành bình thường, và lỗi đó
+			// chỉ lộ ra khi đứng cạnh thiết bị.
+			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-003",
+				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
+				map[string]any{"signalId": signal.signalID, "actual": int(signal.freshnessMs),
+					"expected": int(period)}))
 		}
 		// 4. Kiểu phải nằm trong hệ kiểu ST, và `USE_FALLBACK` phải đi kèm giá
 		// trị dự phòng — ba chính sách còn lại thì không. Đây đúng lối "im lặng

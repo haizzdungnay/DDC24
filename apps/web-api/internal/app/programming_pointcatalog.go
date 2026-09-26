@@ -174,6 +174,12 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 			RunCount: snapshot.Task.RunCount, MissedReleaseCount: snapshot.Task.MissedReleaseCount,
 			LastExecNS: snapshot.Task.LastExecNS, MaxExecNS: snapshot.Task.MaxExecNS,
 			OverrunCount: snapshot.Task.OverrunCount, ConsecutiveOverruns: snapshot.Task.ConsecutiveOverruns,
+			// Chuyển NGUYÊN con trỏ (ADR-061 mục 4.9): `nil` phải tới FE thành
+			// `null` để nó hiện "Core không cấp", không phải "0 vi phạm".
+			BudgetUS: snapshot.Task.BudgetUS, BaseStepUS: snapshot.Task.BaseStepUS,
+			JitterMaxUS:          snapshot.Task.JitterMaxUS,
+			JitterViolationCount: snapshot.Task.JitterViolationCount,
+			MissedBaseStepCount:  snapshot.Task.MissedBaseStepCount,
 		}
 	}
 
