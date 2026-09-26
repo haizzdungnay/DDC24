@@ -354,6 +354,9 @@ sha256sum "$SBIN/mkddc-core" "$SBIN/mkddc-iobus" "$SBIN/mkddc-netcfg" \
     "$WEBDIR/mkddc-programming-sim-worker" \
     > "$SHAREDIR/runtime-checksums.sha256"
 inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" "$LIBEXECDIR/configure-web-hostname"
+# ADR-061 4.11: mkddc-core.service ExecStartPre dồn workqueue + kernel thread
+# không gắn CPU khỏi CPU của vòng quét.
+inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/rt-housekeeping.sh" "$LIBEXECDIR/rt-housekeeping"
 inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" "$SHAREDIR/avahi/mkddc-web.service"
 if [ -e "$UNITDIR/mkddc-web-pi.service" ]; then
     inst -d -m 0755 "$UNITDIR/mkddc-web-pi.service.d"
