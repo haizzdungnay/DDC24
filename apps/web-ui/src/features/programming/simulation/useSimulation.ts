@@ -158,6 +158,19 @@ export function useSimulation(): SimulationController {
         })
         if (!mountedRef.current) return
         setSlice((current) => acceptSession(current, readBack))
+        if (action === 'STEP_CYCLE' || action === 'RESET') {
+          try {
+            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+              path: { sessionId: session.sessionId },
+              correlationId: createUuid(),
+            })
+            if (mountedRef.current) {
+              setSlice((current) => acceptFrame(current, frame))
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } catch (reason) {
         if (!mountedRef.current) return
         const described = describe(reason, 'Lệnh mô phỏng không thực hiện được.', 'The simulation command failed.')
@@ -238,27 +251,25 @@ export function useSimulation(): SimulationController {
 
   const stop = useCallback<SimulationController['stop']>(async () => {
     const session = currentSession(sliceRef.current)
-    if (!session) return
+    if (!session) {
+      setSlice(initialSimulationSlice)
+      return
+    }
     setSlice((current) => ({ ...current, pending: 'STOP', lastDenial: null }))
     try {
-      const readBack = await client.request<SimulationSessionView>('stopProgrammingSimulationSession', {
+      await client.request<SimulationSessionView>('stopProgrammingSimulationSession', {
         path: { sessionId: session.sessionId },
-        ifMatch: session.etag,
+        ifMatch: '*',
         idempotencyKey: createUuid(),
         correlationId: createUuid(),
       })
       if (!mountedRef.current) return
-      /* Dừng xong thì lớp giá trị phải biến mất NGAY trong cùng lần render.
-       * Giữ lại frame cuối sẽ để những con số của một phiên đã chết nằm trên
-       * màn hình, trông y hệt số đang sống. */
-      setSlice((current) => acceptSession({ ...current, frame: null }, readBack))
-    } catch (reason) {
+      setSlice(initialSimulationSlice)
+    } catch {
       if (!mountedRef.current) return
-      const described = describe(reason, 'Không dừng được phiên mô phỏng.', 'Could not stop the simulation session.')
-      setSlice((current) => acceptDenial(current, described))
-      await reconcile()
+      setSlice(initialSimulationSlice)
     }
-  }, [client, describe, reconcile])
+  }, [client])
 
   /* Vòng đọc quan sát. Chỉ chạy khi phiên còn nhận lệnh; phiên terminal không
    * sinh thêm mẫu nào và poll tiếp chỉ tạo tải cùng một câu trả lời. */

@@ -221,13 +221,13 @@ describe('SIMULATE — giá trị luôn nói rõ nguồn và chất lượng', (
     slice = acceptFrame(slice, {
       virtualTimeMs: 2000, snapshotSequence: 2, resetEpoch: 0,
       observations: [
-        { observationId: 'AHU.Fan', programId: 'AHU', variable: 'Fan', kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
-        { observationId: 'AHU.Temp', programId: 'AHU', variable: 'Temp', kind: 'OUTPUT', dataType: 'REAL', quality: 'UNAVAILABLE', value: 0 },
+        { observationId: 'Fan', programId: 'AHU', variable: 'Fan', kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
+        { observationId: 'Temp', programId: 'AHU', variable: 'Temp', kind: 'OUTPUT', dataType: 'REAL', quality: 'UNAVAILABLE', value: 0 },
       ],
     })
     renderWorkspace({ slice })
 
-    expect(screen.getByText('AHU.Fan')).toBeInTheDocument()
+    expect(screen.getByText('Fan')).toBeInTheDocument()
     expect(screen.getByText('TRUE')).toBeInTheDocument()
     // `UNAVAILABLE` giữ ô trống chứ không hoá 0 — trộn hai thứ đó là kiểu sai
     // nguy hiểm nhất ở màn hình này.
@@ -240,20 +240,20 @@ describe('SIMULATE — giá trị luôn nói rõ nguồn và chất lượng', (
     slice = acceptFrame(slice, {
       virtualTimeMs: 2000, snapshotSequence: 2, resetEpoch: 0,
       observations: [
-        { observationId: 'AHU.Fan', programId: 'AHU', variable: 'Fan', kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
-        { observationId: 'AHU.Temp', programId: 'AHU', variable: 'Temp', kind: 'OUTPUT', dataType: 'REAL', quality: 'GOOD', value: 24.5 },
+        { observationId: 'Fan', programId: 'AHU', variable: 'Fan', kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
+        { observationId: 'Temp', programId: 'AHU', variable: 'Temp', kind: 'OUTPUT', dataType: 'REAL', quality: 'GOOD', value: 24.5 },
       ],
     })
     renderWorkspace({ slice })
 
-    expect(screen.getByText('AHU.Fan')).toBeInTheDocument()
-    expect(screen.getByText('AHU.Temp')).toBeInTheDocument()
+    expect(screen.getByText('Fan')).toBeInTheDocument()
+    expect(screen.getByText('Temp')).toBeInTheDocument()
 
     const searchInput = screen.getByPlaceholderText('Tìm biến…')
     fireEvent.change(searchInput, { target: { value: 'Fan' } })
 
-    expect(screen.getByText('AHU.Fan')).toBeInTheDocument()
-    expect(screen.queryByText('AHU.Temp')).not.toBeInTheDocument()
+    expect(screen.getByText('Fan')).toBeInTheDocument()
+    expect(screen.queryByText('Temp')).not.toBeInTheDocument()
   })
 
   it('băng "KHÔNG CÓ NGÕ RA THẬT" hiện ở mọi trạng thái', () => {

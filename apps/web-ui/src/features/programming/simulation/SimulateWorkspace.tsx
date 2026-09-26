@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { useProgrammingRevision } from '../api/queries'
 import { activeProgramSource } from '../overview/activeProgramSet'
+import { LiveFbdView } from '../design/LiveFbdView'
+import { parseLiveFbd } from '../design/LiveProgramView'
 import { SimulationControls } from './SimulationControls'
 import { VirtualInputs } from './VirtualInputs'
 import { StRuntimeValueOverlay, type StRuntimeOverlayItem, type StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
@@ -9,6 +11,7 @@ import {
   canControlSimulation,
   currentSession,
   isSimulationSupported,
+  isTerminalState,
   type SimulationAction,
   type SimulationInputDescriptor,
   type SimulationSlice,
@@ -72,6 +75,11 @@ export function SimulateWorkspace({
     objectId: objectId ?? null,
   })
 
+  const simulatedFbdDocument = useMemo(
+    () => (sealed.source !== null && sealed.language === 'FBD' ? parseLiveFbd(sealed.source) : null),
+    [sealed.language, sealed.source],
+  )
+
   const simulationOverlayState: StRuntimeOverlayState = useMemo(() => {
     if (slice.frame === null) {
       return {
@@ -82,19 +90,26 @@ export function SimulateWorkspace({
         ),
       }
     }
-    const items: StRuntimeOverlayItem[] = slice.frame.observations.map((obs) => ({
+    const hasMatchingProgram = objectId
+      ? slice.frame.observations.some((obs) => obs.programId === objectId)
+      : false
+    const filteredObs = hasMatchingProgram
+      ? slice.frame.observations.filter((obs) => obs.programId === objectId)
+      : slice.frame.observations
+    const items: StRuntimeOverlayItem[] = filteredObs.map((obs) => ({
       variableId: obs.observationId,
-      variableName: obs.observationId,
+      variableName: obs.variable || obs.observationId,
       value: obs.value,
-      valid: obs.quality !== 'UNAVAILABLE',
-      quality: obs.quality === 'GOOD' ? 'GOOD' : obs.quality === 'UNCERTAIN' ? 'UNCERTAIN' : 'BAD',
+      valid: obs.value !== null && obs.value !== undefined && obs.quality !== 'UNAVAILABLE',
+      quality: obs.quality,
       freshness: 'SIMULATION',
     }))
+    items.sort((a, b) => a.variableName.localeCompare(b.variableName) || a.variableId.localeCompare(b.variableId))
     return {
       status: 'ready',
       items,
     }
-  }, [slice.frame, pick])
+  }, [slice.frame, objectId, pick])
 
   if (!supported) {
     /* Thiết bị không công bố khả năng mô phỏng. Nói ra và DỪNG — không dựng
@@ -115,7 +130,7 @@ export function SimulateWorkspace({
   if (session === null) {
     return (
       <section aria-label={pick('Mô phỏng', 'Simulation')} className="space-y-2">
-        <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} />
+        <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} onStopActive={onStopActive} />
         {draftDirty ? (
           /* Chặn ngay ở client cho người dùng biết sớm; server vẫn kiểm lại và
            * vẫn trả `PRG-SIM-SAVE-REQUIRED` nếu hash không khớp. Điểm quan
@@ -162,7 +177,7 @@ export function SimulateWorkspace({
                 disabled={slice.pending !== null}
                 className="rounded-[var(--radius)] border border-[var(--c-danger-fg)] bg-[var(--c-danger-bg)] px-3 py-1 text-xs font-semibold text-[var(--c-danger-fg)] hover:opacity-80"
               >
-                {pick('D\u1eebng phi\u00ean m\u00f4 ph\u1ecfng \u0111ang ch\u1ea1y tr\u00ean thi\u1ebft b\u1ecb', 'Stop running session on controller')}
+                {pick('Dừng phiên mô phỏng đang chạy trên thiết bị', 'Stop running session on controller')}
               </button>
             )}
           </div>
@@ -172,16 +187,53 @@ export function SimulateWorkspace({
   }
 
   return (
-    <section aria-label={pick('Mô phỏng', 'Simulation')} className="space-y-3">
-      <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} />
+    <section aria-label={pick('Mô phỏng', 'Simulation')} className="flex min-h-0 flex-1 flex-col gap-3">
+      <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} onStopActive={onStopActive} />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="space-y-2">
-          {sealed.source === null ? (
-            <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
-              {sealedSourceReason(pick, sealed.reason)}
-            </p>
-          ) : (
+      {isTerminalState(session.state) && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-xs">
+          <span>
+            {session.state === 'STOPPED'
+              ? pick('Phiên mô phỏng đã dừng.', 'Simulation session stopped.')
+              : session.state === 'EXPIRED'
+                ? pick('Phiên mô phỏng đã hết hạn.', 'Simulation session expired.')
+                : pick('Phiên mô phỏng đã kết thúc.', 'Simulation session completed.')}
+          </span>
+          <button
+            type="button"
+            onClick={onStop}
+            className="rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2.5 py-1 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)]"
+          >
+            {pick('Đóng phiên / Chọn chương trình khác', 'Close session / Choose another program')}
+          </button>
+        </div>
+      )}
+
+      {sealed.source === null ? (
+        <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+          {sealedSourceReason(pick, sealed.reason)}
+        </p>
+      ) : sealed.language === 'FBD' ? (
+        simulatedFbdDocument === null ? (
+          <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+            {pick('Sơ đồ FBD của gói mô phỏng không đọc được.', 'The simulated package’s FBD diagram cannot be read.')}
+          </p>
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <LiveFbdView
+                document={simulatedFbdDocument}
+                runtime={simulationOverlayState}
+              />
+            </div>
+            <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto">
+              <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+            </aside>
+          </div>
+        )
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="space-y-2">
             <label className="block space-y-1">
               <span className="text-[11px] uppercase text-[var(--c-text-dim)]">
                 {pick('Mã nguồn đang mô phỏng', 'Simulated source')}
@@ -194,14 +246,13 @@ export function SimulateWorkspace({
                 className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 font-mono text-xs"
               />
             </label>
-          )}
+          </div>
 
+          <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          </aside>
         </div>
-
-        <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-          <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
-        </aside>
-      </div>
+      )}
 
       <StRuntimeValueOverlay
         state={simulationOverlayState}
@@ -227,3 +278,4 @@ function sealedSourceReason(pick: (vi: string, en: string) => string, reason: st
       return pick('Chưa đọc được nguồn của bản đã seal.', 'The sealed source is not available yet.')
   }
 }
+
