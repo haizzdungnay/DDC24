@@ -30,7 +30,7 @@ import { contextNotice } from '../layout/ProgrammingContextStrip'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
-import { currentSession, simulationWatchRows } from '../simulation/simulationSession'
+import { currentSession, isSimulationSupported, simulationWatchRows } from '../simulation/simulationSession'
 import { activeProgramSource } from '../overview/activeProgramSet'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { programsModeCapabilities } from '../shared/programsMode'
@@ -135,9 +135,6 @@ export function DesignWorkspacePage({
      hardcode trong `programsModeCapabilities` để một thiết bị thiếu worker mô
      phỏng không bị hứa hẹn một chế độ nó không có. */
   const capabilities = useProgrammingCapabilities()
-  /* `T59-815` — vòng đời phiên SIMULATE. Hook luôn được gọi (luật hook), nhưng
-     nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
-  const simulation = useSimulation()
   const runtime = useProgrammingRuntime()
   const runtimeContext = useProgrammingRuntimeContext()
   const { setEditingContext, setContextStripSlot } = runtimeContext
@@ -152,6 +149,14 @@ export function DesignWorkspacePage({
    * unmount vì route canonical chỉ đổi query. */
   const modeParam = searchParams.get('mode')
   const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
+  /* `T59-815` — vòng đời phiên SIMULATE. Hook luôn được gọi (luật hook), nhưng
+     nó chỉ poll khi thực sự có phiên sống, và chỉ DÒ phiên đang sống trên thiết
+     bị khi đang ở SIMULATE của một thiết bị có công bố mô phỏng — nên EDIT/LIVE
+     không sinh request nào tới họ route Simulation. */
+  const simulation = useSimulation({
+    recoverActiveSession:
+      workspaceMode === 'SIMULATE' && isSimulationSupported(capabilities.data?.workspaceModes?.simulation),
+  })
   /* `ISS-STED-19` — CỔNG TƯƠNG THÍCH PHIÊN BẢN.
    *
    * Bundle FE mang sẵn hồ sơ ngôn ngữ ST, registry thư viện POU và ABI của

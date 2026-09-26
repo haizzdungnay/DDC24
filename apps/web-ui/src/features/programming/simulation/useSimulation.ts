@@ -78,7 +78,21 @@ export interface SimulationController {
   reconcile: () => Promise<void>
 }
 
-export function useSimulation(): SimulationController {
+export interface UseSimulationOptions {
+  /**
+   * Có dò phiên đang sống trên thiết bị (`GET …/sessions/active`) hay không.
+   *
+   * Lối dò này có để người dùng F5 hay mở lại trình duyệt vẫn lấy lại được
+   * quyền điều khiển phiên cũ thay vì kẹt ở `PRG-SIM-QUOTA`. Nhưng nó chỉ có
+   * nghĩa ở SIMULATE và trên thiết bị ĐÃ công bố capability mô phỏng: ở EDIT hay
+   * LIVE không có gì để khôi phục, còn trên thiết bị không có worker thì server
+   * trả `409 PRG-SIM-UNSUPPORTED` — một dòng lỗi console và một request thừa ở
+   * MỖI lần mở trang Chương trình. Mặc định `false`: người gọi phải nói ra.
+   */
+  recoverActiveSession?: boolean
+}
+
+export function useSimulation({ recoverActiveSession = false }: UseSimulationOptions = {}): SimulationController {
   const { session: authSession } = useAuth()
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
@@ -251,8 +265,12 @@ export function useSimulation(): SimulationController {
   }, [client])
 
   useEffect(() => {
+    if (!recoverActiveSession) return
+    /* Đã giữ một phiên thì không dò lại: `loadActive` đặt lại khung về `null`,
+     * nên dò khi quay lại SIMULATE sẽ xoá mẫu đang hiện mà không thêm gì. */
+    if (currentSession(sliceRef.current) !== null) return
     void loadActive()
-  }, [loadActive])
+  }, [loadActive, recoverActiveSession])
 
   const stopActive = useCallback<SimulationController['stopActive']>(async () => {
     setSlice((current) => ({ ...current, pending: 'STOP', lastDenial: null }))

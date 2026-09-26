@@ -2048,3 +2048,73 @@ describe('LỖI #5 & #6 — userPouInterfaces memoization & objectId exclusion',
   })
 })
 
+/* `#765` — hồi quy e2e mà jsdom từng không thấy, khoá lại ở tầng unit.
+ *
+ * Dò phiên mô phỏng đang sống (`GET …/sessions/active`) chỉ được chạy ở
+ * SIMULATE của thiết bị có công bố mô phỏng. Bản trước dò ở MỌI chế độ, nên
+ * mỗi lần mở trang Chương trình trên thiết bị không có worker là một `409`
+ * trong console. jsdom không ghi lỗi console của trình duyệt, nên các ca ở
+ * đây đếm REQUEST thay vì đếm dòng lỗi. */
+function projectWithOneStPou() {
+  const project = baseProject()
+  project.draft!.programs.push({
+    programId: 'program-1', objectId: 'object-1', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST',
+    document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n'
+  })
+  project.draft!.task.programOrder = ['program-1']
+  return project
+}
+
+describe('PGM-02 — dò phiên mô phỏng đang sống chỉ ở SIMULATE có capability (#765)', () => {
+  function simulationCapability() {
+    return {
+      supported: true,
+      workerVersion: '1.0.0',
+      mutationRoles: ['admin'],
+      limits: {
+        maxConcurrentSessionsPerController: 1, idleTtlSeconds: 900, hardTtlSeconds: 3600,
+        maxRssMiB: 64, maxCpuPercentOneCore: 25, maxActionsPerSecond: 10,
+        maxTraceSamples: 10000, maxVirtualInputs: 256, workerCommandTimeoutMs: 2000,
+      },
+    }
+  }
+
+  function mockProject(capabilities: object) {
+    const project = projectWithOneStPou()
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(capabilities)
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingSimulationSession') return Promise.reject(new Error('không có phiên sống'))
+      return Promise.reject(new Error(`unexpected operation ${operationId}`))
+    })
+  }
+
+  const withSimulation = () => ({ ...deviceCapabilities(), workspaceModes: { simulation: simulationCapability() } })
+  const activeProbes = () => client.request.mock.calls.filter(([operationId, options]) =>
+    operationId === 'getProgrammingSimulationSession'
+    && (options as { path?: { sessionId?: string } } | undefined)?.path?.sessionId === 'active')
+  const capabilitiesRead = () => client.request.mock.calls.some(([operationId]) => operationId === 'getProgrammingCapabilities')
+
+  it('EDIT không dò phiên mô phỏng, kể cả trên thiết bị có công bố mô phỏng', async () => {
+    mockProject(withSimulation())
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    await waitFor(() => expect(capabilitiesRead()).toBe(true))
+    expect(activeProbes()).toHaveLength(0)
+  })
+
+  it('SIMULATE trên thiết bị KHÔNG công bố mô phỏng không gửi request dò nào', async () => {
+    mockProject(deviceCapabilities())
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=SIMULATE')
+    await screen.findByText(/chưa công bố khả năng Mô phỏng/)
+    expect(activeProbes()).toHaveLength(0)
+  })
+
+  it('SIMULATE trên thiết bị có công bố mô phỏng dò đúng một lần để lấy lại phiên cũ', async () => {
+    mockProject(withSimulation())
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=SIMULATE')
+    await waitFor(() => expect(activeProbes()).toHaveLength(1))
+  })
+})
+
