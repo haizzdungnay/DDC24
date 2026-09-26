@@ -39,7 +39,20 @@ var simulationActionEndpointAllowed = map[string]struct{}{
 	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {},
 }
 
-var simulationSpeeds = map[int64]struct{}{1: {}, 10: {}, 60: {}}
+var simulationSpeeds = map[int64]struct{}{
+	1: {}, 2: {}, 3: {}, 5: {}, 10: {}, 20: {}, 60: {},
+}
+
+func mapDbSpeed(speed int64) int64 {
+	switch {
+	case speed >= 40:
+		return 60
+	case speed >= 6:
+		return 10
+	default:
+		return 1
+	}
+}
 
 // SimulationOptions gom mọi phụ thuộc bên ngoài. `WorkerBinaryPath` rỗng nghĩa
 // là capability TẮT — không có đường nào bật một nửa.
@@ -82,7 +95,8 @@ type SimulationService struct {
 	actionWindow map[string][]time.Time
 	// Vòng chạy tự động của phiên đang RUNNING. Đóng kênh = yêu cầu dừng ở
 	// RANH GIỚI giữa hai tick, không phải cắt ngang một tick đang chạy.
-	runLoops map[string]chan struct{}
+	runLoops    map[string]chan struct{}
+	activeSpeed map[string]int64
 }
 
 func NewSimulationService(options SimulationOptions) *SimulationService {
@@ -107,6 +121,7 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 		manifests:    make(map[string]simworker.Manifest),
 		actionWindow: make(map[string][]time.Time),
 		runLoops:     make(map[string]chan struct{}),
+		activeSpeed:  make(map[string]int64),
 	}
 }
 
@@ -267,6 +282,15 @@ type CreateSimulationSessionInput struct {
 // Nay cả hai lớp hỏi CÙNG một câu hỏi (`simulation.run`), nên chúng không thể
 // trôi khỏi nhau nữa. Ranh giới thì KHÔNG đổi: `simulation.run` chỉ admin có,
 // đúng như `ADR-053` đặt ra.
+func (s *SimulationService) enrichView(view SimulationSessionView) SimulationSessionView {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if spd, ok := s.activeSpeed[view.SessionID]; ok {
+		view.Speed = spd
+	}
+	return view
+}
+
 func (s *SimulationService) requireSimulationControl(role string) *domain.PublicError {
 	if auth.RoleHasPermission(auth.Role(strings.ToLower(strings.TrimSpace(role))),
 		auth.PermissionSimulationRun) {
@@ -335,6 +359,7 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 	stop, found := s.runLoops[sessionID]
 	if found {
 		delete(s.runLoops, sessionID)
+		delete(s.activeSpeed, sessionID)
 	}
 	s.mu.Unlock()
 	if found {
@@ -727,7 +752,7 @@ func (s *SimulationService) GetSession(ctx context.Context, sessionID string) (S
 	if _, manifest, found := s.worker(sessionID); found {
 		view.SimulationInputs = manifest.SimulationInputs
 	}
-	return view, nil
+	return s.enrichView(view), nil
 }
 
 // mutableSession gom mọi tiền điều kiện chung của một mutation trên phiên:
@@ -861,7 +886,7 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 	// Vòng chạy được (tái) khởi động SAU khi trạng thái đã commit. Bật trước
 	// commit sẽ có tick chạy cho một trạng thái chưa ai xác nhận.
 	if updated.State == programmingstore.SimStateRunning {
-		s.startRunLoop(updated.SessionID, updated.BaseTickMS, updated.Speed)
+		s.startRunLoop(updated.SessionID, updated.BaseTickMS, speed)
 	}
 
 	view := simulationView(updated)

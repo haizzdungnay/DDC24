@@ -129,15 +129,22 @@ export function SimulationControls({
         <ControlButton label={pick('Tạm dừng', 'Pause')} enabled={enabled('PAUSE')} onClick={() => onAction('PAUSE')} />
         <ControlButton label={pick('Một nhịp', 'Step')} enabled={enabled('STEP_CYCLE')} onClick={() => onAction('STEP_CYCLE')} />
         <ControlButton label={pick('Đặt lại', 'Reset')} enabled={enabled('RESET')} onClick={() => onAction('RESET')} />
-        <span className="ml-1 text-[11px] text-[var(--c-text-dim)]">{pick('Tốc độ', 'Speed')}</span>
-        {SIMULATION_SPEEDS.map((speed) => (
-          <ControlButton
-            key={speed}
-            label={`${speed}×`}
-            enabled={enabled('SET_SPEED') && session?.speed !== speed}
-            onClick={() => onAction('SET_SPEED', speed)}
-          />
-        ))}
+        <label className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
+          <span>{pick('Tốc độ', 'Speed')}</span>
+          <select
+            value={session?.speed ?? 1}
+            disabled={!enabled('SET_SPEED')}
+            onChange={(e) => onAction('SET_SPEED', Number(e.target.value))}
+            aria-label={pick('Tốc độ mô phỏng', 'Simulation speed')}
+            className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--c-text)] disabled:opacity-50"
+          >
+            {SIMULATION_SPEEDS.map((speed) => (
+              <option key={speed} value={speed}>
+                {speed}×
+              </option>
+            ))}
+          </select>
+        </label>
         <ControlButton
           label={pick('Dừng phiên', 'Stop session')}
           enabled={canControl && !busy && session !== null && !isTerminalState(session.state)}
