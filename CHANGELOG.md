@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Changed — Deploy `main@d2556be6` (web + FE) lên Foxlinx (2026-09-26)
+
+- Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (lượt 4). Không đổi mã.
+- Web `mkddc-web` `85079a85…` (`git_commit=d2556be6…`) và FE `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release` thay bản do actor khác đặt lúc 06:50–06:59Z (build từ commit không có trong repo), theo xác nhận của chủ sở hữu. Tool ST cùng profile `1cb61fec…`; sim worker trùng sha nên không thay. Sao lưu `*.bak-20260926T113255Z`.
+- Kiểm chứng: `/proc/MainPID/exe` khớp cho `mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper`, `NRestarts=0`; health 6/6 `ok`; đăng nhập `role=admin`; capabilities `targetState=READY` với 8 chu kỳ; `programming.toolchain ok`; `index.html` và chunk `programming` phục vụ qua HTTP trùng sha bản build; C4 của Core giữ 0 vi phạm, Active không đổi.
+
 ### Fixed — Cổng FE trên main xanh lại: build/lint (#762) và 35 ca e2e Programming mock (#765) (2026-09-26)
 
 - Phạm vi: `apps/web-ui/src/features/programming/{simulation/{SimulateWorkspace.tsx,useSimulation.ts},design/{DesignWorkspacePage.tsx,DesignWorkspacePage.test.tsx,editor/EditorPane.tsx},layout/useProgrammingViewport.ts,fbd/{layout.ts,layout.test.ts,StructuredFbdEditor.tsx,StructuredFbdEditor.test.tsx}}`, `apps/web-ui/e2e/programming.spec.ts`. Không đổi `contracts/**`, không đổi backend.
