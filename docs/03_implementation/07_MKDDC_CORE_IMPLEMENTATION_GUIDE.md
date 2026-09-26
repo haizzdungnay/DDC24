@@ -129,6 +129,7 @@ thật là `<domain>/tests/test_*.cpp` theo cây trên, không phải `tests/` p
 > Base step mặc định **10 ms** (ADR-061 C1; trước đây 1 s). Mốc thứ k = t0 + k × base step, ngủ tới mốc TUYỆT ĐỐI (không drift). Trễ ≥ 1 base step thì BỎ các mốc đã qua và nhảy tới mốc kế tiếp, không chạy dồn; số mốc bị bỏ đếm ở `missedBaseStepCount` (ADR-061 4.9).
 > sd_notify READY=1 sau scan đầu tiên hoàn tất. `WATCHDOG=1` tối đa 1 lần/giây, chỉ ngay sau một scan trọn vẹn (ADR-061 4.8, `WatchdogSec=6`).
 > CPU của vòng quét (CPU3 trên Foxlinx) phải có ràng buộc `pm_qos_resume_latency_us` ≤ 100 µs, nếu không lần thức dậy sau mỗi base step có thể trễ bằng exit latency của trạng thái nghỉ sâu (RV1126B `cpu-sleep` 370 µs). Unit đặt 20 µs; Core log `rt.cpu_idle_ok` hoặc `ERROR rt.cpu_idle_exposed` lúc khởi động.
+> Cụm CPU chứa CPU của vòng quét phải giữ tần số cố định (governor `performance`): RV1126B có MỘT policy cpufreq cho cả 4 lõi, và mỗi lần `schedutil` đổi tần số theo tải ở CPU0–2 thì vòng quét thức dậy trễ 109–163 µs (F17). Unit gọi `/usr/libexec/mkddc/rt-cpufreq hold 3` / `release 3`; Core log `rt.cpufreq_ok` hoặc `ERROR rt.cpufreq_scaling` lúc khởi động.
 
 **Skeleton scan loop (copy được):**
 ```cpp
@@ -551,6 +552,9 @@ ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_re
 # CPU0–2; PID 1 + mọi tiến trình khác do /etc/systemd/system.conf.d/mkddc-rt.conf
 # (CPUAffinity=0-2) đưa khỏi CPU3
 ExecStartPre=-+/usr/libexec/mkddc/rt-housekeeping 0-2 7
+# ADR-061 4.11 / F17: governor performance cho cụm CPU chứa CPU3; release trả governor cũ
+ExecStartPre=-+/usr/libexec/mkddc/rt-cpufreq hold 3
+ExecStopPost=-+/usr/libexec/mkddc/rt-cpufreq release 3
 ExecReload=/bin/kill -HUP $MAINPID   # reload config ở ranh giới scan (§8, COR-008)
 User=mkddc
 Group=mkddc

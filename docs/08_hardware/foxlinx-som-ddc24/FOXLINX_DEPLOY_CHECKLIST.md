@@ -3,7 +3,7 @@
 > **ID:** HW-FOXLINX-DEPLOY-001  
 > **Ngày:** 2026-08-05  
 > **Trạng thái:** Active  
-> **Board:** `SOM-DDC-24-foxlinx` (`root@mekong-fac.ddns.net:2223`, password: `admin123`)  
+> **Board:** `SOM-DDC-24-foxlinx` (`root@mekong-fac.ddns.net:2223`, chỉ khoá SSH `~/.ssh/mkddc24_som`)  
 > **Liên quan:** [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md](../../03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md)
 
 ---
@@ -18,7 +18,7 @@
 | **User** | `root` | `orangepi` |
 | **SSH alias** | `SOM-DDC-24-foxlinx` | `SOM-DDC-24` |
 | **SSH port** | 2223 | 2222 |
-| **Auth** | Password (`admin123`) | SSH key |
+| **Auth** | **Chỉ SSH key** (`~/.ssh/mkddc24_som`; mật khẩu đã tắt từ 2026-09-26, sự cố `SEC-INC-20260926-FOXLINX`) | SSH key |
 | **MCU** | STM32G0B1 **thật** qua `/dev/ttyS2` | **Fake MCU** qua PTY |
 | **UART IOP** | `/dev/ttyS2` (phần cứng) | `/dev/pts/X` (giả lập) |
 | **RS485** | `/dev/ttyS5` (phần cứng + transceiver) | Không có |
