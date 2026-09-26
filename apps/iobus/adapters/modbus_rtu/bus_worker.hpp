@@ -47,6 +47,24 @@ constexpr uint64_t kWriteTtlMs = 30000;
  * — cách hỏng tệ nhất vì nó kéo theo cả IOP. 64 khớp ngân sách FW design §11. */
 constexpr size_t kMaxPendingWrites = 64;
 
+/* G7 (EV-PROG-FBD-ST-MB-20260925) — trần ngủ của `run_loop` chỉ còn là LƯỚI AN
+ * TOÀN. Lệnh ghi mới, probe và `stop` đánh thức worker qua `wake_cv_` ngay khi
+ * xảy ra; trần này chỉ bảo đảm worker vẫn tự tỉnh để tính lại lịch đọc nếu một
+ * lần báo thức nào đó bị bỏ sót. Trước G7 chính trần này quyết định độ trễ ghi:
+ * lệnh vào hàng đợi lúc worker vừa ngủ phải chờ tới 200 ms. */
+constexpr uint32_t kWorkerMaxSleepMs = 200;
+
+/* G7(c) — lệnh ghi đi TRƯỚC lượt đọc tới hạn, nhưng CÓ TRẦN: tối đa ngần này
+ * giao dịch ghi liên tiếp rồi phải nhường cho một slave tới hạn đọc.
+ *
+ * Chọn 4: một lệnh ghi mới chỉ phải chờ tối đa một lượt đọc slave (thay vì mọi
+ * slave tới hạn như trước), còn một lượt đọc tới hạn bị lùi tối đa 4 × t_tx —
+ * ~116 ms ở 9600 baud (FC05 ≈ 29 ms), ~40 ms ở 115200. Không có trần thì một
+ * Program đảo DO nhanh hơn nhịp bus sẽ chiếm dây vĩnh viễn: giá trị đọc đóng
+ * băng trong khi quality vẫn GOOD vì ngưỡng stale tính theo lần đọc thành công
+ * gần nhất — kiểu sai êm ái nhất. */
+constexpr size_t kMaxWritesBeforeRead = 4;
+
 enum class BusState {
     CLOSED,        /* chưa mở hoặc đã đóng theo cấu hình              */
     OPENING,       /* đang mở cổng                                    */
@@ -198,12 +216,23 @@ public:
      * KHÔNG push snapshot — việc publish do một chỗ duy nhất làm (MBR-B104). */
     void poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics);
 
-    /* Vòng lặp thread của worker. Thoát khi `stop` bật. */
+    /* Vòng lặp thread của worker. Thoát khi `stop` bật.
+     *
+     * G7: ngủ trên `wake_cv_` chứ không `sleep_for`. Thức khi (1) có lệnh ghi
+     * mới (`enqueue_write`), (2) có probe (`probe_read`), (3) `wake()` — người
+     * dừng worker gọi nó SAU khi bật `stop`, hoặc (4) tới hạn đọc kế / trần
+     * `kWorkerMaxSleepMs`, tuỳ cái nào tới trước. */
     void run_loop(const std::atomic<bool>& stop, ExtCache& cache, FieldbusMetrics& metrics);
+
+    /* Đánh thức `run_loop` ngay. An toàn gọi từ mọi thread. Người dừng worker
+     * phải bật cờ `stop` TRƯỚC rồi mới gọi hàm này: `run_loop` kiểm cờ trong
+     * cùng vùng khoá với lần chờ, nên thứ tự đó không để lọt lần báo thức. */
+    void wake();
 
     uint32_t sleep_ms_until_next(uint64_t now_ms) const;
 
-    /* Trả false nếu hàng đợi đã đầy (MBR-B107) — caller phải báo rejected. */
+    /* Trả false nếu hàng đợi đã đầy (MBR-B107) — caller phải báo rejected.
+     * Thành công ⇒ đánh thức worker (G7): lệnh không chờ trần ngủ. */
     bool enqueue_write(const PendingWrite& w);
     void set_write_result_sink(WriteResultSink sink) { result_sink_ = std::move(sink); }
 
@@ -235,19 +264,6 @@ public:
         return pending_writes_.size();
     }
 
-    /* Có lệnh ghi CHƯA phát nào đang chờ cho slave này không?
-     *
-     * `poll_once` dùng nó để phát nốt lệnh ghi cho slave chưa tới lượt ĐỌC
-     * (`ISS-MBW-02`). Phép soi này chỉ chạm hàng đợi trong bộ nhớ — slave rỗng
-     * việc không tốn một byte nào trên dây. */
-    bool has_pending_write_for(uint8_t slave_addr) const
-    {
-        std::lock_guard<std::mutex> lock(queue_mu_);
-        for (const auto& w : pending_writes_)
-            if (!w.submitted && w.slave_addr == slave_addr) return true;
-        return false;
-    }
-
     /* Lấy VÀ XOÁ danh sách ext slot có lệnh ghi vừa kết thúc mà KHÔNG ghi được
      * (quá hạn TTL, hết lượt thử, hoặc giá trị không encode được).
      *
@@ -273,7 +289,18 @@ private:
     /* `ISS-PIO-22` — hạ STALE cho block quá ngưỡng của chính nó. */
     void sweep_stale_blocks(uint64_t now_ms, ExtCache& cache);
     void read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics);
-    void flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics);
+    /* Phát tối đa `max_items` lệnh ghi đang chờ của slave `i`, theo thứ tự hàng
+     * đợi. Trả số mục đã xử lý (kể cả mục bị bỏ vì quá hạn/không encode được).
+     * Mục vượt trần giữ nguyên trong hàng đợi cho lượt sau. */
+    size_t flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics, size_t max_items);
+    /* G7(c) — phục vụ hàng đợi ghi trong trần `budget` giao dịch, slave có lệnh
+     * chờ CŨ NHẤT trước. Mỗi slave tối đa một lượt `flush_pending` trong một lần
+     * gọi, nên một lệnh vừa phát lỗi không bị thử lại dồn dập ngay tại chỗ. Trả
+     * số mục đã xử lý; bằng `budget` nghĩa là trần đã chạm. */
+    size_t service_writes(uint64_t now_ms, FieldbusMetrics& metrics, size_t budget);
+    /* Index slave có lệnh ghi CHƯA phát cũ nhất (seq nhỏ nhất) mà `visited`
+     * chưa đánh dấu; `slaves_.size()` nếu không còn. */
+    size_t oldest_pending_slave(const std::vector<bool>& visited) const;
     /* Ghi nhận một ext slot có lệnh ghi kết thúc mà không áp được. Tự lấy
      * `queue_mu_`; chỉ được gọi từ `flush_pending` ở đoạn ĐÃ nhả khoá. */
     void note_dropped_write_slot(uint16_t ext_idx);
@@ -307,6 +334,16 @@ private:
     mutable std::mutex      queue_mu_;
     std::condition_variable probe_cv_;
     std::vector<std::shared_ptr<ProbeRequest>> probes_;
+    /* G7(b) — chuông báo thức của `run_loop`, dùng chung `queue_mu_`.
+     * `wake_pending_` là cờ MỨC: đặt bởi mọi nguồn sự kiện, xoá bởi worker ở
+     * ĐẦU mỗi vòng, TRƯỚC `poll_once`. Sự kiện tới trong lúc `poll_once` đang
+     * chạy vì thế giữ cờ bật và lần chờ kế tiếp trả về ngay — không lọt lệnh. */
+    std::condition_variable wake_cv_;
+    bool                    wake_pending_ = false;   /* bảo vệ bởi queue_mu_ */
+    /* `poll_once` vừa chạm trần `kMaxWritesBeforeRead` mà hàng đợi ghi vẫn còn
+     * ⇒ `run_loop` phục vụ tiếp ngay, không ngủ. Chỉ thread worker chạm. Không
+     * thể thành vòng quay rỗng: cờ chỉ bật sau khi ĐÃ xử lý đủ trần mục ghi. */
+    bool                    writes_deferred_ = false;
 
     BusConfig                    bus_{};
     std::vector<BusSlaveBinding> slaves_;

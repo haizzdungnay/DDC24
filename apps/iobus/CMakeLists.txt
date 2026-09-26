@@ -100,6 +100,7 @@ set(MODBUS_SOURCES
     adapters/modbus_rtu/bus_worker.cpp
     adapters/modbus_rtu/control_channel.cpp
     adapters/modbus_rtu/modbus_master.cpp
+    adapters/modbus_rtu/plc_shm_view.cpp
     adapters/modbus_rtu/modbus_tcp.cpp)
 
 add_library(iobus_build_settings INTERFACE)
@@ -235,6 +236,8 @@ if(IOBUS_BUILD_TESTS)
       adapters/modbus_rtu/tests/test_write_verify.cpp
       adapters/modbus_rtu/tests/test_ext_cache.cpp
       adapters/modbus_rtu/tests/test_bus_worker.cpp
+      adapters/modbus_rtu/tests/test_bus_worker_wake.cpp
+      adapters/modbus_rtu/tests/test_ext_command_watch.cpp
       adapters/modbus_rtu/tests/test_control_channel.cpp
       adapters/modbus_rtu/tests/test_modbus_master_fake.cpp
       adapters/modbus_rtu/tests/test_modbus_audit_20260925.cpp

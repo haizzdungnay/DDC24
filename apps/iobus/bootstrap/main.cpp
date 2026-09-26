@@ -43,6 +43,7 @@
 #include "modbus_rtu/bus_worker.hpp"
 #include "modbus_rtu/modbus_master.hpp"
 #include "modbus_rtu/modbus_tcp.hpp"
+#include "modbus_rtu/plc_shm_view.hpp"
 #include "modbus_rtu/thread_policy.hpp"
 #include "bacnet/bacnet_config.hpp"
 #include "bacnet/bacnet_objects.hpp"
@@ -458,6 +459,9 @@ int main(int argc, char** argv)
     sa_hup.sa_handler = on_sighup;
     sigaction(SIGHUP, &sa_hup, nullptr);
     fieldbus::FieldbusConfig fieldbus_cfg;
+    /* G7: ánh xạ plc_shm giữ lâu cho luồng `mb-extcmd`. Khai TRƯỚC `modbus` để
+     * sống lâu hơn nó — `~ModbusMaster` dừng luồng đang dùng ánh xạ này. */
+    fieldbus::PlcShmView plc_view(plc_shm_name());
     fieldbus::ModbusMaster modbus;
     fieldbus::ModbusTcp    modbus_tcp;
     fieldbus::ExtCache ext_cache;
@@ -627,21 +631,23 @@ int main(int argc, char** argv)
      * và không có gì" khác hẳn "chưa biết" (D-07). */
     {
         if (rtu_configured) modbus.start_workers(ext_cache, fieldbus_metrics);
+        /* G7 (EV-PROG-FBD-ST-MB-20260925): cầu nối ghi Core → Modbus (COR-011)
+         * chạy trên luồng `mb-extcmd` RIÊNG, soi `ext_cmd_seq` mỗi 5 ms.
+         *
+         * Trước G7 nó nằm trong vòng `fb-publish` dưới đây, ngủ 100 ms mỗi vòng
+         * và chạy SAU `modbus_tcp.poll_once` — một slave TCP treo kết nối là giữ
+         * luôn mọi lệnh ghi RTU. Cộng với trần ngủ 200 ms của BusWorker, lệnh
+         * Core → FC05 trên bo đo được ~377 ms. Luồng chạy vô điều kiện như
+         * `fb-publish`: chưa có bus thì `drain_ext_writes` trả về ngay và luồng
+         * tự soi thưa (100 ms). */
+        modbus.start_ext_command_watch([&plc_view]() { return plc_view.get(now_ms()); });
         fieldbus_thread = std::thread([&]() {
-            /* `MBA-FW-01`: publisher + cầu nối ghi KHÔNG thuộc vòng IOP. */
+            /* `MBA-FW-01`: publisher KHÔNG thuộc vòng IOP. */
             fieldbus::demote_to_normal_sched("fb-publish");
             uint64_t last_publish_ms = now_ms();
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
                 const bool rtu_live = modbus.bus_count() > 0;
-                if (rtu_live) {
-                    /* COR-011: bridge write setpoints from core before poll */
-                    const kx_plc_shm_t* rtu_plc_shm = try_attach_plc_shm();
-                    modbus.drain_ext_writes(rtu_plc_shm, poll_now);
-                    if (rtu_plc_shm)
-                        ::munmap(const_cast<kx_plc_shm_t*>(rtu_plc_shm),
-                                 sizeof(kx_plc_shm_t));
-                }
                 if (modbus_tcp.has_slaves())
                     modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
                 if (rtu_live) {
@@ -651,7 +657,8 @@ int main(int argc, char** argv)
                 }
                 publish_fieldbus_metrics(cache, fieldbus_metrics);
                 /* Nhịp publish cố định 100 ms: worker chạy độc lập nên nhịp này
-                 * không còn phụ thuộc deadline của slave nào. */
+                 * không còn phụ thuộc deadline của slave nào, và từ G7 cũng không
+                 * còn quyết định độ trễ lệnh ghi. */
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         });
@@ -665,6 +672,7 @@ int main(int argc, char** argv)
                                     bacnet_config_from_cli, &bacnet_cfg)) {
         g_shutdown.store(true);
         if (fieldbus_thread.joinable()) fieldbus_thread.join();
+        modbus.stop_ext_command_watch();
         modbus.stop_workers();
         fieldbus_control.stop();
         cache.detach();
@@ -1150,6 +1158,8 @@ int main(int argc, char** argv)
     /* Shutdown: đóng UART, KHÔNG xóa shm (core còn đọc) */
     std::fprintf(stderr, "INFO  iobus.shutdown\n");
     if (fieldbus_thread.joinable()) fieldbus_thread.join();
+    /* Không nhận lệnh EXT mới trong lúc worker drain (FW_SOM_DESIGN §10). */
+    modbus.stop_ext_command_watch();
     if (bacnet_thread.joinable()) bacnet_thread.join();
     bacnet_server.stop();
     /* Dừng kênh điều khiển TRƯỚC khi đóng bus: không nhận lệnh mới trong lúc

@@ -16,7 +16,6 @@
 #include <cstdio>
 #include <chrono>
 #include <cstring>
-#include <thread>
 
 #ifdef MKDDC_ENABLE_MODBUS
 #include <modbus.h>
@@ -439,35 +438,57 @@ void BusWorker::emit_result(const std::string& request_id, const char* status,
 
 bool BusWorker::enqueue_write(const PendingWrite& w)
 {
-    std::lock_guard<std::mutex> lock(queue_mu_);
-    for (auto& pending : pending_writes_) {
-        /* `MBA-FW-04`: KHÔNG coalesce vào mục đang bay — xem `in_flight`. Lệnh
-         * mới đi thành mục riêng, đứng SAU mục đang bay trong hàng đợi, nên thứ
-         * tự trên dây vẫn là cũ rồi mới. */
-        if (!pending.submitted && !pending.in_flight && pending.slave_addr == w.slave_addr &&
-            pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
-            /* Coalesce: setpoint mới thay setpoint cũ chưa gửi. Giá trị cũ
-             * không còn ai muốn ghi, giữ lại nó chỉ để phát ra dây là sai. */
-            const std::string superseded = pending.request_id;
-            pending = w;
-            pending.seq       = next_write_seq_++;
-            pending.in_flight = false;
-            if (!superseded.empty() && superseded != w.request_id)
-                emit_result(superseded, "rejected", "superseded_by_newer_setpoint", 0);
-            return true;
+    {
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        bool coalesced = false;
+        for (auto& pending : pending_writes_) {
+            /* `MBA-FW-04`: KHÔNG coalesce vào mục đang bay — xem `in_flight`. Lệnh
+             * mới đi thành mục riêng, đứng SAU mục đang bay trong hàng đợi, nên thứ
+             * tự trên dây vẫn là cũ rồi mới. */
+            if (!pending.submitted && !pending.in_flight && pending.slave_addr == w.slave_addr &&
+                pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
+                /* Coalesce: setpoint mới thay setpoint cũ chưa gửi. Giá trị cũ
+                 * không còn ai muốn ghi, giữ lại nó chỉ để phát ra dây là sai.
+                 * Đây là nguyên tắc "giá trị mới nhất tại lúc phát trên bus" của
+                 * spec I/O mở rộng (G7(d)). */
+                const std::string superseded = pending.request_id;
+                pending = w;
+                pending.seq       = next_write_seq_++;
+                pending.in_flight = false;
+                if (!superseded.empty() && superseded != w.request_id)
+                    emit_result(superseded, "rejected", "superseded_by_newer_setpoint", 0);
+                coalesced = true;
+                break;
+            }
         }
+        if (!coalesced) {
+            if (pending_writes_.size() >= kMaxPendingWrites) {
+                std::fprintf(stderr, "ERROR bus_worker.write_queue_full bus=%u slave=%u reg=%u"
+                             " limit=%zu — TỪ CHỐI lệnh ghi\n",
+                             bus_.id, w.slave_addr, w.reg_addr, kMaxPendingWrites);
+                emit_result(w.request_id, "rejected", "write_queue_full", 0);
+                return false;
+            }
+            pending_writes_.push_back(w);
+            pending_writes_.back().seq       = next_write_seq_++;
+            pending_writes_.back().in_flight = false;
+        }
+        /* G7(b): lệnh mới là một SỰ KIỆN — worker phải thức ngay, không chờ trần
+         * ngủ. Đặt cờ trong cùng vùng khoá với hàng đợi nên worker không thể thấy
+         * lệnh mà lỡ cờ, hoặc thấy cờ mà chưa thấy lệnh. */
+        wake_pending_ = true;
     }
-    if (pending_writes_.size() >= kMaxPendingWrites) {
-        std::fprintf(stderr, "ERROR bus_worker.write_queue_full bus=%u slave=%u reg=%u"
-                     " limit=%zu — TỪ CHỐI lệnh ghi\n",
-                     bus_.id, w.slave_addr, w.reg_addr, kMaxPendingWrites);
-        emit_result(w.request_id, "rejected", "write_queue_full", 0);
-        return false;
-    }
-    pending_writes_.push_back(w);
-    pending_writes_.back().seq       = next_write_seq_++;
-    pending_writes_.back().in_flight = false;
+    wake_cv_.notify_one();
     return true;
+}
+
+void BusWorker::wake()
+{
+    {
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        wake_pending_ = true;
+    }
+    wake_cv_.notify_one();
 }
 
 uint32_t BusWorker::sleep_ms_until_next(uint64_t now_ms) const
@@ -837,10 +858,42 @@ void BusWorker::record_write_frame(const PendingWrite& w, uint8_t slave, int rc,
     metrics.frames().record(frame);
 }
 
-void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics)
+size_t BusWorker::oldest_pending_slave(const std::vector<bool>& visited) const
+{
+    std::lock_guard<std::mutex> lock(queue_mu_);
+    size_t best = slaves_.size();
+    uint64_t best_seq = UINT64_MAX;
+    for (const auto& w : pending_writes_) {
+        if (w.submitted || w.in_flight || w.seq >= best_seq) continue;
+        for (size_t i = 0; i < slaves_.size(); i++) {
+            if (visited[i] || slaves_[i].cfg.addr != w.slave_addr) continue;
+            best = i;
+            best_seq = w.seq;
+            break;
+        }
+    }
+    return best;
+}
+
+size_t BusWorker::service_writes(uint64_t now_ms, FieldbusMetrics& metrics, size_t budget)
+{
+    size_t used = 0;
+    std::vector<bool> visited(slaves_.size(), false);
+    while (used < budget && port_open()) {
+        const size_t i = oldest_pending_slave(visited);
+        if (i >= slaves_.size()) break;
+        visited[i] = true;
+        used += flush_pending(i, now_ms, metrics, budget - used);
+    }
+    return used;
+}
+
+size_t BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics,
+                                size_t max_items)
 {
 #ifndef MKDDC_ENABLE_MODBUS
-    (void)i; (void)now_ms; (void)metrics;
+    (void)i; (void)now_ms; (void)metrics; (void)max_items;
+    return 0;
 #else
     BusSlaveBinding& binding = slaves_[i];
     const SlaveConfig& sc = binding.cfg;
@@ -855,8 +908,12 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
         std::lock_guard<std::mutex> lock(queue_mu_);
         /* `MBA-FW-04`: chỉ chụp mục của slave này, và ĐÁNH DẤU chúng đang bay
          * ngay trong vùng khoá. Từ đây tới lúc hợp nhất, `enqueue_write` không
-         * được ghi đè chúng — lệnh mới cho cùng register thành mục riêng. */
+         * được ghi đè chúng — lệnh mới cho cùng register thành mục riêng.
+         *
+         * G7(c): chụp tối đa `max_items` mục theo thứ tự hàng đợi; phần còn lại
+         * KHÔNG bị đánh dấu đang bay và vẫn coalesce được bình thường. */
         for (auto& live : pending_writes_) {
+            if (batch.size() >= max_items) break;
             if (live.submitted || live.slave_addr != sc.addr) continue;
             live.in_flight = true;
             batch.push_back(live);
@@ -1080,11 +1137,16 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
     }
     for (const auto& id : superseded_ids)
         emit_result(id, "rejected", "superseded_by_newer_setpoint", 0);
+    return batch.size();
 #endif
 }
 
 void BusWorker::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics)
 {
+    /* Xoá ở ĐẦU hàm, trước mọi nhánh thoát sớm: cờ còn sót từ lượt trước mà
+     * lượt này thoát ở nhánh cổng lỗi thì `run_loop` sẽ `continue` mãi mà không
+     * làm gì — đúng vòng quay rỗng mà G7 cấm. */
+    writes_deferred_ = false;
     if (state_ == BusState::CONFIG_ERROR) return;
     /* Commissioning trước poll: kỹ thuật viên đang đứng cạnh tủ chờ kết quả,
      * một chu kỳ poll chậm không được biến thành mấy giây im lặng trên UI. */
@@ -1135,42 +1197,42 @@ void BusWorker::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& met
      * mới, đúng như mong muốn. */
     sweep_stale_blocks(now_ms, cache);
 
-    std::vector<bool> flushed(slaves_.size(), false);
+    /* `ISS-MBW-02`: LỆNH GHI KHÔNG ĐƯỢC ĐI NHỜ LỊCH ĐỌC.
+     *
+     * Trước bản sửa đó `flush_pending` chỉ có MỘT nơi gọi, nằm trong vòng `due`:
+     * worker tỉnh dậy mà không slave nào tới hạn ĐỌC thì lệnh ghi nằm im tới
+     * lượt đọc kế. Đo trên bo Foxlinx (CK-508 slave 04, `poll_ms=1000`): từ lúc
+     * API trả `200 success` tới lúc relay đổi trạng thái là 16 s / 60 s / 97 s /
+     * 153 s. Ghép độ trễ ghi vào chu kỳ đọc là sai về bản chất: đọc thưa là lựa
+     * chọn tiết kiệm băng thông dây; ghi thưa là lệnh điều khiển đến muộn.
+     *
+     * G7(c) (EV-PROG-FBD-ST-MB-20260925): GHI TRƯỚC ĐỌC, CÓ TRẦN.
+     *
+     * `ISS-MBW-02` vẫn để lệnh ghi đi SAU mọi lượt đọc tới hạn trong cùng lượt
+     * phục vụ, nên một lệnh Core → FC05 phải đợi trọn các giao dịch đọc (29 ms
+     * mỗi block ở 9600 baud, nhân với số block và số slave tới hạn). Nay trước
+     * MỖI lượt đọc slave, worker phát tối đa `kMaxWritesBeforeRead` lệnh ghi
+     * đang chờ — lệnh cũ nhất trước. Trần ấy giữ cho đọc không bị bỏ đói khi
+     * Program đảo output nhanh hơn nhịp bus: giữa hai lượt đọc tới hạn liên tiếp
+     * có tối đa `kMaxWritesBeforeRead` giao dịch ghi.
+     *
+     * Hai bất biến của `ISS-MBW-02` giữ nguyên: lượt ghi KHÔNG chạm lịch đọc
+     * (`last_poll_ms`), và hàng đợi rỗng thì không phát một byte nào —
+     * `service_writes` chỉ soi hàng đợi trong bộ nhớ. */
+    size_t last_writes = service_writes(now_ms, metrics, kMaxWritesBeforeRead);
+    if (!port_open()) return;
     for (const auto& d : due) {
         read_slave(d.idx, now_ms, cache, metrics);
         if (!port_open()) return;   /* cổng chết giữa chừng — nhường vòng sau */
-        flush_pending(d.idx, now_ms, metrics);
-        flushed[d.idx] = true;
-    }
-
-    /* `ISS-MBW-02`: LỆNH GHI KHÔNG ĐƯỢC ĐI NHỜ LỊCH ĐỌC.
-     *
-     * `run_loop` cố ý chặn trần ngủ ở 200 ms với lý do ghi ngay trong chú thích
-     * của nó: *"worker phải tỉnh đủ dày để phản ứng với `stop` VÀ VỚI LỆNH GHI
-     * MỚI, kể cả khi mọi slave đều poll chậm"*. Nhưng ý đồ đó chưa từng được
-     * hiện thực: `flush_pending` chỉ có MỘT nơi gọi, và nó nằm trong vòng `due`.
-     * Worker tỉnh dậy mà không slave nào tới hạn ĐỌC ⇒ `due` rỗng ⇒ vòng `for`
-     * không chạy ⇒ lệnh ghi đang chờ nằm im tới lượt đọc kế.
-     *
-     * Đo trên bo Foxlinx (CK-508 slave 04, `poll_ms=1000`): độ trễ từ lúc API
-     * trả `200 success` tới lúc relay đổi trạng thái là 16 s / 60 s / 97 s /
-     * 153 s — biến thiên đúng kiểu "chờ trùng nhịp", không phải một lịch cố
-     * định. Người vận hành bấm nút, thấy báo thành công, rồi nhìn thiết bị đứng
-     * yên cả phút.
-     *
-     * Ghép độ trễ ghi vào chu kỳ đọc là sai về bản chất: hai việc có ràng buộc
-     * thời gian khác hẳn nhau. Đọc thưa là lựa chọn tiết kiệm băng thông dây;
-     * ghi thưa là lệnh điều khiển đến muộn.
-     *
-     * Vòng dưới đây phát nốt cho slave chưa được flush trong lượt này. Nó KHÔNG
-     * đụng tới lịch đọc (`last_poll_ms` không bị chạm) và KHÔNG thêm lưu lượng
-     * khi rỗng việc: `has_pending_write_for` chỉ soi hàng đợi trong bộ nhớ, nên
-     * slave không có lệnh chờ thì không phát byte nào. */
-    for (size_t i = 0; i < slaves_.size(); i++) {
-        if (flushed[i]) continue;
-        if (!has_pending_write_for(slaves_[i].cfg.addr)) continue;
-        flush_pending(i, now_ms, metrics);
+        last_writes = service_writes(now_ms, metrics, kMaxWritesBeforeRead);
         if (!port_open()) return;
+    }
+    if (last_writes >= kMaxWritesBeforeRead) {
+        /* Chạm trần mà hàng đợi vẫn còn ⇒ báo `run_loop` phục vụ tiếp ngay. */
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        for (const auto& w : pending_writes_) {
+            if (!w.submitted) { writes_deferred_ = true; break; }
+        }
     }
 }
 
@@ -1185,18 +1247,33 @@ void BusWorker::run_loop(const std::atomic<bool>& stop, ExtCache& cache, Fieldbu
     }
     metrics.set_bus_state(bus_.id, bus_state_name(state_));
     while (!stop.load(std::memory_order_relaxed)) {
+        /* Xoá cờ TRƯỚC `poll_once`: sự kiện tới trong lúc đang phục vụ giữ cờ
+         * bật, và lần chờ bên dưới trả về ngay thay vì bỏ lỡ nó. */
+        {
+            std::lock_guard<std::mutex> lock(queue_mu_);
+            wake_pending_ = false;
+        }
         const uint64_t now = monotonic_ms();
         poll_once(now, cache, metrics);
+        /* Vừa chạm trần ghi mà hàng đợi còn ⇒ phục vụ tiếp, không ngủ. Không
+         * quay rỗng được: cờ chỉ bật sau khi đã xử lý đủ trần mục ghi. */
+        if (writes_deferred_) continue;
         uint32_t wait = sleep_ms_until_next(monotonic_ms());
         if (!port_open() && state_ == BusState::PORT_ERROR) {
             const uint64_t nowb = monotonic_ms();
             wait = (reopen_at_ms_ > nowb) ? static_cast<uint32_t>(reopen_at_ms_ - nowb) : 0u;
         }
-        /* Trần 200 ms: worker phải tỉnh đủ dày để phản ứng với `stop` và với
-         * lệnh ghi mới, kể cả khi mọi slave đều poll chậm. */
-        if (wait > 200u) wait = 200u;
+        /* G7(b): `sleep_for` với trần 200 ms là thứ từng quyết định độ trễ ghi
+         * — chú thích cũ nói worker "tỉnh đủ dày để phản ứng với lệnh ghi mới",
+         * nhưng lệnh vào hàng đợi lúc worker vừa ngủ vẫn chờ tới 200 ms; `stop`
+         * và probe cũng vậy. Nay worker ngủ trên `wake_cv_` và bị ĐÁNH THỨC bởi
+         * chính sự kiện; trần `kWorkerMaxSleepMs` chỉ còn là lưới an toàn. */
+        if (wait > kWorkerMaxSleepMs) wait = kWorkerMaxSleepMs;
         if (wait == 0u) wait = 1u;
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait));
+        std::unique_lock<std::mutex> lock(queue_mu_);
+        wake_cv_.wait_for(lock, std::chrono::milliseconds(wait), [&]() {
+            return wake_pending_ || stop.load(std::memory_order_relaxed);
+        });
     }
     /* DRAINING: transaction đang phát đã xong (chúng ta ở ngoài nó), huỷ hàng
      * đợi write chưa gửi. FW_SOM_DESIGN §10: shutdown KHÔNG ghi giá trị nào
@@ -1231,7 +1308,11 @@ BusWorker::ProbeResult BusWorker::probe_read(uint8_t slave_addr, uint8_t fc, uin
     {
         std::lock_guard<std::mutex> lock(queue_mu_);
         probes_.push_back(req);
+        /* G7(b): kỹ thuật viên đang chờ kết quả trên UI — đánh thức worker
+         * thay vì để probe nằm chờ hết giấc ngủ của nó. */
+        wake_pending_ = true;
     }
+    wake_cv_.notify_one();
     std::unique_lock<std::mutex> lock(queue_mu_);
     if (!probe_cv_.wait_for(lock, std::chrono::milliseconds(wait_ms),
                             [&req]() { return req->done; })) {
