@@ -183,6 +183,10 @@ func TestLibraryMetadataMigratesFromOlderSchemaWithData(t *testing.T) {
 		`DROP TRIGGER library_entries_tags_bounds_insert`,
 		`DROP TRIGGER library_entries_tags_bounds_update`,
 		`ALTER TABLE library_entries DROP COLUMN tags`,
+		// ADR-061: migration `0016` (dải freshness) nằm SAU `0015` nên phải
+		// gỡ trước; nó rebuild `published_signal_defs` nên chạy lại được trên
+		// bảng đã có CHECK mới.
+		`DELETE FROM schema_migrations WHERE version=16`,
 		`DELETE FROM schema_migrations WHERE version=15`,
 		`PRAGMA user_version=14`,
 	} {
@@ -196,7 +200,7 @@ func TestLibraryMetadataMigratesFromOlderSchemaWithData(t *testing.T) {
 
 	migrated, err := open()
 	if err != nil {
-		t.Fatalf("migrate v14 -> v15 trên DB CÓ DỮ LIỆU: %v", err)
+		t.Fatalf("migrate v14 -> v16 trên DB CÓ DỮ LIỆU: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
 	after, err := migrated.GetLibraryEntry(ctx, libraryRevisionA, entryScaleID)

@@ -223,8 +223,8 @@ func TestDraftSignalPolicyAndFallbackAreCoupled(t *testing.T) {
 	for name, operation := range map[string]json.RawMessage{
 		"USE_FALLBACK thiếu giá trị": signal("USE_FALLBACK", nil, 5000),
 		"HOLD_LAST thừa giá trị":     signal("HOLD_LAST", 21.5, 5000),
-		"freshness dưới trần dưới":   signal("HOLD_LAST", nil, 999),
-		"freshness trên trần trên":   signal("HOLD_LAST", nil, 90001),
+		"freshness dưới trần dưới":   signal("HOLD_LAST", nil, 9),
+		"freshness trên trần trên":   signal("HOLD_LAST", nil, 150001),
 		"chính sách tự chế":          signal("JUST_GUESS", nil, 5000),
 	} {
 		if _, err := saveOps(t, service, projectID, draftID, base.ETag, "70000000-0000-4000-8000-6000000000"+fmt.Sprintf("%02d", len(name)),
@@ -660,11 +660,11 @@ func TestSetTaskChonDungProgramTheoProgramOrder(t *testing.T) {
 			map[string]any{"programId": "p3", "objectId": "p3", "periodMs": float64(1000)},
 		},
 	}
-	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":30000,"programOrder":["p2","p3"]}}`)
+	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":50000,"programOrder":["p2","p3"]}}`)
 	if err := setTaskCompat(document, raw); err != nil {
 		t.Fatalf("setTask lỗi: %v", err)
 	}
-	want := map[string]float64{"p1": 1000, "p2": 30000, "p3": 30000}
+	want := map[string]float64{"p1": 1000, "p2": 50000, "p3": 50000}
 	for _, item := range collectionOf(document, "programs") {
 		id, _ := item["programId"].(string)
 		got, _ := item["periodMs"].(float64)
@@ -708,7 +708,7 @@ func TestSetTaskTuChoiProgramKhongTonTai(t *testing.T) {
 	document := map[string]any{
 		"programs": []any{map[string]any{"programId": "p1", "objectId": "p1", "periodMs": float64(1000)}},
 	}
-	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":30000,"programOrder":["p1","khong-co"]}}`)
+	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":50000,"programOrder":["p1","khong-co"]}}`)
 	if err := setTaskCompat(document, raw); err == nil {
 		t.Fatal("phải từ chối programOrder có Program không tồn tại")
 	}

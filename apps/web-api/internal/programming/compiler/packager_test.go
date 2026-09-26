@@ -142,8 +142,11 @@ func TestProcessPackagerIsByteStable(t *testing.T) {
 	}
 }
 
+// Hai đầu tập chu kỳ ADR-061 (10 ms, 50000 ms) cộng một lớp giữa. 30000 ms của
+// profile 2.1 KHÔNG còn ở đây: writer production chỉ đóng gói chu kỳ thuộc tập
+// hiện hành (`st_package_v2.cpp`), còn gói cũ 30000 ms là việc của đường nạp.
 func TestProcessPackagerSingleProgramPreservesScheduleInV2Container(t *testing.T) {
-	for _, periodMs := range []int64{5000, 30000} {
+	for _, periodMs := range []int64{10, 5000, 50000} {
 		t.Run(fmt.Sprintf("period_%d_ms", periodMs), func(t *testing.T) {
 			packager := ProcessPackager{BinaryPath: packagerBinary(t),
 				ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}

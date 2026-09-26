@@ -460,6 +460,50 @@ func TestSaveDraftBaoDungThaoTacBiTuChoiTrongBatch(t *testing.T) {
 	}
 }
 
+// ADR-061 C1 — `PATCH .../draft` đặt chu kỳ ngoài tập {10…50000} ms trả 400
+// `PRG-ERR-REQ-001` KÈM `detailCode=ST-SCHED-001` và giá trị bị từ chối. Chỉ
+// "request sai" thì người dùng không biết phải chọn chu kỳ khác.
+func TestSaveDraftPeriodOutsideCycleSetCarriesSchedDetail(t *testing.T) {
+	for _, period := range []int{5, 30000} {
+		t.Run(fmt.Sprintf("period_%d_ms", period), func(t *testing.T) {
+			mux, projectID, etag := newLibraryTestMux(t, auth.RoleAdmin)
+			readRecorder := httptest.NewRecorder()
+			mux.ServeHTTP(readRecorder, libraryRequest(t, http.MethodGet,
+				"/api/v1/programming/projects/"+projectID, "", "", ""))
+			var project struct {
+				DraftRevisionID string `json:"draftRevisionId"`
+			}
+			if err := json.Unmarshal(readRecorder.Body.Bytes(), &project); err != nil {
+				t.Fatalf("đọc project: %v", err)
+			}
+			body := fmt.Sprintf(`{"schemaVersion":"1.0","baseRevisionId":"%s","operations":[`+
+				`{"op":"setTask","task":{"taskId":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","periodMs":%d,"programOrder":[]}}]}`,
+				project.DraftRevisionID, period)
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, libraryRequest(t, http.MethodPatch,
+				"/api/v1/programming/projects/"+projectID+"/draft", body, etag,
+				"10000000-0000-4000-8000-0000000000f2"))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, mong đợi 400; body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response struct {
+				Error struct {
+					Code  string         `json:"code"`
+					Field string         `json:"field"`
+					Args  map[string]any `json:"args"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if response.Error.Code != "PRG-ERR-REQ-001" || response.Error.Field != "operations[0].setTask" ||
+				response.Error.Args["detailCode"] != "ST-SCHED-001" || response.Error.Args["actual"] != float64(period) {
+				t.Fatalf("lỗi không mang ST-SCHED-001: %s", recorder.Body.String())
+			}
+		})
+	}
+}
+
 // `T59-804` — chữ ký typed công khai. Ba khẳng định: SYSTEM entry phân giải
 // được, PROJECT entry hình dạng lạ KHÔNG bị bịa thành chữ ký rỗng, và chữ ký
 // thô vẫn đi kèm để consumer cũ không hỏng.

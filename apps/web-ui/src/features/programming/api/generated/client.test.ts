@@ -166,7 +166,11 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // `expected '1.41.0' to be '1.40.0'`: phép kiểm đã làm đúng việc của nó —
     // báo rằng hai số đã rời nhau — chỉ là lần này bên trôi là chính cái ghim,
     // không phải client. Cập nhật ghim theo contract, KHÔNG hạ client về số cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.41.0");
+    //
+    // `1.42.0` — ADR-061: tập chu kỳ {10…50000} ms, metric C2–C4 của Task,
+    // Trace `effectiveSamplePeriodMs`, freshness 10…150000 ms. Client sinh lại
+    // CÙNG change-set với contract.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.42.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

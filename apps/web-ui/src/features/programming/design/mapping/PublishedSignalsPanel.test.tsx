@@ -152,16 +152,22 @@ describe('PublishedSignalsPanel — authoring Draft v2 Plan59', () => {
     fireEvent.change(within(form).getByLabelText('Tên signal'), { target: { value: 'supplytemp' } })
     fireEvent.change(within(form).getByLabelText('Kiểu dữ liệu'), { target: { value: 'BOOL' } })
     fireEvent.change(within(form).getByLabelText('Đơn vị'), { target: { value: ' state ' } })
-    fireEvent.change(within(form).getByLabelText('Hạn tươi (ms)'), { target: { value: '999' } })
+    fireEvent.change(within(form).getByLabelText('Hạn tươi (ms)'), { target: { value: '9' } })
     fireEvent.change(within(form).getByLabelText('Chính sách khi quá hạn'), { target: { value: 'USE_FALLBACK' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Lưu Published Signal' }))
 
     expect(within(form).getByText(/trùng tên/)).toBeInTheDocument()
-    expect(within(form).getByText(/1000..90000 ms/)).toBeInTheDocument()
+    expect(within(form).getByText(/10..150000 ms/)).toBeInTheDocument()
     expect(within(form).getByText(/bắt buộc có giá trị dự phòng/)).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
 
     fireEvent.change(within(form).getByLabelText('Tên signal'), { target: { value: 'ReturnAirValid' } })
+    // ADR-061 mục 4.5: trong dải nhưng NHỎ HƠN chu kỳ publisher (1000 ms) vẫn
+    // bị chặn tại chỗ — Check sẽ từ chối nó bằng ST-SIG-003.
+    fireEvent.change(within(form).getByLabelText('Hạn tươi (ms)'), { target: { value: '500' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Lưu Published Signal' }))
+    expect(within(form).getByText(/lớn hơn hoặc bằng chu kỳ của Program publish/)).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
     fireEvent.change(within(form).getByLabelText('Hạn tươi (ms)'), { target: { value: '5000' } })
     fireEvent.change(within(form).getByLabelText('Giá trị dự phòng (TRUE/FALSE)'), { target: { value: 'FALSE' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Lưu Published Signal' }))

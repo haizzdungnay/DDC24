@@ -48,10 +48,19 @@ describe('ContextInspector — thu gọn khi không có ngữ cảnh', () => {
     expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
     expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
     expect(screen.getByText('AHU_MAIN')).toBeInTheDocument()
-    // `DEV-PROG-004` — chu kỳ là bội của giây thì hiện theo giây ("5 s"): ba
-    // chu kỳ hợp lệ của profile đều là bội của 1000 ms, và "30000 ms" bắt người
-    // đọc tự chia trước khi so được với chu kỳ họ đã đặt.
+    // `DEV-PROG-004` — chu kỳ từ 1 s trở lên hiện theo giây ("5 s"), dưới 1 s
+    // hiện ms (ADR-061 mục 4.13): "50000 ms" bắt người đọc tự chia trước khi so
+    // được với chu kỳ họ đã đặt.
     expect(screen.getByText('5 s')).toBeInTheDocument()
+    expect(screen.queryByTestId('execution-interval-invalid')).toBeNull()
+  })
+
+  // ADR-061 mục 4.14 — Program còn mang chu kỳ cũ 30 s hiện đúng "30 s" kèm
+  // nhãn không còn hợp lệ; không bị ép về 1 s, không im lặng như giá trị đúng.
+  it('Program chu kỳ legacy 30 s ⇒ hiện nguyên giá trị kèm nhãn không còn hợp lệ', () => {
+    renderInspector({ program, cycleMs: 30000 })
+    expect(screen.getByTestId('execution-interval')).toHaveTextContent('30 s')
+    expect(screen.getByTestId('execution-interval-invalid')).toHaveTextContent('(không còn hợp lệ)')
   })
 })
 

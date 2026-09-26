@@ -101,8 +101,17 @@ type operationFixture struct {
 
 func newOperationFixture(t *testing.T) operationFixture {
 	t.Helper()
+	return newOperationFixtureWithPeriod(t, 1000)
+}
+
+// newOperationFixtureWithPeriod: như `newOperationFixture` nhưng Revision chạy
+// chu kỳ cho trước. Check chạy qua ĐÚNG CheckService với tập chu kỳ đang có
+// hiệu lực lúc gọi — test nâng cấp ADR-061 dựa vào đó để dựng một Check PASSED
+// "trước khi nâng cấp".
+func newOperationFixtureWithPeriod(t *testing.T, periodMs int) operationFixture {
+	t.Helper()
 	projects, store := openProjectService(t)
-	revision := createCheckRevisionFixture(t, projects)
+	revision := createCheckRevisionFixtureWithPeriod(t, projects, periodMs)
 	artifactBytes := []byte("artifact-coordinator-test")
 	digest := sha256.Sum256(artifactBytes)
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true,

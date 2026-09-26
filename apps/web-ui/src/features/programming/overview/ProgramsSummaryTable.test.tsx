@@ -92,11 +92,21 @@ describe('ProgramsSummaryTable — sáu cột theo D-02', () => {
 
   it('chu kỳ render TỪ DỮ LIỆU, không phải hằng số của ảnh mockup (D-03)', () => {
     renderTable({ rows: [row({ cycle: { periodMs: 5000, source: 'CORE_LIVE' } })] })
-    expect(within(table()).getByText('5000 ms')).toBeInTheDocument()
-    // Profile Rev A chỉ có [1000, 5000, 30000]; `10 ms`/`100 ms` trong ảnh
-    // không tồn tại trong sản phẩm nên cũng không được xuất hiện ở đây.
+    expect(within(table()).getByText('5 s')).toBeInTheDocument()
+    // Con số chỉ đến từ dữ liệu: `10 ms`/`100 ms` của ảnh mockup không được
+    // xuất hiện khi dữ liệu nói 5 s.
     expect(within(table()).queryByText('10 ms')).not.toBeInTheDocument()
     expect(within(table()).queryByText('100 ms')).not.toBeInTheDocument()
+  })
+
+  // ADR-061 mục 4.13/4.14: dưới 1 s hiện ms, từ 1 s hiện giây; chu kỳ cũ 30 s
+  // của Program đang chạy hiện nguyên, không bị coi là lỗi dữ liệu.
+  it('định dạng chu kỳ theo ADR-061 và giữ nguyên chu kỳ legacy 30 s', () => {
+    for (const [periodMs, text] of [[10, '10 ms'], [500, '500 ms'], [1000, '1 s'], [50000, '50 s'], [30000, '30 s']] as const) {
+      renderTable({ rows: [row({ cycle: { periodMs, source: 'CORE_LIVE' } })] })
+      expect(within(table()).getByText(text)).toBeInTheDocument()
+      cleanup()
+    }
   })
 
   it('nói rõ nguồn của chu kỳ: số sống của Core khác số khai báo trong gói', () => {
