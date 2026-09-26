@@ -60,7 +60,7 @@ export function SimulateWorkspace({
   allowMutation?: boolean
   program?: ProgrammingDocumentProgram
   onStart: () => void
-  onAction: (action: SimulationAction, speed?: number) => void
+  onAction: (action: SimulationAction, speed?: number, baseTickMs?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
   onStop: () => void
   onStopActive?: () => void
@@ -126,10 +126,11 @@ export function SimulateWorkspace({
         ),
       }
     }
-    const hasMatchingProgram = objectId
-      ? slice.frame.observations.some((obs) => obs.programId === objectId)
-      : false
-    const filteredObs = hasMatchingProgram
+    if (!objectId) {
+      return { status: 'ready', items: [] }
+    }
+    const hasMatching = slice.frame.observations.some((obs) => obs.programId === objectId)
+    const filteredObs = hasMatching
       ? slice.frame.observations.filter((obs) => obs.programId === objectId)
       : slice.frame.observations
     const items: StRuntimeOverlayItem[] = filteredObs.map((obs) => ({
@@ -228,7 +229,7 @@ export function SimulateWorkspace({
           </div>
         )}
 
-        {activeFbdDocument !== null && (
+        {objectId && activeFbdDocument !== null && (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <LiveFbdView
               document={activeFbdDocument}
@@ -298,7 +299,22 @@ export function SimulateWorkspace({
         </div>
       )}
 
-      {activeFbdDocument !== null ? (
+      {!objectId ? (
+        <div
+          role="status"
+          className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-6 text-center text-xs text-[var(--c-text-dim)]"
+        >
+          <p className="font-semibold text-[var(--c-text)]">
+            {pick('Chưa chọn chương trình mô phỏng', 'No program selected for simulation')}
+          </p>
+          <p className="mt-1">
+            {pick(
+              'Vui lòng chọn một chương trình (POU) trong danh sách bên trái để xem sơ đồ và mô phỏng.',
+              'Please select a program (POU) from the left sidebar to view its diagram and simulation values.'
+            )}
+          </p>
+        </div>
+      ) : activeFbdDocument !== null ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <LiveFbdView
@@ -337,11 +353,13 @@ export function SimulateWorkspace({
         </p>
       )}
 
-      <StRuntimeValueOverlay
-        state={simulationOverlayState}
-        programId={objectId ?? session?.sourceDraftRevisionId ?? session?.sessionId}
-        mode="SIMULATION"
-      />
+      {objectId && (
+        <StRuntimeValueOverlay
+          state={simulationOverlayState}
+          programId={objectId}
+          mode="SIMULATION"
+        />
+      )}
     </section>
   )
 }

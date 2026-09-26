@@ -33,7 +33,7 @@ export function SimulationControls({
 }: {
   slice: SimulationSlice
   canControl: boolean
-  onAction: (action: SimulationAction, speed?: number) => void
+  onAction: (action: SimulationAction, speed?: number, baseTickMs?: number) => void
   onStop: () => void
   onStopActive?: () => void
   onStart?: () => void
@@ -81,12 +81,24 @@ export function SimulationControls({
           <>
             <span className="text-[var(--c-text-dim)]">
               {pick('Thời gian ảo', 'Virtual time')}{' '}
-              <span className="font-mono">{formatVirtualTime(session.virtualTimeMs)}</span>
+              <span className="font-mono">{formatVirtualTime(slice.frame !== null ? slice.frame.virtualTimeMs : session.virtualTimeMs)}</span>
             </span>
-            <span className="text-[var(--c-text-dim)]">
-              {pick('Nhịp cơ sở', 'Base tick')}{' '}
-              <span className="font-mono">{session.baseTickMs === null ? '—' : `${session.baseTickMs} ms`}</span>
-            </span>
+            <label className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
+              <span>{pick('Chu kỳ', 'Base tick')}</span>
+              <select
+                value={session.baseTickMs ?? 10}
+                disabled={!canControl}
+                onChange={(e) => onAction('SET_BASE_TICK', undefined, Number(e.target.value))}
+                aria-label={pick('Chu kỳ mô phỏng', 'Simulation base tick')}
+                className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--c-text)] disabled:opacity-50"
+              >
+                {[10, 50, 100, 500, 1000, 5000].map((tick) => (
+                  <option key={tick} value={tick}>
+                    {tick >= 1000 ? (tick / 1000) + ' s' : tick + ' ms'}
+                  </option>
+                ))}
+              </select>
+            </label>
             <span className="text-[var(--c-text-dim)]">
               {pick('Tốc độ', 'Speed')} <span className="font-mono">{session.speed}×</span>
             </span>
@@ -129,15 +141,22 @@ export function SimulationControls({
         <ControlButton label={pick('Tạm dừng', 'Pause')} enabled={enabled('PAUSE')} onClick={() => onAction('PAUSE')} />
         <ControlButton label={pick('Một nhịp', 'Step')} enabled={enabled('STEP_CYCLE')} onClick={() => onAction('STEP_CYCLE')} />
         <ControlButton label={pick('Đặt lại', 'Reset')} enabled={enabled('RESET')} onClick={() => onAction('RESET')} />
-        <span className="ml-1 text-[11px] text-[var(--c-text-dim)]">{pick('Tốc độ', 'Speed')}</span>
-        {SIMULATION_SPEEDS.map((speed) => (
-          <ControlButton
-            key={speed}
-            label={`${speed}×`}
-            enabled={enabled('SET_SPEED') && session?.speed !== speed}
-            onClick={() => onAction('SET_SPEED', speed)}
-          />
-        ))}
+        <label className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
+          <span>{pick('Tốc độ', 'Speed')}</span>
+          <select
+            value={session?.speed ?? 1}
+            disabled={!enabled('SET_SPEED')}
+            onChange={(e) => onAction('SET_SPEED', Number(e.target.value))}
+            aria-label={pick('Tốc độ mô phỏng', 'Simulation speed')}
+            className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--c-text)] disabled:opacity-50"
+          >
+            {SIMULATION_SPEEDS.map((speed) => (
+              <option key={speed} value={speed}>
+                {speed}×
+              </option>
+            ))}
+          </select>
+        </label>
         <ControlButton
           label={pick('Dừng phiên', 'Stop session')}
           enabled={canControl && !busy && session !== null && !isTerminalState(session.state)}
@@ -246,8 +265,8 @@ function stateLabel(pick: (vi: string, en: string) => string, state: string): st
 }
 
 /** `virtualTimeMs` là uint64 dạng chuỗi — không đổi sang Number để định dạng. */
-function formatVirtualTime(value: string): string {
-  const digits = value.replace(/^0+(?=\d)/, '')
+function formatVirtualTime(value: string | number): string {
+  const digits = String(value).replace(/^0+(?=\d)/, '')
   if (digits.length <= 3) return `0,${digits.padStart(3, '0')} s`
   const seconds = digits.slice(0, digits.length - 3)
   const milliseconds = digits.slice(digits.length - 3)

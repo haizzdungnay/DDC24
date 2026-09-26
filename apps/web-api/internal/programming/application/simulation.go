@@ -36,10 +36,23 @@ const (
 // materialize bằng resource riêng (PUT input, DELETE session) để có identity và
 // idempotency rõ ràng, nên chúng KHÔNG được nhận qua endpoint action.
 var simulationActionEndpointAllowed = map[string]struct{}{
-	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {},
+	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {}, "SET_BASE_TICK": {},
 }
 
-var simulationSpeeds = map[int64]struct{}{1: {}, 10: {}, 60: {}}
+var simulationSpeeds = map[int64]struct{}{
+	1: {}, 2: {}, 3: {}, 5: {}, 10: {}, 20: {}, 60: {},
+}
+
+func mapDbSpeed(speed int64) int64 {
+	switch {
+	case speed >= 40:
+		return 60
+	case speed >= 6:
+		return 10
+	default:
+		return 1
+	}
+}
 
 // SimulationOptions gom mọi phụ thuộc bên ngoài. `WorkerBinaryPath` rỗng nghĩa
 // là capability TẮT — không có đường nào bật một nửa.
@@ -82,7 +95,10 @@ type SimulationService struct {
 	actionWindow map[string][]time.Time
 	// Vòng chạy tự động của phiên đang RUNNING. Đóng kênh = yêu cầu dừng ở
 	// RANH GIỚI giữa hai tick, không phải cắt ngang một tick đang chạy.
-	runLoops map[string]chan struct{}
+	runLoops     map[string]chan struct{}
+	activeSpeed  map[string]int64
+	activeTickMs map[string]int64
+	latestFrames map[string]simworker.Frame
 }
 
 func NewSimulationService(options SimulationOptions) *SimulationService {
@@ -107,6 +123,9 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 		manifests:    make(map[string]simworker.Manifest),
 		actionWindow: make(map[string][]time.Time),
 		runLoops:     make(map[string]chan struct{}),
+		activeSpeed:  make(map[string]int64),
+		activeTickMs: make(map[string]int64),
+		latestFrames: make(map[string]simworker.Frame),
 	}
 }
 
@@ -267,6 +286,34 @@ type CreateSimulationSessionInput struct {
 // Nay cả hai lớp hỏi CÙNG một câu hỏi (`simulation.run`), nên chúng không thể
 // trôi khỏi nhau nữa. Ranh giới thì KHÔNG đổi: `simulation.run` chỉ admin có,
 // đúng như `ADR-053` đặt ra.
+func (s *SimulationService) enrichView(view SimulationSessionView) SimulationSessionView {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if spd, ok := s.activeSpeed[view.SessionID]; ok {
+		view.Speed = spd
+	}
+	if tick, ok := s.activeTickMs[view.SessionID]; ok {
+		view.BaseTickMS = &tick
+	}
+	return view
+}
+
+func (s *SimulationService) getSpeed(sessionID string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if spd, ok := s.activeSpeed[sessionID]; ok && spd > 0 {
+		return spd
+	}
+	return 1
+}
+
+func (s *SimulationService) getTick(sessionID string) (int64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tick, ok := s.activeTickMs[sessionID]
+	return tick, ok
+}
+
 func (s *SimulationService) requireSimulationControl(role string) *domain.PublicError {
 	if auth.RoleHasPermission(auth.Role(strings.ToLower(strings.TrimSpace(role))),
 		auth.PermissionSimulationRun) {
@@ -335,6 +382,9 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 	stop, found := s.runLoops[sessionID]
 	if found {
 		delete(s.runLoops, sessionID)
+		delete(s.activeSpeed, sessionID)
+		delete(s.activeTickMs, sessionID)
+		delete(s.latestFrames, sessionID)
 	}
 	s.mu.Unlock()
 	if found {
@@ -352,6 +402,9 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 // timer, không đổi thứ tự — nên cùng một chuỗi input cho cùng một kết quả ở
 // 1×, 10× và 60×.
 func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int64) {
+	if customTick, ok := s.getTick(sessionID); ok && customTick > 0 {
+		baseTickMS = customTick
+	}
 	if baseTickMS <= 0 {
 		return
 	}
@@ -365,14 +418,36 @@ func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int
 	s.runLoops[sessionID] = stop
 	s.mu.Unlock()
 
-	interval := time.Duration(baseTickMS/speed) * time.Millisecond
-	if interval < 5*time.Millisecond {
-		interval = 5 * time.Millisecond
+	rawInterval := time.Duration(baseTickMS/speed) * time.Millisecond
+	var interval time.Duration
+	var stepsPerTick int
+
+	if rawInterval >= 20*time.Millisecond {
+		interval = rawInterval
+		stepsPerTick = 1
+	} else {
+		interval = 20 * time.Millisecond
+		stepsPerTick = int((int64(20) * speed) / baseTickMS)
+		if stepsPerTick < 1 {
+			stepsPerTick = 1
+		}
+		if stepsPerTick > 200 {
+			stepsPerTick = 200
+		}
 	}
 
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		lastDbSync := time.Now()
+		var latestFrame simworker.Frame
+		defer func() {
+			if latestFrame.VirtualTimeMS > 0 {
+				_, _ = s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
+					latestFrame.VirtualTimeMS, latestFrame.SnapshotSequence, s.now())
+			}
+		}()
+
 		for {
 			select {
 			case <-stop:
@@ -382,19 +457,33 @@ func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int
 				if !found || client == nil {
 					return
 				}
+				var stepErr error
 				ctx, cancel := context.WithTimeout(context.Background(), SimulationWorkerCommandTimeout)
-				frame, err := client.Step(ctx)
+				for i := 0; i < stepsPerTick; i++ {
+					latestFrame, stepErr = client.Step(ctx)
+					if stepErr != nil {
+						break
+					}
+				}
 				cancel()
-				if err != nil {
+				if stepErr == nil {
+					s.mu.Lock()
+					s.latestFrames[sessionID] = latestFrame
+					s.mu.Unlock()
+				}
+				if stepErr != nil {
 					// Tick hỏng là hỏng CỦA PHIÊN. Đưa phiên về FAILED rồi thoát;
 					// chạy tiếp sau một tick lỗi là tích luỹ trạng thái không ai
 					// giải thích được.
-					s.failRunningSession(sessionID, simulationDetailOf(err, client))
+					s.failRunningSession(sessionID, simulationDetailOf(stepErr, client))
 					return
 				}
-				if _, err := s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
-					frame.VirtualTimeMS, frame.SnapshotSequence, s.now()); err != nil {
-					return
+				if time.Since(lastDbSync) >= time.Second {
+					lastDbSync = time.Now()
+					if _, err := s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
+						latestFrame.VirtualTimeMS, latestFrame.SnapshotSequence, s.now()); err != nil {
+						return
+					}
 				}
 			}
 		}
@@ -696,7 +785,7 @@ func (s *SimulationService) GetSession(ctx context.Context, sessionID string) (S
 	if _, manifest, found := s.worker(sessionID); found {
 		view.SimulationInputs = manifest.SimulationInputs
 	}
-	return view, nil
+	return s.enrichView(view), nil
 }
 
 // mutableSession gom mọi tiền điều kiện chung của một mutation trên phiên:
@@ -756,7 +845,11 @@ func (s *SimulationService) mutableSession(ctx context.Context, request Simulati
 
 // Action thực hiện một hành động điều khiển phiên.
 func (s *SimulationService) Action(ctx context.Context, request SimulationRequest, sessionID, action string,
-	speed int64) (SimulationSessionView, *domain.PublicError) {
+	speed int64, baseTickMs ...int64) (SimulationSessionView, *domain.PublicError) {
+	var customTick int64
+	if len(baseTickMs) > 0 {
+		customTick = baseTickMs[0]
+	}
 
 	if _, allowed := simulationActionEndpointAllowed[action]; !allowed {
 		public := domain.NewPublicError(domain.ErrRequest)
@@ -794,9 +887,20 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 			public.Field = "speed"
 			return SimulationSessionView{}, &public
 		}
-		// Speed CHỈ đổi nhịp treo tường. Nó không gửi lệnh nào cho worker, nên
-		// không thể đổi thứ tự, bỏ tick hay đổi hash đầu ra.
-		next.Speed = speed
+		s.mu.Lock()
+		s.activeSpeed[session.SessionID] = speed
+		s.mu.Unlock()
+		next.Speed = mapDbSpeed(speed)
+	case "SET_BASE_TICK":
+		if customTick <= 0 {
+			customTick = 10
+		}
+		s.mu.Lock()
+		s.activeTickMs[session.SessionID] = customTick
+		s.mu.Unlock()
+		if session.State == programmingstore.SimStateRunning {
+			s.startRunLoop(session.SessionID, customTick, s.getSpeed(session.SessionID))
+		}
 	case "STEP_CYCLE":
 		frame, err := client.Step(ctx)
 		if err != nil {
@@ -830,12 +934,12 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 	// Vòng chạy được (tái) khởi động SAU khi trạng thái đã commit. Bật trước
 	// commit sẽ có tick chạy cho một trạng thái chưa ai xác nhận.
 	if updated.State == programmingstore.SimStateRunning {
-		s.startRunLoop(updated.SessionID, updated.BaseTickMS, updated.Speed)
+		s.startRunLoop(updated.SessionID, updated.BaseTickMS, speed)
 	}
 
 	view := simulationView(updated)
 	view.SimulationInputs = manifest.SimulationInputs
-	return view, nil
+	return s.enrichView(view), nil
 }
 
 // SetInput ghi một virtual input đã qua allowlist của manifest.
@@ -930,6 +1034,13 @@ func (s *SimulationService) Observations(ctx context.Context, sessionID string) 
 	if public := s.requireCapability(); public != nil {
 		return simworker.Frame{}, public
 	}
+	s.mu.Lock()
+	if frame, ok := s.latestFrames[sessionID]; ok && frame.SnapshotSequence > 0 {
+		s.mu.Unlock()
+		return frame, nil
+	}
+	s.mu.Unlock()
+
 	client, _, found := s.worker(sessionID)
 	if !found || client == nil {
 		public := domain.NewPublicError(domain.ErrSimWorkerFailed)
@@ -940,6 +1051,9 @@ func (s *SimulationService) Observations(ctx context.Context, sessionID string) 
 		public := simulationPublicForDetail(simulationDetailOf(err, client))
 		return simworker.Frame{}, &public
 	}
+	s.mu.Lock()
+	s.latestFrames[sessionID] = frame
+	s.mu.Unlock()
 	return frame, nil
 }
 

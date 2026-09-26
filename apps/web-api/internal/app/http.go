@@ -260,6 +260,7 @@ func (a *App) routeTable() []webRouter.Route {
 		webRouter.ProtectedPermission("POST /api/v1/modbus/devices/{id}/test-connection", PermissionOperate, a.handleModbusTestConnection),
 		webRouter.ProtectedPermission("POST /api/v1/modbus/read-test", PermissionOperate, a.handleModbusReadTest),
 		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
+		webRouter.Public("GET /api/v1/ws/simulation", a.requireWSAuth(a.handleSimulationWS)),
 		webRouter.ProtectedPermission("GET /api/v1/alarms", PermissionRead, a.handleAlarms),
 		webRouter.ProtectedPermission("GET /api/v1/alarm-history", PermissionRead, a.handleAlarmHistory),
 		// `T57-3.3` (`ADR-044`): chỉ số hệ alarm ISA-18.2 §16, tính tại thời

@@ -33,6 +33,7 @@ type simulationActionRequest struct {
 	SchemaVersion string `json:"schemaVersion"`
 	Action        string `json:"action"`
 	Speed         int64  `json:"speed,omitempty"`
+	BaseTickMS    int64  `json:"baseTickMs,omitempty"`
 }
 
 type simulationInputRequest struct {
@@ -139,7 +140,7 @@ func handleSimulationRequest(w http.ResponseWriter, r *http.Request, correlation
 			WriteProgrammingError(w, http.StatusBadRequest, domain.NewPublicError(domain.ErrRequest), correlationID)
 			return true
 		}
-		view, public := service.Action(r.Context(), request, sessionID, payload.Action, payload.Speed)
+		view, public := service.Action(r.Context(), request, sessionID, payload.Action, payload.Speed, payload.BaseTickMS)
 		if public != nil {
 			writeSimulationError(w, *public, correlationID)
 			return true

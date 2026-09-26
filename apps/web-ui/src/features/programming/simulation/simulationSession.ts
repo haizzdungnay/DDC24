@@ -25,10 +25,10 @@ export const SIMULATION_STATES = [
 ] as const
 export type SimulationState = (typeof SIMULATION_STATES)[number]
 
-export const SIMULATION_ACTIONS = ['RUN', 'PAUSE', 'STEP_CYCLE', 'RESET', 'SET_SPEED'] as const
+export const SIMULATION_ACTIONS = ['RUN', 'PAUSE', 'STEP_CYCLE', 'RESET', 'SET_SPEED', 'SET_BASE_TICK'] as const
 export type SimulationAction = (typeof SIMULATION_ACTIONS)[number]
 
-export const SIMULATION_SPEEDS = [1, 10, 60] as const
+export const SIMULATION_SPEEDS = [1, 2, 3, 5, 10, 20, 60] as const
 export type SimulationSpeed = (typeof SIMULATION_SPEEDS)[number]
 
 export interface SimulationInputDescriptor {
