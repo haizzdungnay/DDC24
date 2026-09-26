@@ -250,7 +250,7 @@ TEST(StPackageV2, WriterRefusesProgramWithoutScheduleAndWritesNoOutput)
 
 TEST(StPackageV2, WriterAndLoaderKeepSingleProgramSchedule)
 {
-    for (uint32_t period_ms : {5000u, 30000u}) {
+    for (uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) {
         StPackageInput input = minimal_input();
         input.programs[0].period_ms = period_ms;
         std::vector<uint8_t> bytes;
@@ -262,6 +262,68 @@ TEST(StPackageV2, WriterAndLoaderKeepSingleProgramSchedule)
         EXPECT_EQ(view.header.schema_version, 2U);
         ASSERT_EQ(view.program_periods_ms.size(), 1U);
         EXPECT_EQ(view.program_periods_ms[0], period_ms);
+    }
+}
+
+TEST(StPackageV2, WriterRejectsPeriodOutsideProfileWithScheduleCode)
+{
+    /* ADR-061 C1/4.12: writer là đường TẠO gói mới — 5 ms, 30000 ms (legacy) và
+     * 750 ms đều bị từ chối bằng mã riêng `ST-SCHED-001`, không phải ST-LIM-009. */
+    for (uint32_t period_ms : {5u, 30000u, 750u}) {
+        StPackageInput input = minimal_input();
+        input.programs[0].period_ms = period_ms;
+        std::vector<uint8_t> bytes = {0xAAu};
+        std::string error;
+        EXPECT_FALSE(WritePackageV2(input, &bytes, &error)) << period_ms;
+        EXPECT_TRUE(bytes.empty());
+        EXPECT_EQ(error.rfind("ST-SCHED-001", 0), 0u) << period_ms << ": " << error;
+    }
+}
+
+/* Sửa trường periodMs của record Program đầu tiên rồi băm lại — cách duy nhất
+ * dựng một gói "đã Commission trước ADR-061" khi writer hiện hành không còn
+ * được phép sinh chu kỳ legacy. */
+static void patch_first_program_period(std::vector<uint8_t>* bytes, uint32_t period_ms)
+{
+    const std::size_t entry = st_pkg::kHeaderSize + st_pkg::kSectionEntrySize;
+    ASSERT_LT(entry + st_pkg::kSectionEntrySize, bytes->size());
+    const uint16_t type = static_cast<uint16_t>((*bytes)[entry]) |
+                          (static_cast<uint16_t>((*bytes)[entry + 1]) << 8);
+    ASSERT_EQ(type, st_pkg::SEC_PROGRAM_TABLE);
+    const uint32_t payload = static_cast<uint32_t>((*bytes)[entry + 4]) |
+                             (static_cast<uint32_t>((*bytes)[entry + 5]) << 8) |
+                             (static_cast<uint32_t>((*bytes)[entry + 6]) << 16) |
+                             (static_cast<uint32_t>((*bytes)[entry + 7]) << 24);
+    const uint16_t name_bytes = static_cast<uint16_t>((*bytes)[payload]) |
+                                (static_cast<uint16_t>((*bytes)[payload + 1]) << 8);
+    const std::size_t period = static_cast<std::size_t>(payload) + 2U + name_bytes;
+    ASSERT_LE(period + 4U, bytes->size());
+    for (std::size_t index = 0; index < 4; ++index)
+        (*bytes)[period + index] = static_cast<uint8_t>((period_ms >> (8 * index)) & 0xFFu);
+    rehash(bytes);
+}
+
+TEST(StPackageV2, ReaderAcceptsLegacyThirtySecondPeriodButNotArbitraryPeriods)
+{
+    /* Gói Active/LKG commission trước ADR-061 có Program 30000 ms phải NẠP được
+     * sau nâng cấp — từ chối là bộ điều khiển mất chương trình ngay lúc deploy.
+     * Chu kỳ không thuộc tập cũ lẫn tập mới vẫn bị chặn ở loader. */
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(minimal_input(), &bytes, &error)) << error;
+    std::vector<uint8_t> legacy = bytes;
+    patch_first_program_period(&legacy, 30000u);
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_TRUE(load(legacy, &view, &code)) << (code ? code : "");
+    ASSERT_EQ(view.program_periods_ms.size(), 1U);
+    EXPECT_EQ(view.program_periods_ms[0], 30000U);
+
+    for (uint32_t period_ms : {5u, 750u, 60000u}) {
+        std::vector<uint8_t> odd = bytes;
+        patch_first_program_period(&odd, period_ms);
+        EXPECT_FALSE(load(odd, &view, &code)) << period_ms;
+        EXPECT_STREQ(code, st_pkg_error::kResourceLimit) << period_ms;
     }
 }
 
@@ -463,7 +525,9 @@ TEST(StPackageV2, WriterRejectsInvalidSignalContractAndFallbackEncoding)
     rejected({"bad-name", "Main", 3, 1000});
     rejected({"VALID_NAME", "Missing", 3, 1000});
     rejected({"VALID_NAME", "Main", 0, 1000});
-    rejected({"VALID_NAME", "Main", 3, 999});
+    /* ADR-061 4.5: freshness 10..150000 ms. */
+    rejected({"VALID_NAME", "Main", 3, 9});
+    rejected({"VALID_NAME", "Main", 3, 150001});
     rejected({"VALID_NAME", "Main", 1, 1000, 1, 2, true});
     rejected({"VALID_NAME", "Main", 3, 1000, 0, 1, false});
     rejected({"VALID_NAME", "Main", 3, 1000, 1, 0x7f800000u, true});

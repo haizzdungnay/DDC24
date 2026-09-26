@@ -1,7 +1,8 @@
 /**
  * @file  test_safe_state.cpp
- * @brief Bảng trigger 07 §5: iop_status=FAULT → out safe; ts_ns đứng yên 4 scan →
- *        safe; hết fault → trả quyền cho resolver.
+ * @brief Bảng trigger 07 §5: iop_status=FAULT → out safe; ts_ns đứng yên quá
+ *        max(5 base step, 500 ms) → safe (T3, ADR-061 4.7); hết fault → trả quyền
+ *        cho resolver.
  */
 #include <gtest/gtest.h>
 
@@ -39,7 +40,7 @@ TEST(SafeState, IopFaultForcesSafeOutputs)
     IoSnapshot io = normal_io(100);
     io.iop_status = KX_IOP_FAULT;
     io.ao_mode[1] = 1;   /* AO2 = 4-20mA */
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
 
     OutputCmd out = active_out();
     s.apply(io, t, &out);
@@ -50,27 +51,70 @@ TEST(SafeState, IopFaultForcesSafeOutputs)
         EXPECT_EQ(out.dout[i], 0) << "DO open";
 }
 
-TEST(SafeState, StaleShm4ScansForcesSafe)
+TEST(SafeState, StaleShmForcesSafeAfterHalfSecondOnTenMsBaseStep)
 {
+    /* ADR-061 4.7: base step 10 ms → UNCERTAIN sau 250 ms, T3 sau 500 ms. Luật
+     * "3 scan" cũ ép safe sau 30 ms — ngắn hơn một vòng IOP bình thường. */
+    constexpr uint64_t kMs = 1000000ull;
     PointTable t;
     PointQuality q;
+    q.set_base_step_ns(10 * kMs);
     SafeState s(q);
 
     IoSnapshot io = normal_io(100);
-    q.evaluate(t, io);   /* fresh */
+    q.evaluate(t, io, 0);   /* fresh */
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active());
     EXPECT_EQ(out.dout[0], 1);
 
-    /* ts đứng yên 4 scan → stale > 3 → safe */
-    for (int i = 0; i < 4; i++)
-        q.evaluate(t, io);
+    /* ts đứng yên 40 ms (4 base step): theo luật cũ đã safe; nay còn GOOD. */
+    for (uint64_t now = 10 * kMs; now <= 40 * kMs; now += 10 * kMs) q.evaluate(t, io, now);
+    out = active_out();
+    s.apply(io, t, &out);
+    EXPECT_FALSE(s.active()) << "40 ms stale ở base 10 ms không được ép safe";
+
+    /* 300 ms: UNCERTAIN nhưng CHƯA T3 — UNCERTAIN chỉ hạ quality. */
+    q.evaluate(t, io, 300 * kMs);
+    EXPECT_TRUE(q.is_stale());
+    out = active_out();
+    s.apply(io, t, &out);
+    EXPECT_FALSE(s.active()) << "UNCERTAIN không ép đầu ra";
+
+    /* Đúng 500 ms: tuổi BẰNG ngưỡng chưa phải stale BAD (luật `>` như cũ). */
+    q.evaluate(t, io, 500 * kMs);
+    out = active_out();
+    s.apply(io, t, &out);
+    EXPECT_FALSE(s.active());
+
+    q.evaluate(t, io, 510 * kMs);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active());
+    EXPECT_TRUE(s.triggers().stale);
     EXPECT_EQ(out.dout[0], 0);
     EXPECT_FLOAT_EQ(out.ao[0], 0.0f);
+}
+
+TEST(SafeState, StaleThresholdScalesWithLongBaseStep)
+{
+    /* Base step 1 s (dev `--scan-ms 1000`): max(5 step, 500 ms) = 5 s — giữ đúng
+     * hành vi "quá 5 scan" cũ khi base step dài. */
+    constexpr uint64_t kMs = 1000000ull;
+    PointTable t;
+    PointQuality q;
+    q.set_base_step_ns(1000 * kMs);
+    SafeState s(q);
+    IoSnapshot io = normal_io(100);
+    q.evaluate(t, io, 0);
+    q.evaluate(t, io, 5000 * kMs);
+    OutputCmd out = active_out();
+    s.apply(io, t, &out);
+    EXPECT_FALSE(s.active());
+    q.evaluate(t, io, 6000 * kMs);
+    out = active_out();
+    s.apply(io, t, &out);
+    EXPECT_TRUE(s.active());
 }
 
 TEST(SafeState, RecoveryReturnsControlToResolver)
@@ -81,7 +125,7 @@ TEST(SafeState, RecoveryReturnsControlToResolver)
 
     IoSnapshot io = normal_io(100);
     io.iop_status = KX_IOP_FAULT;
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active());
@@ -89,7 +133,7 @@ TEST(SafeState, RecoveryReturnsControlToResolver)
     /* hết fault + ts mới → trả quyền */
     io.iop_status = KX_IOP_NORMAL;
     io.ts_ns = 200;
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active());
@@ -105,7 +149,7 @@ TEST(SafeState, SafeStatusAlsoTriggers)
 
     IoSnapshot io = normal_io(100);
     io.iop_status = KX_IOP_SAFE;
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active());
@@ -147,7 +191,7 @@ TEST(SafeState, T6GraphInputBadForcesSafe)
     IoSnapshot io = normal_io(100);
     io.ui_quality[0] = KX_Q_GOOD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active()) << "AI0 GOOD → không trigger";
@@ -156,7 +200,7 @@ TEST(SafeState, T6GraphInputBadForcesSafe)
     io.ts_ns = 200;
     io.ui_quality[0] = KX_Q_BAD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active());
@@ -167,7 +211,7 @@ TEST(SafeState, T6GraphInputBadForcesSafe)
     io.ui_quality[0] = KX_Q_GOOD;
     io.ui_quality[5] = KX_Q_BAD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active()) << "BAD trên kênh graph không dùng → kệ";
@@ -185,7 +229,7 @@ TEST(SafeState, ProgramOwnerIgnoresInactiveGraphInputPolicy)
     IoSnapshot io = normal_io(100);
     io.ui_quality[0] = KX_Q_BAD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     ASSERT_TRUE(r.set_do(PRIO_LOCAL_MANUAL, 0, true));
     OutputCmd out = r.resolve();
 
@@ -210,7 +254,7 @@ TEST(SafeState, ProgramOwnerDetectsNoControllerEvenWhenRollbackGraphIsLoaded)
     IoSnapshot io = normal_io(100);
     io.ui_quality[0] = KX_Q_GOOD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
 
     s.apply(io, t, &out, false);
@@ -230,7 +274,7 @@ TEST(SafeState, T7NoGraphNoManualForcesSafe)
     SafeState s(q, &g, &r);
 
     IoSnapshot io = normal_io(100);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active()) << "không graph + không manual → T7 safe";
@@ -239,7 +283,7 @@ TEST(SafeState, T7NoGraphNoManualForcesSafe)
     /* manual active (mức 2) → T7 hết trigger */
     r.set_do(PRIO_LOCAL_MANUAL, 0, true);
     io.ts_ns = 200;
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active()) << "có manual active → có người điều khiển → thoát T7";
@@ -248,7 +292,7 @@ TEST(SafeState, T7NoGraphNoManualForcesSafe)
     /* release manual → T7 trigger lại */
     r.release_do(PRIO_LOCAL_MANUAL, 0);
     io.ts_ns = 300;
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     out = active_out();
     s.apply(io, t, &out);
     EXPECT_TRUE(s.active());
@@ -266,7 +310,7 @@ TEST(SafeState, T7OffWhenGraphLoaded)
     IoSnapshot io = normal_io(100);
     io.ui_quality[0] = KX_Q_GOOD;
     t.update_inputs(io);
-    q.evaluate(t, io);
+    q.evaluate(t, io, 0);
     OutputCmd out = active_out();
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active()) << "graph loaded → T7 off dù không manual";

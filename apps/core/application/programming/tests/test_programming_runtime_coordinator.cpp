@@ -148,7 +148,7 @@ void configure_runtime_topology(StScheduler* scheduler)
     task.id = "main";
     task.priority = 0;
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     task.overrun_threshold = 3;
     std::string error;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;

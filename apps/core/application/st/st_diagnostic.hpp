@@ -92,6 +92,12 @@ constexpr const char* kTooManyRetainVars    = "ST-LIM-008";
  * ST-LIM-003/004 vì đây là trần cấp PACKAGE, không phải cấp Program. */
 constexpr const char* kTooManyPrograms      = "ST-LIM-009";
 
+/* ADR-061 C1 / 4.12: chu kỳ Task/Program không thuộc tập `allowedPeriodMs` của
+ * profile. Mã RIÊNG thay vì dùng lại ST-LIM-009: "quá nhiều Program" và "chu kỳ
+ * không hợp lệ" là hai lỗi có hai cách sửa khác hẳn nhau, gộp một mã thì người
+ * dùng đọc diagnostic đi bớt Program trong khi thứ cần sửa là một con số chu kỳ. */
+constexpr const char* kSchedulePeriodNotAllowed = "ST-SCHED-001";
+
 /* IO map validation (st_io_map.hpp) */
 constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";
 constexpr const char* kIoMapBadDirection    = "ST-IOMAP-002";

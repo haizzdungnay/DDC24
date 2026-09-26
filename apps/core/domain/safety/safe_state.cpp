@@ -9,8 +9,11 @@ void SafeState::apply(const IoSnapshot& io, const PointTable& table, OutputCmd* 
 {
     /* T1/T2: IOP fault/safe */
     const bool fault = (io.iop_status == KX_IOP_FAULT || io.iop_status == KX_IOP_SAFE);
-    /* T3: shm stale */
-    const bool stale = quality_.is_stale();
+    /* T3: shm stale quá max(5 base step, 500 ms) — ADR-061 4.7. Ngưỡng UNCERTAIN
+     * (max(3 base step, 250 ms)) chỉ hạ quality, không ép đầu ra: ở base step
+     * 10 ms, ép safe từ 30 ms stale là ép safe theo từng nhịp poll chậm của
+     * iobus. */
+    const bool stale = quality_.is_stale_bad();
 
     /* T6: chỉ graph đang SỞ HỮU Local logic mới có quyền làm input graph kích
      * hoạt SafeState. PROGRAM_ONLY vẫn giữ graph đã load để rollback, nhưng

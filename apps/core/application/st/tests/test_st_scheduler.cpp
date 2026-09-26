@@ -63,8 +63,25 @@ StTaskConfig task_cfg(const char* id, uint8_t prio, uint32_t period, uint32_t bu
     c.id = id;
     c.priority = prio;
     c.period_ms = period;
-    c.budget_ms = budget ? budget : period;
+    c.budget_us = (budget ? budget : period) * 1000u;
     return c;
+}
+
+/* Ngân sách tính thẳng bằng µs (ADR-061 4.3). */
+StTaskConfig task_cfg_us(const char* id, uint8_t prio, uint32_t period_ms, uint32_t budget_us)
+{
+    StTaskConfig c;
+    c.id = id;
+    c.priority = prio;
+    c.period_ms = period_ms;
+    c.budget_us = budget_us;
+    return c;
+}
+
+/* Ngân sách lớn nhất hợp lệ của Rev A: dưới 20% chu kỳ đúng 1 µs. */
+uint32_t max_rev_a_budget_us(uint32_t period_ms)
+{
+    return period_ms * 1000u / 5u - 1u;
 }
 
 int32_t counter_of(StScheduler& s, const char* inst)
@@ -157,6 +174,40 @@ TEST(StSchedulerRevA, AcceptsOnlyProfilePeriodsAndBudgetBelowTwentyPercent)
     EXPECT_TRUE(below_limit.add_task(task_cfg("Control_Main", 0, 1000, 199), &err)) << err;
 }
 
+TEST(StSchedulerRevA, TenMsTaskBudgetIsCheckedInMicroseconds)
+{
+    /* ADR-061 4.3: trần Task 10 ms = 2000 µs, loại trừ (OD-PROG-012 `< 20%`).
+     * Ở đơn vị ms cũ chỉ còn biểu diễn được 1 ms. */
+    std::string err;
+    StScheduler at_ceiling(StSchedulerProfile::REV_A);
+    EXPECT_FALSE(at_ceiling.add_task(task_cfg_us("main", 0, 10, 2000), &err));
+    EXPECT_NE(err.find("<20%"), std::string::npos) << err;
+
+    StScheduler below(StSchedulerProfile::REV_A);
+    ASSERT_TRUE(below.add_task(task_cfg_us("main", 0, 10, 1999), &err)) << err;
+    EXPECT_EQ(below.tasks()[0]->config().budget_us, 1999u);
+    EXPECT_EQ(st_base_step::kDefaultBudgetUs, 1999u);
+    EXPECT_EQ(st_base_step::kBudgetCeilingUs, 2000u);
+
+    StScheduler zero(StSchedulerProfile::REV_A);
+    EXPECT_FALSE(zero.add_task(task_cfg_us("main", 0, 10, 0), &err));
+}
+
+TEST(StSchedulerRevA, PeriodOutsideProfileIsScheduleDiagnosticNotProgramLimit)
+{
+    /* ADR-061 C1/4.12: 5 ms (dưới base step) và 30000 ms (tập cũ, không còn được
+     * tạo mới) đều bị từ chối bằng `ST-SCHED-001`, không dùng lại ST-LIM-009. */
+    for (const uint32_t period_ms : {5u, 30000u, 2000u}) {
+        StScheduler s(StSchedulerProfile::REV_A);
+        std::string err;
+        EXPECT_FALSE(s.add_task(task_cfg_us("main", 0, period_ms, 1), &err)) << period_ms;
+        EXPECT_EQ(err.rfind(st_diag_code::kSchedulePeriodNotAllowed, 0), 0u)
+            << period_ms << ": " << err;
+        EXPECT_EQ(err.find("ST-LIM-009"), std::string::npos);
+    }
+    EXPECT_STREQ(st_diag_code::kSchedulePeriodNotAllowed, "ST-SCHED-001");
+}
+
 TEST(StSchedulerProduct, AcceptsProfileCapacityAndRejectsOneOver)
 {
     /* Product v2 cho phép nhiều Program (32 tổng, 16 Enabled). Test cũ khoá
@@ -169,8 +220,9 @@ TEST(StSchedulerProduct, AcceptsProfileCapacityAndRejectsOneOver)
     ASSERT_EQ(max_tasks, st_profile_generated::kAllowedPeriodMs.size());
     for (std::size_t index = 0; index < max_tasks; ++index) {
         const std::string id = "Task_" + std::to_string(index);
-        ASSERT_TRUE(s.add_task(task_cfg(id.c_str(), static_cast<uint8_t>(index),
-                                        st_profile_generated::kAllowedPeriodMs[index], 100),
+        const uint32_t period_ms = st_profile_generated::kAllowedPeriodMs[index];
+        ASSERT_TRUE(s.add_task(task_cfg_us(id.c_str(), static_cast<uint8_t>(index), period_ms,
+                                           max_rev_a_budget_us(period_ms)),
                                &err))
             << err;
     }
@@ -189,27 +241,78 @@ TEST(StSchedulerProduct, AcceptsProfileCapacityAndRejectsOneOver)
     EXPECT_NE(err.find("too many program"), std::string::npos) << err;
 }
 
-TEST(StSchedulerRevA, BaseStepContinuesWhileThirtySecondTaskWaitsForRelease)
+TEST(StSchedulerRevA, BaseStepContinuesWhileFiftySecondTaskWaitsForRelease)
 {
+    /* Chu kỳ chậm nhất của profile sau ADR-061 là 50 000 ms. */
     StScheduler s(StSchedulerProfile::REV_A);
     std::string err;
-    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 30000, 100), &err)) << err;
+    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 50000, 100), &err)) << err;
     ASSERT_TRUE(s.add_program("Control_Main", "program-main", 0, &err)) << err;
     deploy(s, "program-main", counter_program(), 0);
 
-    for (uint64_t second = 1; second < 30; ++second) {
+    for (uint64_t second = 1; second < 50; ++second) {
         const StSchedulerTickResult r = s.on_base_step(second * 1000 * kMs);
         EXPECT_EQ(r.base_step_sequence, second + 1);
-        EXPECT_EQ(r.tasks_run, 0u) << "Task 30 s không được chạy ở giây " << second;
+        EXPECT_EQ(r.tasks_run, 0u) << "Task 50 s không được chạy ở giây " << second;
         EXPECT_EQ(r.programs_run, 0u);
     }
-    const StSchedulerTickResult due = s.on_base_step(30000 * kMs);
-    EXPECT_EQ(due.base_step_sequence, 31u);
+    const StSchedulerTickResult due = s.on_base_step(50000 * kMs);
+    EXPECT_EQ(due.base_step_sequence, 51u);
     EXPECT_EQ(due.tasks_run, 1u);
     EXPECT_EQ(due.programs_run, 1u);
     EXPECT_EQ(counter_of(s, "program-main"), 1);
-    EXPECT_EQ(s.base_step_count(), 31u)
-        << "activation step + 30 base step phải độc lập với một Task release";
+    EXPECT_EQ(s.base_step_count(), 51u)
+        << "activation step + 50 base step phải độc lập với một Task release";
+}
+
+/* ADR-061 C1/C3 — MỘT Task `main` 10 ms, tám Program ở tám chu kỳ của profile.
+ * Siêu chu kỳ 50 s: mỗi Program release ĐÚNG 50000/P lần, không lỡ nhịp, cả khi
+ * đồng hồ tick mang jitter ±40 µs (nhỏ hơn nửa base step). */
+static void run_all_periods_for_superperiod(int64_t jitter_ns)
+{
+    StScheduler s(StSchedulerProfile::REV_A);
+    s.set_base_step_ns(10 * kMs);
+    std::string err;
+    ASSERT_TRUE(s.add_task(task_cfg_us("main", 0, 10, st_base_step::kDefaultBudgetUs), &err))
+        << err;
+    std::vector<std::string> ids;
+    for (std::size_t index = 0; index < st_profile_generated::kAllowedPeriodMs.size(); ++index) {
+        const std::string id = "P_" + std::to_string(st_profile_generated::kAllowedPeriodMs[index]);
+        ASSERT_TRUE(s.add_program("main", id, static_cast<uint16_t>(index), &err)) << err;
+        s.find_program(id)->period_ms = st_profile_generated::kAllowedPeriodMs[index];
+        ASSERT_TRUE(s.request_activation(id, counter_program(), &err)) << err;
+        ids.push_back(id);
+    }
+    s.tick(0);
+    for (const std::string& id : ids) ASSERT_TRUE(s.start(id, &err)) << err;
+
+    for (uint64_t step = 1; step <= 5000; ++step) {
+        const int64_t skew = (step % 2 == 0) ? jitter_ns : -jitter_ns;
+        (void)s.on_base_step(static_cast<uint64_t>(static_cast<int64_t>(step * 10 * kMs) + skew));
+    }
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        const uint32_t period = st_profile_generated::kAllowedPeriodMs[index];
+        const StProgramInstance* program = s.find_program(ids[index]);
+        EXPECT_EQ(counter_of(s, ids[index].c_str()), static_cast<int32_t>(50000u / period))
+            << period << " ms";
+        EXPECT_EQ(program->run_count, 50000u / period) << period << " ms";
+        EXPECT_EQ(program->missed_release_count, 0u) << period << " ms";
+        EXPECT_EQ(program->state, StProgramState::RUNNING) << period << " ms";
+    }
+    /* +1: Task cũng được dispatch ở tick kích hoạt t = 0 (chưa Program nào
+     * RUNNING nên không Program nào chạy). */
+    EXPECT_EQ(s.tasks()[0]->stats().run_count, 5001u);
+    EXPECT_EQ(s.tasks()[0]->stats().missed_release_count, 0u);
+}
+
+TEST(StSchedulerRevA, Adr061_TenMsTaskReleasesEveryPeriodClassExactlyOverSuperperiod)
+{
+    run_all_periods_for_superperiod(0);
+}
+
+TEST(StSchedulerRevA, Adr061_ReleaseCountSurvivesSubToleranceWakeJitter)
+{
+    run_all_periods_for_superperiod(40000);
 }
 
 TEST(StScheduler, RejectsDuplicateProgramOrderInTask)

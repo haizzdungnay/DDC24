@@ -20,6 +20,7 @@
 
 #include "ipc/iobus_reader.hpp"
 #include "ipc/output_writer.hpp"
+#include "runtime/interval_gate.hpp"
 #include "runtime/scan_loop.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_diagnostic.hpp"
@@ -238,23 +239,190 @@ TEST(ScanLoop, FaultAlongsideNoControllerIsNotCommissionRecoverable)
         << "có lỗi IOP thật — không được coi là an toàn để Commission bỏ qua";
 }
 
-TEST(ScanLoop, StaleShmTriggersSafeWithin6Scans)
+namespace {
+
+/* Đồng hồ tiêm cho ScanLoop (ADR-061): test điều khiển thời gian thay vì ngủ
+ * thật. `sleep_until` nhảy tới mốc được yêu cầu cộng độ trễ tiêm cho lần đó, và
+ * đặt `shutdown` sau `max_sleeps` lần ngủ để `run()` tự dừng. */
+struct FakeScanTime {
+    uint64_t now_ns = 0;
+    std::atomic<bool>* shutdown = nullptr;
+    std::size_t max_sleeps = 0;
+    std::vector<uint64_t> wake_delay_ns;
+    std::vector<uint64_t> deadlines;
+    std::size_t sleeps = 0;
+
+    static uint64_t monotonic(void* ctx) { return static_cast<FakeScanTime*>(ctx)->now_ns; }
+    static void sleep_until(void* ctx, uint64_t deadline_ns)
+    {
+        auto* self = static_cast<FakeScanTime*>(ctx);
+        self->deadlines.push_back(deadline_ns);
+        if (deadline_ns > self->now_ns) self->now_ns = deadline_ns;
+        if (self->sleeps < self->wake_delay_ns.size()) self->now_ns += self->wake_delay_ns[self->sleeps];
+        ++self->sleeps;
+        if (self->shutdown != nullptr && self->sleeps >= self->max_sleeps) self->shutdown->store(true);
+    }
+    ScanTimeSource source() { return ScanTimeSource{&FakeScanTime::monotonic, &FakeScanTime::sleep_until, this}; }
+};
+
+/* Ghi mốc đồng hồ tiêm của MỖI step (after_scan chạy ngay sau step) và tiêm thời
+ * lượng step bằng cách đẩy đồng hồ đi thêm `extra_ns` ở step `slow_scan`. */
+struct ScanRecorder {
+    FakeScanTime* time = nullptr;
+    std::vector<uint64_t> step_times;
+    std::size_t slow_scan = SIZE_MAX;
+    uint64_t extra_ns = 0;
+
+    static void after_scan(void* ctx)
+    {
+        auto* self = static_cast<ScanRecorder*>(ctx);
+        self->step_times.push_back(self->time->now_ns);
+        if (self->step_times.size() - 1 == self->slow_scan) self->time->now_ns += self->extra_ns;
+    }
+};
+
+constexpr uint64_t kScanMs = 1000000ull;
+
+} // namespace
+
+TEST(ScanLoop, StaleShmTriggersSafeAfterHalfSecondOfWallClock)
 {
+    /* ADR-061 4.7: stale theo THỜI GIAN. Base step 10 ms, T3 sau 500 ms — không
+     * còn "sau 4 scan" (40 ms). */
     Fixture f;
+    FakeScanTime time;
+    f.loop.set_time_source_for_test(time.source());
     f.resolver.set_do(PRIO_LOCAL_MANUAL, 0, true);
     f.tick_iobus();
     f.loop.step();
     EXPECT_EQ(f.shm.do_cmd[0], 1);
 
-    /* iobus chết: ts_ns đứng yên */
-    for (int i = 0; i < 6; i++)
+    /* iobus chết: ts_ns đứng yên. 50 step x 10 ms = 500 ms: tuổi BẰNG ngưỡng. */
+    for (int i = 0; i < 50; i++) {
+        time.now_ns += 10 * kScanMs;
         f.loop.step();
-    EXPECT_EQ(f.shm.do_cmd[0], 0) << "stale → safe";
+    }
+    EXPECT_EQ(f.shm.do_cmd[0], 1) << "500 ms chưa quá ngưỡng T3";
+    EXPECT_TRUE(f.quality.is_stale()) << "đã quá 250 ms: UNCERTAIN";
+
+    time.now_ns += 10 * kScanMs;
+    f.loop.step();
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "stale > 500 ms → safe";
 
     /* iobus sống lại → trả quyền */
     f.tick_iobus();
+    time.now_ns += 10 * kScanMs;
     f.loop.step();
     EXPECT_EQ(f.shm.do_cmd[0], 1);
+}
+
+TEST(ScanLoop, Adr061_WakeJitterAndMissedBaseStepsAreCounted)
+{
+    Fixture f;
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 10;
+    /* Lần thức 0: 50 µs (trong C4); 1: 150 µs (vi phạm); 3: 25 ms (trễ >= 1 base
+     * step: vi phạm và lỡ 2 mốc lưới). */
+    time.wake_delay_ns = {50000, 150000, 0, 25 * kScanMs};
+    ScanRecorder recorder;
+    recorder.time = &time;
+    f.loop.set_time_source_for_test(time.source());
+    f.loop.run(shutdown, 10 * kScanMs, &ScanRecorder::after_scan, &recorder);
+
+    const BaseStepTimingSnapshot timing = f.loop.timing();
+    EXPECT_EQ(timing.base_step_ns, 10 * kScanMs);
+    EXPECT_EQ(timing.jitter_violation_count, 2u);
+    EXPECT_EQ(timing.missed_base_step_count, 2u);
+    EXPECT_EQ(timing.jitter_max_us, 25000u);
+    EXPECT_EQ(recorder.step_times.size(), 10u);
+    /* Sau lần thức trễ 25 ms (mốc 40 ms → thức 65 ms), step chạy cho mốc lưới 60 ms
+     * và lần ngủ kế tiếp nhắm đúng mốc 70 ms: lưới tuyệt đối không trôi. */
+    ASSERT_GE(time.deadlines.size(), 5u);
+    EXPECT_EQ(time.deadlines[3], 1040 * kScanMs);
+    EXPECT_EQ(time.deadlines[4], 1070 * kScanMs);
+    for (uint64_t deadline : time.deadlines)
+        EXPECT_EQ((deadline - 1000 * kScanMs) % (10 * kScanMs), 0u) << "mốc lệch lưới";
+}
+
+TEST(ScanLoop, Adr061_OverrunningStepSkipsTicksInsteadOfCatchingUp)
+{
+    /* SPEC §4: trễ >= 1 base step thì BỎ tick và nhảy tới mốc lưới kế tiếp trong
+     * tương lai. Chạy dồn 3 tick đã lỡ sẽ làm vòng quét chạy liên tiếp không
+     * nghỉ đúng lúc nó đang quá tải. */
+    Fixture f;
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 6;
+    ScanRecorder recorder;
+    recorder.time = &time;
+    recorder.slow_scan = 2;               /* step thứ 3 chạy 35 ms */
+    recorder.extra_ns = 35 * kScanMs;
+    f.loop.set_time_source_for_test(time.source());
+    f.loop.run(shutdown, 10 * kScanMs, &ScanRecorder::after_scan, &recorder);
+
+    const std::vector<uint64_t> expected = {1000 * kScanMs, 1010 * kScanMs, 1020 * kScanMs,
+                                            1060 * kScanMs, 1070 * kScanMs, 1080 * kScanMs};
+    EXPECT_EQ(recorder.step_times, expected)
+        << "mốc 30/40/50 ms phải bị BỎ, không chạy bù liên tiếp";
+    EXPECT_EQ(f.loop.timing().missed_base_step_count, 3u);
+    EXPECT_EQ(f.loop.timing().jitter_violation_count, 0u)
+        << "thức đúng mốc 60 ms sau khi bỏ tick không phải lệch nhịp";
+    for (std::size_t index = 1; index < recorder.step_times.size(); ++index)
+        EXPECT_GE(recorder.step_times[index] - recorder.step_times[index - 1], 10 * kScanMs);
+}
+
+TEST(ScanLoop, Adr061_StepWcetIsMeasuredPerPhase)
+{
+    /* ADR-061 4.10 bước 1: có số đo WCET từng bước trước khi tách việc không-RT. */
+    Fixture f;
+    f.tick_iobus();
+    f.loop.step();
+    const ScanStepWcet& wcet = f.loop.step_wcet();
+    uint64_t sum = 0;
+    for (std::size_t phase = 0; phase < kScanPhaseCount; ++phase) {
+        sum += wcet.last_ns[phase];
+        EXPECT_GE(wcet.minute_max_ns[phase], wcet.last_ns[phase]);
+        EXPECT_STRNE(scan_phase_name(static_cast<ScanPhase>(phase)), "?");
+    }
+    EXPECT_GT(wcet.total_last_ns, 0u);
+    EXPECT_EQ(sum, wcet.total_last_ns) << "các bước phải phủ kín step, không chồng/không hở";
+    EXPECT_EQ(wcet.minute_scans, 1u);
+}
+
+TEST(BaseStepPacer, Adr061_JitterMaxIsWindowedToSixtySecondsButCountersAccumulate)
+{
+    constexpr uint64_t kStep = 10 * kScanMs;
+    BaseStepPacer pacer;
+    pacer.start(kStep, 0);
+    pacer.on_wake(0);
+    uint64_t deadline = pacer.advance(0);
+    /* Lệch 300 µs ở giây đầu. */
+    pacer.on_wake(deadline + 300000);
+    EXPECT_EQ(pacer.snapshot().jitter_max_us, 300u);
+    EXPECT_EQ(pacer.snapshot().jitter_violation_count, 1u);
+    /* Chạy đúng nhịp 61 s: cửa sổ 60 s đã bỏ mốc 300 µs, bộ đếm tích luỹ giữ. */
+    uint64_t now = deadline + 300000;
+    for (int step = 0; step < 6100; ++step) {
+        deadline = pacer.advance(now);
+        now = deadline + 20000;   /* 20 µs: trong C4 */
+        pacer.on_wake(now);
+    }
+    EXPECT_EQ(pacer.snapshot().jitter_max_us, 20u);
+    EXPECT_EQ(pacer.snapshot().jitter_violation_count, 1u);
+    EXPECT_EQ(pacer.snapshot().missed_base_step_count, 0u);
+    /* Lệch đúng 100 µs chưa là vi phạm (C4: <= 100 µs); 100,001 µs là vi phạm. */
+    deadline = pacer.advance(now);
+    pacer.on_wake(deadline + 100000);
+    EXPECT_EQ(pacer.snapshot().jitter_violation_count, 1u);
+    deadline = pacer.advance(deadline + 100000);
+    pacer.on_wake(deadline + 100001);
+    EXPECT_EQ(pacer.snapshot().jitter_violation_count, 2u);
+    EXPECT_EQ(pacer.snapshot().jitter_max_us, 101u) << "µs làm tròn LÊN";
 }
 
 TEST(ScanLoop, NoOverrunWithLightLoad)
@@ -606,7 +774,7 @@ struct ProgramFixture {
         config.id = id;
         config.priority = priority;
         config.period_ms = period_ms;
-        config.budget_ms = period_ms;
+        config.budget_us = period_ms * 1000u;
         std::string error;
         ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
     }
@@ -855,4 +1023,64 @@ TEST(ScanLoop, DumpsRealProgramSnapshotJsonForBackendHandoff)
                 "===== T60-004 M1 POINT_SNAPSHOT DUMP END =====\n",
                 payload.c_str());
     std::fflush(stdout);
+}
+
+/* ADR-061 4.9 — metric C4 đi qua `task` của `point_snapshot` với ĐÚNG các khoá
+ * camelCase mà `/programming/runtime` trả nguyên. */
+TEST(ScanLoop, Adr061_PointSnapshotTaskCarriesC4Metrics)
+{
+    ProgramFixture f;
+    f.add_task("main", 0, 100);
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 5000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 4;
+    time.wake_delay_ns = {0, 250000};   /* một lần lệch 250 µs */
+    ScanRecorder recorder;
+    recorder.time = &time;
+    f.loop.set_time_source_for_test(time.source());
+    f.loop.run(shutdown, 10 * kScanMs, &ScanRecorder::after_scan, &recorder);
+
+    const RuntimePointSnapshot snapshot = f.web.snapshot_for_test();
+    ASSERT_TRUE(snapshot.task.present);
+    EXPECT_EQ(snapshot.task.base_step_us, 10000u);
+    EXPECT_EQ(snapshot.task.budget_us, 100000u);
+    EXPECT_EQ(snapshot.task.budget_ms, 100u);
+    EXPECT_EQ(snapshot.task.jitter_max_us, 250u);
+    EXPECT_EQ(snapshot.task.jitter_violation_count, 1u);
+    EXPECT_EQ(snapshot.task.missed_base_step_count, 0u);
+
+    const nlohmann::json json = nlohmann::json::parse(serialize_runtime_point_snapshot(snapshot));
+    const nlohmann::json& task = json.at("task");
+    for (const char* key : {"budgetUs", "baseStepUs", "jitterMaxUs", "jitterViolationCount",
+                            "missedBaseStepCount", "budgetMs", "periodMs", "runCount"})
+        EXPECT_TRUE(task.contains(key)) << key;
+    EXPECT_EQ(task.at("baseStepUs").get<uint64_t>(), 10000u);
+    EXPECT_EQ(task.at("jitterMaxUs").get<uint32_t>(), 250u);
+    EXPECT_EQ(task.at("jitterViolationCount").get<uint64_t>(), 1u);
+}
+
+/* ADR-061 4.8 — watchdog systemd kick tối đa 1 lần/giây dù base step 10 ms, và
+ * snapshot persist graph mỗi 60 s đo bằng đồng hồ (trước là "mỗi 60 scan"). */
+TEST(IntervalGate, Adr061_WatchdogKickAtMostOncePerSecondOnTenMsSteps)
+{
+    IntervalGate watchdog(1000 * kScanMs);
+    uint32_t kicks = 0;
+    for (uint64_t now = 0; now < 10000 * kScanMs; now += 10 * kScanMs)
+        if (watchdog.due(now)) ++kicks;
+    EXPECT_EQ(kicks, 10u) << "10 s ở base 10 ms: kick ở 0, 1, ..., 9 s";
+
+    /* Scan đầu tiên luôn kick: watchdog phải thấy vòng quét hoàn tất sớm nhất. */
+    IntervalGate fresh(1000 * kScanMs);
+    EXPECT_TRUE(fresh.due(123 * kScanMs));
+    EXPECT_FALSE(fresh.due(124 * kScanMs));
+
+    /* Snapshot: neo lúc READY, mở lần đầu sau đúng 60 s, không mở ngay. */
+    IntervalGate snapshot(60000 * kScanMs);
+    snapshot.arm(0);
+    uint32_t saves = 0;
+    for (uint64_t now = 10 * kScanMs; now <= 180000 * kScanMs; now += 10 * kScanMs)
+        if (snapshot.due(now)) ++saves;
+    EXPECT_EQ(saves, 3u) << "180 s: ghi ở 60, 120, 180 s — không phải 0,6 s một lần";
 }

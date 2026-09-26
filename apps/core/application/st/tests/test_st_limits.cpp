@@ -200,15 +200,34 @@ TEST(StProfile, TaskAndPeriodAreLockedToProductProfile)
         st_limits::RevAProfileError error;
         EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error)) << period;
     }
-    for (uint32_t period : {999u, 1001u, 4999u, 5001u, 29999u, 30001u}) {
+    /* ADR-061 C1: 5 ms (dưới base step) và 30000 ms (tập cũ) nằm ngoài tập mới. */
+    for (uint32_t period : {5u, 9u, 11u, 999u, 1001u, 29999u, 30000u, 50001u}) {
         st_limits::RevAProfileUsage usage;
         usage.task_period_ms = period;
         st_limits::RevAProfileError error;
         EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error)) << period;
         EXPECT_EQ(error.field, "taskPeriodMs");
         /* Constraint text phải kể đúng enum của profile, không phải chuỗi cũ. */
-        EXPECT_NE(error.constraint.find("1000"), std::string::npos);
-        EXPECT_NE(error.constraint.find("30000"), std::string::npos);
+        EXPECT_NE(error.constraint.find("enum=10,50,100,500,1000,5000,10000,50000"),
+                  std::string::npos)
+            << error.constraint;
+    }
+}
+
+TEST(StProfile, LegacyThirtySecondPeriodIsLoadOnlyNotCreatable)
+{
+    /* ADR-061 — gói đã Commission với tập cũ {1000, 5000, 30000} phải nạp được
+     * sau nâng cấp; riêng 30000 là legacy: loader nhận, đường tạo mới từ chối. */
+    EXPECT_FALSE(st_limits::RevAAllowsPeriod(30000u));
+    EXPECT_TRUE(st_limits::RevAIsLegacyPeriod(30000u));
+    EXPECT_TRUE(st_limits::RevALoaderAllowsPeriod(30000u));
+    for (uint32_t period : st_profile_generated::kAllowedPeriodMs) {
+        EXPECT_FALSE(st_limits::RevAIsLegacyPeriod(period)) << period;
+        EXPECT_TRUE(st_limits::RevALoaderAllowsPeriod(period)) << period;
+    }
+    for (uint32_t period : {5u, 20u, 750u, 60000u}) {
+        EXPECT_FALSE(st_limits::RevAIsLegacyPeriod(period)) << period;
+        EXPECT_FALSE(st_limits::RevALoaderAllowsPeriod(period)) << period;
     }
 }
 

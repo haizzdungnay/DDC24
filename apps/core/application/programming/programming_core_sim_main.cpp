@@ -121,8 +121,11 @@ int main(int argc, char** argv)
     StTaskConfig task;
     task.id = "main";
     task.priority = 0;
+    /* Simulator host giữ Task 1000 ms (vẫn thuộc tập ADR-061) vì vòng tick của
+     * nó là `--tick-ms` (mặc định 20 ms), không phải base step 10 ms của bo.
+     * Ngân sách tính bằng µs (ADR-061 4.3). */
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     task.overrun_threshold = 3;
     std::string error;
     if (!scheduler.add_task(task, &error)) {

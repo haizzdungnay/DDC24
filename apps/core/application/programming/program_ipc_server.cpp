@@ -11,6 +11,8 @@
 
 #include <sys/socket.h>
 
+#include "st/st_profile_generated.hpp"
+
 namespace core::programming {
 namespace {
 
@@ -427,8 +429,12 @@ std::string hex_key(const std::vector<uint8_t>& bytes)
 
 std::vector<uint8_t> capabilities_payload()
 {
+    /* ADR-061 X11: tập chu kỳ đọc từ hằng SINH từ product profile, không chép
+     * cứng — bản chép `[1000,5000,30000]` cũ nói sai ngay khi profile đổi. */
+    json periods = json::array();
+    for (const uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) periods.push_back(period_ms);
     json payload = json::array({"MK-DDC-24-REV-A", PROGRAM_IPC_MAX_FRAME,
-                                PROGRAM_IPC_MAX_QUEUE, json::array({1000, 5000, 30000})});
+                                PROGRAM_IPC_MAX_QUEUE, periods});
     return json::to_cbor(payload);
 }
 
@@ -953,7 +959,11 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
         if (!value_trace_->start(session_id, *trace_scheduler_, variables.data(), variables.size(),
                                  period_ms, duration_ms, now_mono_ns, &error))
             return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
-        return make_response(request, ProgramResult::Accepted, nullptr);
+        /* ADR-061 4.6 — trả chu kỳ lấy mẫu HIỆU LỰC `[effectiveSamplePeriodMs]`
+         * để view nói đúng nhịp Core thật sự lấy mẫu (max(yêu cầu, base step)),
+         * không phải nhịp người dùng đã xin. */
+        const json accepted = json::array({value_trace_->status().effective_sample_period_ms});
+        return make_response(request, ProgramResult::Accepted, nullptr, json::to_cbor(accepted));
     }
     if (!parse_trace_session_payload(request, &session_id))
         return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");

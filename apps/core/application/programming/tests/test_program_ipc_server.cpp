@@ -390,7 +390,7 @@ TEST(ProgramIpcServer, DispatchesCanonicalStageAndActivateToRuntimeCoordinator)
     task.id = "main";
     task.priority = 0;
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     std::string runtime_error;
     ASSERT_TRUE(scheduler.add_task(task, &runtime_error));
     ASSERT_TRUE(scheduler.add_program("main", "program-main", 0, &runtime_error));
@@ -458,7 +458,7 @@ TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;

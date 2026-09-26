@@ -86,7 +86,9 @@ void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_own
     task.present = true;
     copy_bounded(&task.id, first_task.config().id);
     task.period_ms = first_task.config().period_ms;
-    task.budget_ms = first_task.config().budget_ms;
+    /* ADR-061 4.3: nguồn là µs; `budgetMs` làm tròn xuống chỉ để tương thích đọc. */
+    task.budget_us = first_task.config().budget_us;
+    task.budget_ms = first_task.config().budget_us / 1000u;
     copy_bounded(&task.state, task_state_name(first_task, program_owner));
     task.run_count = first_task.stats().run_count;
     task.missed_release_count = first_task.stats().missed_release_count;
@@ -124,6 +126,8 @@ void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_own
             target.consecutive_missed_release = program->consecutive_missed_release;
             target.last_run_mono_ns = program->last_run_mono_ns;
             target.lane = program->lane;
+            target.legacy_period = scheduler->profile() == StSchedulerProfile::REV_A &&
+                                   st_limits::RevAIsLegacyPeriod(target.period_ms);
         }
     }
     snapshot->program_count = filled;

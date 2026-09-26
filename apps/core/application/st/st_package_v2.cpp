@@ -13,7 +13,9 @@
 #include <sodium.h>
 
 #include "st/st_profile_generated.hpp"
+#include "st/st_diagnostic.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_limits.hpp"
 
 namespace core {
 namespace {
@@ -243,12 +245,14 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         if (program.period_ms == 0)
             return fail(error, "Program '" + program.program_name +
                                    "' chưa có chu kỳ chạy");
-        if (std::find(st_profile_generated::kAllowedPeriodMs.begin(),
-                      st_profile_generated::kAllowedPeriodMs.end(),
-                      program.period_ms) == st_profile_generated::kAllowedPeriodMs.end())
-            return fail(error, "Program '" + program.program_name + "' có chu kỳ " +
+        /* Writer là đường TẠO gói mới: chỉ tập của profile hiện hành (ADR-061
+         * C1). Chu kỳ legacy chỉ còn được NẠP (loader phía dưới), không được
+         * sinh thêm gói nào mang nó. */
+        if (!st_limits::RevAAllowsPeriod(program.period_ms))
+            return fail(error, std::string(st_diag_code::kSchedulePeriodNotAllowed) +
+                                   " Program '" + program.program_name + "' có chu kỳ " +
                                    std::to_string(program.period_ms) +
-                                   " ms ngoài ba lớp của profile");
+                                   " ms ngoài tập chu kỳ của profile");
     }
     std::set<std::string> signal_names;
     for (const StPackageSignal& signal : input.signals) {
@@ -260,8 +264,11 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
             return fail(error, "signal '" + signal.name + "' trỏ publisher không có trong PROGRAM_TABLE");
         if (!valid_signal_type(signal.data_type))
             return fail(error, "signal '" + signal.name + "' có dataType không hợp lệ");
-        if (signal.freshness_ms < 1000u || signal.freshness_ms > 90000u)
-            return fail(error, "signal '" + signal.name + "' có freshness ngoài dải 1000..90000 ms");
+        if (signal.freshness_ms < st_limits::kMinSignalFreshnessMs ||
+            signal.freshness_ms > st_limits::kMaxSignalFreshnessMs)
+            return fail(error, "signal '" + signal.name + "' có freshness ngoài dải " +
+                                   std::to_string(st_limits::kMinSignalFreshnessMs) + ".." +
+                                   std::to_string(st_limits::kMaxSignalFreshnessMs) + " ms");
         if (signal.stale_policy > 2u ||
             (signal.stale_policy == 1u) != signal.has_fallback ||
             !valid_fallback_bits(signal.data_type, signal.fallback_bits,
@@ -798,10 +805,11 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                  * có thể do một writer khác phiên bản sinh ra. Riêng 0 vẫn được
                  * đọc để giữ tương thích với package v2 legacy; writer hiện hành
                  * không còn được phép sinh giá trị này. */
-                if (period_ms != 0 &&
-                    std::find(st_profile_generated::kAllowedPeriodMs.begin(),
-                              st_profile_generated::kAllowedPeriodMs.end(),
-                              period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+                /* ADR-061: loader nhận tập mới ∪ legacy 30000 ms. Gói Active/LKG đã
+                 * Commission trước khi đổi tập chu kỳ phải nạp lại được sau nâng
+                 * cấp — loader không phân biệt được gói cũ với gói mới, nên việc
+                 * chặn chu kỳ legacy cho Revision mới nằm ở Check/API và writer. */
+                if (period_ms != 0 && !st_limits::RevALoaderAllowsPeriod(period_ms))
                     return reject(error_code, st_pkg_error::kResourceLimit);
                 out->program_names.push_back(std::move(name));
                 out->program_periods_ms.push_back(period_ms);
@@ -855,7 +863,8 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 const uint64_t fallback_bits = read_u64(payload, cursor + 6);
                 const bool has_fallback = stale_policy == 1u;
                 if (!valid_signal_identifier(name) || !valid_signal_type(data_type) ||
-                    freshness_ms < 1000u || freshness_ms > 90000u ||
+                    freshness_ms < st_limits::kMinSignalFreshnessMs ||
+                    freshness_ms > st_limits::kMaxSignalFreshnessMs ||
                     stale_policy > 2u ||
                     !valid_fallback_bits(data_type, fallback_bits, has_fallback))
                     return reject(error_code, st_pkg_error::kBadRecord);
