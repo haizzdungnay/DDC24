@@ -121,6 +121,55 @@ inline CpuIdleExposure cpu_idle_exposure(const std::string& sysfs_cpu_root, int 
     return result;
 }
 
+/* ADR-061 4.11 / F17 — tần số của cụm CPU chứa CPU vòng quét còn tự đổi không.
+ *
+ *        Đo trên Foxlinx 2026-09-26: RV1126B có MỘT policy cpufreq cho cả 4 lõi
+ *        (`related_cpus=0 1 2 3`), governor `schedutil` đổi tần số ~100 lần/giây
+ *        theo tải ở CPU0–2. Mỗi lần đổi cả cụm khựng: trace CPU3 cho thấy đoạn
+ *        `sched_waking` → `sched_wakeup` của mkddc-core dài 57–81 µs (bình thường
+ *        ~18 µs), lần thức dậy trễ 109–163 µs dù CPU3 rảnh. Cùng tải I/O, A/B:
+ *        `schedutil` +3/+7 lần vượt 100 µs, `performance` +0/+0.
+ *
+ *        Việc ghim governor là của nền tảng (`/usr/libexec/mkddc/rt-cpufreq`
+ *        trong unit mkddc-core, chạy bằng root); ở đây chỉ ĐỌC để Core nói ra
+ *        lúc khởi động khi thiếu. */
+struct CpuFreqExposure {
+    /* false: CPU này không có cpufreq (không driver, sysfs không mount). */
+    bool known = false;
+    /* true: tần số còn có thể tự đổi (governor động và min != max). */
+    bool scaling = false;
+    std::string governor;
+    int min_khz = 0;
+    int max_khz = 0;
+    int cur_khz = 0;
+    /* Các CPU chung policy, ví dụ "0 1 2 3": tải ở CPU khác vẫn đổi tần số CPU này. */
+    std::string related_cpus;
+};
+
+inline CpuFreqExposure cpufreq_exposure(const std::string& sysfs_cpu_root, int cpu)
+{
+    using cpu_idle_detail::read_first_line;
+    using cpu_idle_detail::read_int;
+
+    CpuFreqExposure result;
+    const std::string dir = sysfs_cpu_root + "/cpu" + std::to_string(cpu) + "/cpufreq";
+    if (!read_first_line(dir + "/scaling_governor", &result.governor) || result.governor.empty())
+        return result;
+    result.known = true;
+    read_int(dir + "/scaling_min_freq", &result.min_khz);
+    read_int(dir + "/scaling_max_freq", &result.max_khz);
+    read_int(dir + "/scaling_cur_freq", &result.cur_khz);
+    read_first_line(dir + "/related_cpus", &result.related_cpus);
+    /* `performance`/`powersave` ghim max/min; `userspace` chỉ đổi khi có người
+     * ghi `scaling_setspeed`. Governor động mà min == max cũng không còn gì để
+     * đổi. */
+    const bool fixed_by_governor = result.governor == "performance" ||
+                                   result.governor == "powersave" || result.governor == "userspace";
+    const bool fixed_by_limits = result.min_khz > 0 && result.min_khz == result.max_khz;
+    result.scaling = !fixed_by_governor && !fixed_by_limits;
+    return result;
+}
+
 /* "0-2,5" (dạng `Cpus_allowed_list`) có chứa `cpu` không. */
 inline bool cpu_list_contains(const std::string& list, int cpu)
 {

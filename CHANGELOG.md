@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Fixed — Soak ADR-061 hỏng C4 do đổi tần số CPU; bo lab bị xâm nhập qua SSH đã được ngăn chặn (F17, 2026-09-26)
+
+- Phạm vi: `platform/packaging/rt-cpufreq.sh` (mới), `platform/systemd/mkddc-core.service`, `platform/packaging/install.sh`, `apps/core/application/runtime/{cpu_idle_check.hpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `tests/integration/test_release_packaging_guard.py`; ADR-061 4.11; guide Core §3/§9; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (F17, lượt 4); `docs/07_records/security/2026-09-26-foxlinx-ssh-intrusion.md` (mới); runbook `27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md`, `FOXLINX_DEPLOY_CHECKLIST.md`.
+- F17: soak 24 h có 2 lần thức dậy lệch > 100 µs (tối đa 129,6 µs) sau 3,5 h. Nguyên nhân là RV1126B có một policy cpufreq chung cho cả 4 lõi, governor `schedutil` đổi tần số khoảng 100 lần/giây theo tải ở CPU0–2, và mỗi lần đổi làm CPU3 khựng trong đường đánh thức (trace CPU3: `sched_waking` → `sched_wakeup` 57–81 µs thay vì ~18 µs). Unit core nay gọi `rt-cpufreq hold 3` / `release 3` (governor `performance`, trả governor cũ khi dừng); Core log `ERROR rt.cpufreq_scaling` / `INFO rt.cpufreq_ok` lúc khởi động.
+- Sự cố `SEC-INC-20260926-FOXLINX`: bo lab bị đăng nhập root bằng mật khẩu qua SSH mở ra Internet từ 2026-09-22 (XMRig tự khôi phục, agent quét mạng, khoá SSH lạ khoá bằng `chattr +ia`). Đã cách ly, SSH chỉ nhận khoá, chặn 3 IP; cần cài lại image. Runbook và checklist bỏ hướng dẫn SSH bằng mật khẩu.
+- Kiểm chứng: `cmake --fresh … MODBUS/BACNET/HMI=ON` exit 0, build exit 0 (0 warning), `ctest` 1568/1568 PASS (9 skipped như trước); pytest `test_release_packaging_guard.py` 13/13 PASS; cross-build ARM core `3ebd78c3…` (commit `ff2f92fe`, GLIBCXX ≤ 3.4.29). Trên Foxlinx: A/B cùng tải `schedutil` +3/+7 lần vượt, `performance` +0/+0; sau deploy, 5 lần ghi 64 MB fsync + 5 lần `daemon-reload` cho +0 lần vượt, 0 lần đổi tần số. Soak lần 2 từ 2026-09-26 10:46:27Z.
+
 ### Fixed — Khởi động core không còn lỡ base step do `ExecStartPost` chạy FIFO 80 trên CPU vòng quét (F16, 2026-09-26)
 
 - Phạm vi: `apps/core/application/runtime/{pid_file.hpp,scan_loop.cpp,scan_loop.hpp,base_step_pacer.hpp,test_scan_loop.cpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `platform/systemd/mkddc-core.service`, `tests/integration/test_release_packaging_guard.py`; ADR-061 4.11; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
