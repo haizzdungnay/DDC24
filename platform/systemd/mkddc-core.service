@@ -12,6 +12,15 @@ Type=notify
 # ADR-052: khoá công khai của CHÍNH bo này vào tập khoá tin cậy. Thiếu file
 # thì core dừng với lỗi cấu hình rõ ràng thay vì lặng lẽ chạy với ít khoá hơn.
 ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkddc/keys/device.pub
+# ADR-061 C4 / 4.11: CPU3 (CPU của vòng quét, xem CPUAffinity) không được vào
+# trạng thái nghỉ sâu. RV1126B có `cpu-sleep` exit latency 370 µs; vòng quét ngủ
+# 10 ms giữa hai base step nên governor chọn nó gần như mọi lần. Đo trên Foxlinx
+# 2026-09-26: 13,07 % lần thức dậy lệch > 100 µs khi không ràng buộc, 0,15 % khi
+# ràng buộc 20 µs (chỉ còn WFI). `+` chạy bằng root vì user mkddc không ghi được
+# sysfs; `-` để bo không có cpuidle không bị chặn khởi động. Core tự log
+# `rt.cpu_idle_exposed` khi ràng buộc này thiếu.
+ExecStartPre=-+/bin/sh -c 'echo 20 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
+ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc
