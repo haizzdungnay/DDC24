@@ -30,7 +30,7 @@ import { contextNotice } from '../layout/ProgrammingContextStrip'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
-import { currentSession, simulationWatchRows } from '../simulation/simulationSession'
+import { currentSession, isSimulationSupported, simulationWatchRows } from '../simulation/simulationSession'
 import { activeProgramSource } from '../overview/activeProgramSet'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { programsModeCapabilities } from '../shared/programsMode'
@@ -135,9 +135,6 @@ export function DesignWorkspacePage({
      hardcode trong `programsModeCapabilities` để một thiết bị thiếu worker mô
      phỏng không bị hứa hẹn một chế độ nó không có. */
   const capabilities = useProgrammingCapabilities()
-  /* `T59-815` — vòng đời phiên SIMULATE. Hook luôn được gọi (luật hook), nhưng
-     nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
-  const simulation = useSimulation()
   const runtime = useProgrammingRuntime()
   const runtimeContext = useProgrammingRuntimeContext()
   const { setEditingContext, setContextStripSlot } = runtimeContext
@@ -152,6 +149,14 @@ export function DesignWorkspacePage({
    * unmount vì route canonical chỉ đổi query. */
   const modeParam = searchParams.get('mode')
   const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
+  /* `T59-815` — vòng đời phiên SIMULATE. Hook luôn được gọi (luật hook), nhưng
+     nó chỉ poll khi thực sự có phiên sống, và chỉ DÒ phiên đang sống trên thiết
+     bị khi đang ở SIMULATE của một thiết bị có công bố mô phỏng — nên EDIT/LIVE
+     không sinh request nào tới họ route Simulation. */
+  const simulation = useSimulation({
+    recoverActiveSession:
+      workspaceMode === 'SIMULATE' && isSimulationSupported(capabilities.data?.workspaceModes?.simulation),
+  })
   /* `ISS-STED-19` — CỔNG TƯƠNG THÍCH PHIÊN BẢN.
    *
    * Bundle FE mang sẵn hồ sơ ngôn ngữ ST, registry thư viện POU và ABI của
@@ -391,12 +396,28 @@ export function DesignWorkspacePage({
    * khai cổng nào): chỉ cái sau mới là một câu trả lời. */
   const checkSymbols = latestCheckResult.data?.symbols
   const checkState = latestCheckResult.data?.state ?? latestCheck?.state ?? null
-  /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
-   * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
-   * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
-   * phiên, không theo bản mới nhất. */
+  /* Hai Revision trả lời hai câu hỏi khác nhau ở SIMULATE, nên KHÔNG gộp:
+   *
+   * - `simulateRevisionId` (bản Check đạt gần nhất) là bản mà nút mở phiên sẽ
+   *   niêm phong. `startSimulation` cần `contentHash` của CHÍNH bản đó — gửi
+   *   hash của bản khác kèm id này là tự vấp `PRG-SIM-SAVE-REQUIRED`, đúng lúc
+   *   người dùng bấm `Mô phỏng bản nháp mới` khi phiên cũ còn chạy.
+   * - Revision mà PHIÊN đang mở đã niêm phong có thể khác bản trên nếu người
+   *   dùng vừa lưu và Check thêm một lần nữa. Workbench (Tìm kiếm, Tham chiếu,
+   *   nhãn `Bản đã niêm phong`) phải nói theo phiên, không theo bản mới nhất —
+   *   cùng quy tắc `SimulateWorkspace` áp cho sơ đồ của nó.
+   *
+   * Bản của phiên chỉ được đọc riêng khi nó KHÁC bản Check mới nhất; trùng thì
+   * dùng lại đúng một lần đọc, để một endpoint không bị đọc hai lần cho hai câu
+   * trả lời có thể lệch nhau. */
   const simulateRevision = useProgrammingRevision(
     workspaceMode === 'SIMULATE' ? simulateRevisionId : null)
+  const sessionRevisionId = currentSession(simulation.slice)?.sourceDraftRevisionId ?? null
+  const sessionPinsOtherRevision = sessionRevisionId !== null && sessionRevisionId !== simulateRevisionId
+  const otherSessionRevision = useProgrammingRevision(
+    workspaceMode === 'SIMULATE' && sessionPinsOtherRevision ? sessionRevisionId : null)
+  const simulationSourceRevisionId = sessionPinsOtherRevision ? sessionRevisionId : simulateRevisionId
+  const simulationSourceRevision = sessionPinsOtherRevision ? otherSessionRevision : simulateRevision
   /* LIVE đọc bản đang chạy ở TRANG CHA rồi truyền xuống, cùng lý do như
    * `monitor`: hai lần đọc cùng một endpoint cho hai câu trả lời có thể lệch. */
   const liveRevision = useProgrammingRevision(
@@ -791,9 +812,9 @@ export function DesignWorkspacePage({
    * được đọc hai lần cho hai câu trả lời có thể lệch nhau. */
   const sealedSource = workspaceMode === 'SIMULATE'
     ? activeProgramSource({
-        activeRevisionId: simulateRevisionId,
-        status: simulateRevision.status,
-        revision: simulateRevision.data,
+        activeRevisionId: simulationSourceRevisionId,
+        status: simulationSourceRevision.status,
+        revision: simulationSourceRevision.data,
         objectId: selectedObjectId ?? null,
       })
     : workspaceMode === 'LIVE'

@@ -49,6 +49,7 @@ import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
 import {
   PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX,
+  PROGRAMMING_FULL_SHELL_MIN_WIDTH_PX,
   useMinWidth,
 } from '../../layout/useProgrammingViewport'
 import { catalogEntriesOf, type CatalogEntry } from '../library/libraryCatalog'
@@ -538,8 +539,8 @@ export function EditorPane({
   /* Nút mở khay Thư viện nhanh — đích trả focus khi đóng khay. Nút chỉ tồn tại
    * khi khay ĐANG ĐÓNG, nên phải đợi một nhịp render rồi mới focus được. */
   const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
-  const fbdInspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
-  const [fbdInspectorDrawerOpen, setFbdInspectorDrawerOpen] = useState(false)
+  const inspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
+  const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false)
   /* MỖI HÌNH THÁI MỘT TRẠNG THÁI MỞ/ĐÓNG RIÊNG — ba biến, không phải một.
    *
    * `libraryDockOpen` ở trên là của `column` (mặc định MỞ, cột thường trực).
@@ -575,6 +576,7 @@ export function EditorPane({
    * (khay/popover có nút mở, hay nới chính AC) thay vì để hai thứ cùng sai. */
   const fbdWideDesktop = useMinWidth(PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX)
   const fbdLibraryDockDesktop = useMinWidth(PROGRAMMING_FBD_LIBRARY_DOCK_MIN_WIDTH_PX)
+  const fullShellDesktop = useMinWidth(PROGRAMMING_FULL_SHELL_MIN_WIDTH_PX)
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -611,11 +613,14 @@ export function EditorPane({
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
    * vùng theo line/column sau khi Program mới mount". */
   const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
-  /* POU FBD dưới ngưỡng bốn cột: Inspector là KHAY NỔI, không phải cột. Một
-     biến duy nhất cho câu hỏi đó, dùng lại ở cả class, nút mở và hành vi Escape
-     — ba nơi tự suy lấy là ba nơi có thể lệch nhau. */
-  const inspectorAsDrawer = selected?.language === 'FBD' && !fbdWideDesktop
-  const fbdInspectorOpen = inspectorAsDrawer ? fbdInspectorDrawerOpen : slots.inspector
+  /* Inspector là KHAY NỔI, không phải cột, ở hai trường hợp: POU FBD dưới
+     ngưỡng bốn cột (`TC-FBD-RESP-001`), và MỌI POU dưới full shell — dải
+     `compact dock` 1024–1279 px không đủ chỗ cho track Inspector cạnh Editor
+     tối thiểu 320 px (xem `PROGRAMMING_FULL_SHELL_MIN_WIDTH_PX`). Một biến duy
+     nhất cho câu hỏi đó, dùng lại ở cả class, nút mở và hành vi Escape — ba nơi
+     tự suy lấy là ba nơi có thể lệch nhau. */
+  const inspectorAsDrawer = selected?.language === 'FBD' ? !fbdWideDesktop : !fullShellDesktop
+  const inspectorPanelOpen = inspectorAsDrawer ? inspectorDrawerOpen : slots.inspector
   /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop RỘNG. Sau khi
    * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
    * này — đây là owner của quyết định hình thái (`LibraryPresentation`).
@@ -669,16 +674,16 @@ export function EditorPane({
   })
 
   useEffect(() => {
-    if (selected?.language !== 'FBD' || fbdWideDesktop || !fbdInspectorDrawerOpen) return undefined
+    if (!inspectorAsDrawer || !inspectorDrawerOpen) return undefined
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      setFbdInspectorDrawerOpen(false)
-      window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+      setInspectorDrawerOpen(false)
+      window.setTimeout(() => inspectorOpenerRef.current?.focus(), 0)
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [fbdInspectorDrawerOpen, fbdWideDesktop, selected?.language])
+  }, [inspectorDrawerOpen, inspectorAsDrawer])
 
   /* Escape đóng khay Thư viện nhanh ở dải `<1280` và trả focus về nút mở.
    *
@@ -868,21 +873,21 @@ const inspectorToggleButton = (
     <button
       type="button"
       className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-      aria-expanded={fbdInspectorOpen}
+      aria-expanded={inspectorPanelOpen}
       aria-controls="programs-slot-inspector"
       onClick={() => {
-        const nextOpen = !fbdInspectorOpen
-        if (inspectorAsDrawer) setFbdInspectorDrawerOpen(nextOpen)
+        const nextOpen = !inspectorPanelOpen
+        if (inspectorAsDrawer) setInspectorDrawerOpen(nextOpen)
         else setSlots({ ...slots, inspector: nextOpen })
         if (!nextOpen && inspectorAsDrawer) {
-          window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+          window.setTimeout(() => inspectorOpenerRef.current?.focus(), 0)
         }
       }}
     >
-      {fbdInspectorOpen
+      {inspectorPanelOpen
         ? <PanelRightClose className="h-4 w-4" aria-hidden="true" />
         : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
-      <span className="sr-only">{fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}</span>
+      <span className="sr-only">{inspectorPanelOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}</span>
     </button>
   )
 
@@ -1105,12 +1110,12 @@ const inspectorToggleButton = (
             )}
             {inspectorAsDrawer && (
               <button
-                ref={fbdInspectorOpenerRef}
+                ref={inspectorOpenerRef}
                 type="button"
                 className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs"
-                aria-expanded={fbdInspectorDrawerOpen}
+                aria-expanded={inspectorDrawerOpen}
                 aria-controls="programs-slot-inspector"
-                onClick={() => setFbdInspectorDrawerOpen(true)}
+                onClick={() => setInspectorDrawerOpen(true)}
               >
                 {pick('Mở Thuộc tính', 'Open inspector')}
               </button>
@@ -1385,22 +1390,22 @@ const inspectorToggleButton = (
          * không chứa gì cho khổ ≥1440 vì nó không bao giờ chạy ở đó. Không có
          * hai rule cùng khớp thì không có gì để thua. */
         className={inspectorAsDrawer
-          ? `min-w-0 ${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:overflow-y-auto md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl`
+          ? `min-w-0 ${inspectorPanelOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:overflow-y-auto md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl`
           : 'min-w-0 lg:min-h-0 lg:overflow-y-auto'}
         aria-label={pick('Thuộc tính', 'Inspector')}
         onKeyDown={(event) => {
           if (!inspectorAsDrawer || event.key !== 'Escape') return
           event.preventDefault()
-          setFbdInspectorDrawerOpen(false)
-          window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+          setInspectorDrawerOpen(false)
+          window.setTimeout(() => inspectorOpenerRef.current?.focus(), 0)
         }}
       >
-        {!fbdInspectorOpen && (
+        {!inspectorPanelOpen && (
           <div className="flex justify-center p-1">
             {inspectorToggleButton}
           </div>
         )}
-        <div id="programs-slot-inspector" hidden={!fbdInspectorOpen}>
+        <div id="programs-slot-inspector" hidden={!inspectorPanelOpen}>
         {selected ? (
             /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
                rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó

@@ -37,7 +37,7 @@ import {
   type FbdCanvasClipboard,
   type FbdViewCommands,
 } from './FbdCanvas'
-import { buildFbdNetworkGeometry, FBD_CANVAS_MARGIN, FBD_NODE_WIDTH } from './geometry'
+import { buildFbdNetworkGeometry, FBD_CANVAS_MARGIN, FBD_NODE_WIDTH, fbdNodeAutoWidth, fbdNodeHeight } from './geometry'
 import { extractSubgraph, FBD_PASTE_OFFSET, remapSubgraph, type FbdSubgraph } from './clipboard'
 import {
   FBD_SHORTCUT_MUTATES,
@@ -46,7 +46,7 @@ import {
   type FbdEditorShortcut,
 } from './fbdShortcuts'
 import { extractDiagnosticNodeId, fbdIssueTargets } from './issueTargets'
-import { alignNodes, computeAutoLayout } from './layout'
+import { alignNodes, computeAutoLayout, findFreeNodePosition } from './layout'
 import { snapPoint } from './viewport'
 import { hashBufferSource, type OpenBufferContext, diagnosticFreshness } from '../shared/diagnosticFreshness'
 import {
@@ -701,11 +701,12 @@ export function StructuredFbdEditor({
     if (command === 'ADD_BLOCK') {
       const network = state.document.networks.find((item) => item.id === selectedNetworkId)
       if (network && selectedPaletteEntry) {
+        const node = buildPaletteNode(selectedPaletteEntry)
         action = {
           type: 'ADD_NODE',
           networkId: network.id,
-          node: buildPaletteNode(selectedPaletteEntry),
-          position: getNewNodePosition(),
+          node,
+          position: getNewNodePosition(network, node),
         }
       }
     } else if (command === 'SELECT_NEXT_PORT') {
@@ -740,21 +741,40 @@ export function StructuredFbdEditor({
     if (action) dispatch(action)
   }
 
-  function getNewNodePosition(): FbdPoint {
+  /* Kích thước khối người dùng đã kéo tay (`useFbdNodeResize`), cùng khoá
+   * localStorage mà Tự sắp xếp đọc. Hỏng hay thiếu thì coi như chưa kéo. */
+  function storedNodeSizes(): Record<string, { width?: number; height?: number }> | undefined {
+    try {
+      const key = state.document.graphId
+        ? 'mkddc_fbd_node_sizes_' + state.document.graphId
+        : 'mkddc_fbd_node_sizes_default'
+      const raw = localStorage.getItem(key)
+      return raw ? JSON.parse(raw) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /* Khối mới hiện ở tâm khung nhìn (`99f4ae8f`), nhưng dời sang chỗ trống gần
+   * nhất nếu tâm đã có khối — xem `findFreeNodePosition`. */
+  function getNewNodePosition(network: FbdNetwork, node: FbdNode): FbdPoint {
     const center = viewCommandsRef.current?.getViewportCenter?.()
     const x = center ? Math.max(FBD_CANVAS_MARGIN, center.x - FBD_NODE_WIDTH / 2) : 320
     const y = center ? Math.max(FBD_CANVAS_MARGIN, center.y - 40) : 256
-    return snapPoint({ x, y }, 16)
+    const preferred = snapPoint({ x, y }, 16)
+    const occupied = buildFbdNetworkGeometry(network, state.document.layout, { wireStyle, nodeSizes: storedNodeSizes() }).nodes
+    return findFreeNodePosition(preferred, { width: fbdNodeAutoWidth(node), height: fbdNodeHeight(node) }, occupied)
   }
 
   function addPaletteNode() {
     const network = state.document.networks.find((item) => item.id === selectedNetworkId)
     if (!selectedPaletteEntry || !network) return
+    const node = buildPaletteNode(selectedPaletteEntry)
     dispatch({
       type: 'ADD_NODE',
       networkId: network.id,
-      node: buildPaletteNode(selectedPaletteEntry),
-      position: getNewNodePosition(),
+      node,
+      position: getNewNodePosition(network, node),
     })
   }
 
@@ -764,11 +784,12 @@ export function StructuredFbdEditor({
     if (!isFbdIdentifier(ioVariable)) { setCreateError(pick('Tên biến không hợp lệ', 'Invalid variable name')); return }
     setCreateError(null)
     const unit = ioUnit.trim().length > 0 ? ioUnit.trim() : null
+    const node = buildInterfaceNode(kind, ioVariable, ioType, unit)
     dispatch({
       type: 'ADD_NODE',
       networkId: network.id,
-      node: buildInterfaceNode(kind, ioVariable, ioType, unit),
-      position: getNewNodePosition(),
+      node,
+      position: getNewNodePosition(network, node),
     })
     setCreatingKind(null)
     setIoVariable('')
@@ -783,11 +804,12 @@ export function StructuredFbdEditor({
       : Number(constantValue)
     if (!isValidConstantLiteral(constantType, parsed)) { setCreateError(pick('Giá trị không hợp lệ với kiểu đã chọn', 'Value is not valid for the selected type')); return }
     setCreateError(null)
+    const node = buildConstantNode(constantType, parsed)
     dispatch({
       type: 'ADD_NODE',
       networkId: network.id,
-      node: buildConstantNode(constantType, parsed),
-      position: getNewNodePosition(),
+      node,
+      position: getNewNodePosition(network, node),
     })
     setCreatingKind(null)
   }
@@ -823,17 +845,7 @@ export function StructuredFbdEditor({
       return
     }
     const current = networkPositions(network)
-    let nodeSizes: Record<string, { width?: number; height?: number }> | undefined
-    try {
-      const nodeSizesKey = state.document.graphId
-        ? 'mkddc_fbd_node_sizes_' + state.document.graphId
-        : 'mkddc_fbd_node_sizes_default'
-      const raw = localStorage.getItem(nodeSizesKey)
-      if (raw) nodeSizes = JSON.parse(raw)
-    } catch {
-      // ignore localStorage parse error
-    }
-    const result = computeAutoLayout(network, current, { nodeSizes })
+    const result = computeAutoLayout(network, current, { nodeSizes: storedNodeSizes() })
     const snapped = snapLayoutPositions(result.positions)
     const positions = Object.fromEntries(network.nodes
       .map((node) => [node.id, snapped[node.id]] as const)

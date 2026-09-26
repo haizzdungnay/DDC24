@@ -157,6 +157,22 @@ export function useMinWidth(minWidthPx: number): boolean {
  */
 export const PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX = 1440
 
+/**
+ * `nfr.viewport.fullShellMinWidthPx` của `contracts/programming/pgm02_workspace_v1.json`
+ * — khổ nhỏ nhất mà workspace PGM-02 được dựng "full shell" (DDD PGM-02 §7.5).
+ *
+ * Dải `1024–1279 px` là `compact dock`: rail Lập trình đã mở rộng 220 px, nên ở
+ * 1024 px lưới chỉ còn 762 px. Bốn track cố định Explorer 192 │ Editor ≥320 │
+ * Thư viện nhanh 180 │ Inspector 256 (+18 px tay kéo) cộng lại 966 px — không
+ * track nào co được, nên cả tài liệu tràn ngang 162 px (đo 2026-09-26). Dưới
+ * ngưỡng này Inspector của MỌI POU là khay nổi có nút mở, giống FBD dưới
+ * `PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX`.
+ *
+ * `1280` trùng `xl` của Tailwind, nhưng vẫn đi qua `useMinWidth` như các ngưỡng
+ * khác của trang: quyết định này đổi cả hành vi Escape và nút mở, không chỉ class.
+ */
+export const PROGRAMMING_FULL_SHELL_MIN_WIDTH_PX = 1280
+
 export const PROGRAMMING_WORKBENCH_MINIMAP_MIN_WIDTH_PX = 1440
 const WORKBENCH_MINIMAP_QUERY = `(min-width: ${PROGRAMMING_WORKBENCH_MINIMAP_MIN_WIDTH_PX}px)`
 
