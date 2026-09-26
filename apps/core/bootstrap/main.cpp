@@ -511,6 +511,21 @@ int main(int argc, char** argv)
                                  "WARN  rt.workqueue_on_scan_cpu cpu=%d mask=%s — kworker unbound con"
                                  " chay tren CPU vong quet (unit mkddc-core ExecStartPre)\n",
                                  cpu, housekeeping.workqueue_mask.c_str());
+                /* F17: cụm CPU chung policy cpufreq còn tự đổi tần số thì mỗi lần
+                 * đổi làm vòng quét thức dậy trễ quá C4, dù CPU này rảnh. */
+                const CpuFreqExposure freq = cpufreq_exposure("/sys/devices/system/cpu", cpu);
+                if (freq.known && freq.scaling)
+                    std::fprintf(stderr,
+                                 "ERROR rt.cpufreq_scaling cpu=%d governor=%s min_khz=%d max_khz=%d"
+                                 " related_cpus=%s — tan so cum CPU vong quet con tu doi, C4 (<= %d us)"
+                                 " KHONG dat duoc; can governor performance (unit mkddc-core"
+                                 " rt-cpufreq)\n",
+                                 cpu, freq.governor.c_str(), freq.min_khz, freq.max_khz,
+                                 freq.related_cpus.c_str(), c4_limit_us);
+                else if (freq.known)
+                    std::fprintf(stderr,
+                                 "INFO  rt.cpufreq_ok cpu=%d governor=%s cur_khz=%d related_cpus=%s\n",
+                                 cpu, freq.governor.c_str(), freq.cur_khz, freq.related_cpus.c_str());
                 const CpuIdleExposure idle = cpu_idle_exposure("/sys/devices/system/cpu", cpu);
                 if (!idle.known) continue;
                 if (idle.worst_allowed_exit_latency_us > c4_limit_us)

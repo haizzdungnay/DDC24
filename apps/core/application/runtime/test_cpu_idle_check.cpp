@@ -147,6 +147,61 @@ TEST(CpuHousekeepingParse, HexMaskWithGroupsAndCase)
     EXPECT_FALSE(cpu_hex_mask_contains("zz", 0));
 }
 
+/* F17 — policy cpufreq của CPU3 trên Foxlinx: một policy cho cả 4 lõi. */
+static void write_cpufreq(const std::string& root, const std::string& governor,
+                          const std::string& min_khz, const std::string& max_khz)
+{
+    const std::string dir = root + "/cpu3/cpufreq";
+    const std::string command = "mkdir -p '" + dir + "'";
+    ASSERT_EQ(std::system(command.c_str()), 0);
+    auto put = [&](const std::string& name, const std::string& text) {
+        std::FILE* file = std::fopen((dir + "/" + name).c_str(), "w");
+        ASSERT_NE(file, nullptr);
+        std::fputs(text.c_str(), file);
+        std::fclose(file);
+    };
+    put("scaling_governor", governor + "\n");
+    put("scaling_min_freq", min_khz + "\n");
+    put("scaling_max_freq", max_khz + "\n");
+    put("scaling_cur_freq", "1296000\n");
+    put("related_cpus", "0 1 2 3\n");
+}
+
+TEST_F(CpuIdleSysfs, SchedutilOnSharedPolicyStillScalesFoxlinxCpu3)
+{
+    /* Mặc định của bo: schedutil, 594–1296 MHz, chung policy với CPU0–2. */
+    write_cpufreq(root_, "schedutil", "594000", "1296000");
+    const CpuFreqExposure freq = cpufreq_exposure(root_, 3);
+    EXPECT_TRUE(freq.known);
+    EXPECT_TRUE(freq.scaling);
+    EXPECT_EQ(freq.governor, "schedutil");
+    EXPECT_EQ(freq.min_khz, 594000);
+    EXPECT_EQ(freq.max_khz, 1296000);
+    EXPECT_EQ(freq.related_cpus, "0 1 2 3");
+}
+
+TEST_F(CpuIdleSysfs, PerformanceGovernorHoldsFrequency)
+{
+    write_cpufreq(root_, "performance", "594000", "1296000");
+    const CpuFreqExposure freq = cpufreq_exposure(root_, 3);
+    EXPECT_TRUE(freq.known);
+    EXPECT_FALSE(freq.scaling);
+    EXPECT_EQ(freq.cur_khz, 1296000);
+}
+
+TEST_F(CpuIdleSysfs, DynamicGovernorWithEqualLimitsCannotScale)
+{
+    write_cpufreq(root_, "schedutil", "1296000", "1296000");
+    EXPECT_FALSE(cpufreq_exposure(root_, 3).scaling);
+}
+
+TEST_F(CpuIdleSysfs, MissingCpufreqIsUnknownNotScaling)
+{
+    const CpuFreqExposure freq = cpufreq_exposure(root_, 3);
+    EXPECT_FALSE(freq.known);
+    EXPECT_FALSE(freq.scaling);
+}
+
 TEST_F(CpuIdleSysfs, HousekeepingExposedWhenPid1AndWorkqueueMayRunOnScanCpu)
 {
     write(root_ + "/proc/1/status", "Name:\tsystemd\nCpus_allowed:\tf\nCpus_allowed_list:\t0-3\n");
