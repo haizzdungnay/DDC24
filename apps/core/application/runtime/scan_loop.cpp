@@ -91,9 +91,10 @@ void ScanLoop::step()
         }
     }
 
-    /* 2. Update point table + quality (kể cả stale check ts_ns) */
+    /* 2. Update point table + quality (kể cả stale check ts_ns). Stale tính
+     * theo THỜI GIAN của scan (ADR-061 4.7), không theo số scan. */
     d_.table->update_inputs(last_io_);
-    d_.quality->evaluate(*d_.table, last_io_);
+    d_.quality->evaluate(*d_.table, last_io_, clock.monotonic_ns);
 
     /* Đồng bộ mode thực tế MCU đã ACK trước khi nhận lệnh hoặc chạy graph.
      * Từ đây trở xuống AO luôn là giá trị vật lý V/mA, không phải phần trăm. */
@@ -445,6 +446,8 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
                    void (*after_scan)(void*), void* ctx)
 {
     budget_ns_ = base_step_ns;
+    /* ADR-061 4.7: ngưỡng stale theo thời gian dựa trên base step THẬT. */
+    d_.quality->set_base_step_ns(base_step_ns);
     /* 1 nguồn sự thật cho dt: graph PID/logic tính theo chu kỳ scan THẬT,
      * không theo device.scan_ms khai báo (lệch → graph tự WARN).
      * Làm tròn + sàn 1ms: base step sub-ms không được truncate về 0 (0 = silent skip). */

@@ -35,6 +35,7 @@
 #include "ipc/output_writer.hpp"
 #include "config/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
+#include "runtime/interval_gate.hpp"
 #include "runtime/scan_loop.hpp"
 #include "runtime/thread_policy.hpp"
 #include "persistence/state_snapshot.hpp"
@@ -48,6 +49,11 @@ namespace {
 
 std::atomic<bool> g_shutdown{false};
 std::atomic<bool> g_reload{false};
+
+/* ADR-061 4.8 — watchdog systemd kick tối đa 1 lần/giây (`WatchdogSec=6`). */
+constexpr uint64_t kWatchdogKickMinIntervalNs = 1000000000ull;
+/* GAP-08/COR-010 — chu kỳ ghi snapshot persist của graph khi dirty. */
+constexpr uint64_t kGraphSnapshotIntervalNs = 60ull * 1000000000ull;
 
 void on_signal(int)
 {
@@ -805,8 +811,13 @@ int main(int argc, char** argv)
      * phải chứng minh process còn sống. Kick giữa chu kỳ biến nó thành
      * liveness check vô nghĩa — một step() treo vĩnh viễn ở giữa vẫn kick đều
      * và systemd sẽ không bao giờ khởi động lại, đúng loại lỗi mà watchdog
-     * sinh ra để bắt. Task period 30 s chỉ là cadence dispatch, không đi vào
+     * sinh ra để bắt. Task/Program period chỉ là cadence dispatch, không đi vào
      * công thức watchdog và không được làm chậm callback này.
+     *
+     * ADR-061 4.8: ở base step 10 ms, kick sau MỌI step là 100 datagram/s tới
+     * systemd — chi phí syscall trên luồng RT mà không thêm bảo vệ nào, vì
+     * `WatchdogSec=6` chỉ cần một kick trong 6 s. Kick TỐI ĐA 1 lần/giây, vẫn
+     * chỉ ngay sau một step() trọn vẹn: step treo thì không có kick nào.
      *
      * Trong khoảng core chưa chạy (đang restart), MCU tự ép AO/DO về an toàn
      * sau IOP_SAFE_TIMEOUT_MS = 200 ms — lớp bảo vệ ĐỘC LẬP với SOM, và là lý
@@ -815,21 +826,29 @@ int main(int argc, char** argv)
      * sd_notify READY=1 sau scan đầu; snapshot 60s dirty (COR-010). */
     struct NotifyCtx {
         bool ready_sent = false;
-        int snap_ticks  = 0;
+        IntervalGate watchdog{kWatchdogKickMinIntervalNs};
+        IntervalGate snapshot{kGraphSnapshotIntervalNs};
         GraphRuntime*  graph;
         StateSnapshot* snap;
-    } nctx{false, 0, &graph, &snap};
+    } nctx{false, IntervalGate{kWatchdogKickMinIntervalNs},
+           IntervalGate{kGraphSnapshotIntervalNs}, &graph, &snap};
     auto after_scan = [](void* p) {
         NotifyCtx* c = static_cast<NotifyCtx*>(p);
+        struct timespec ts {};
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        const uint64_t now = static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+                             static_cast<uint64_t>(ts.tv_nsec);
         if (!c->ready_sent) {
             notify_systemd("READY=1");
             c->ready_sent = true;
+            c->snapshot.arm(now);
             std::fprintf(stderr, "INFO  core.ready first scan done\n");
         }
-        notify_systemd("WATCHDOG=1");
-        /* GAP-08: ghi snapshot mỗi 60 scan NẾU dirty */
-        if (++c->snap_ticks >= 60) {
-            c->snap_ticks = 0;
+        if (c->watchdog.due(now)) notify_systemd("WATCHDOG=1");
+        /* GAP-08: ghi snapshot mỗi 60 s NẾU dirty. Trước ADR-061 là "mỗi 60 scan"
+         * và chỉ đúng 60 s vì base step là 1 s; ở 10 ms nó thành ghi flash mỗi
+         * 0,6 s. Đo bằng đồng hồ, không bằng số vòng quét. */
+        if (c->snapshot.due(now)) {
             if (c->graph->dirty()) {
                 c->snap->save(c->graph->get_persist_state());
                 c->graph->clear_dirty();

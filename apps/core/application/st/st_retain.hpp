@@ -108,6 +108,12 @@ private:
     std::atomic<uint32_t> write_fail_count_{0};
     std::atomic<uint64_t> last_saved_generation_{0};
     StRetainService* owner_ = nullptr;
+    /* ADR-061 X14 — chỉ luồng RT (publish) đọc/ghi: mốc lần đánh thức worker gần
+     * nhất. Ở chu kỳ 10 ms, đánh thức mỗi lần publish là 100 lần futex/s trên
+     * luồng quét trong khi worker vẫn tự thức mỗi 1 s và ghi đĩa tối đa 1 lần
+     * mỗi `kMinWriteIntervalNs`; đánh thức dày hơn 1 lần/giây không đổi gì. */
+    uint64_t last_notify_ns_ = 0;
+    bool     notified_once_ = false;
 
     bool publish(const StLoadedProgram& program, uint64_t now_ns) noexcept;
     int acquire_latest_ready() noexcept;
