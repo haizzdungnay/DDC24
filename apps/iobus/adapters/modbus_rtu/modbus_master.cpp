@@ -180,6 +180,10 @@ void ModbusMaster::stop_workers_locked()
 {
     if (threads_.empty()) return;
     stop_flag_.store(true, std::memory_order_relaxed);
+    /* G7(b): bật cờ TRƯỚC rồi mới đánh thức — `run_loop` đọc cờ trong cùng vùng
+     * khoá với lần chờ, nên không lọt. Trước G7 join phải đợi worker ngủ hết
+     * phần còn lại của trần 200 ms. */
+    for (auto& worker : workers_) worker->wake();
     for (auto& thread : threads_)
         if (thread.joinable()) thread.join();
     threads_.clear();

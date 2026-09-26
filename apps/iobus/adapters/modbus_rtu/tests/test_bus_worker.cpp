@@ -819,12 +819,13 @@ TEST(BusWorkerFrames, PollRecordsTransactionIncludingTheFailedOnes)
 #ifdef MKDDC_ENABLE_MODBUS
 /* `ISS-MBW-02`: lệnh ghi phải được phát kể cả khi KHÔNG slave nào tới hạn ĐỌC.
  *
- * `run_loop` chặn trần ngủ ở 200 ms với lý do ghi thẳng trong chú thích của nó
- * — "tỉnh đủ dày để phản ứng với lệnh ghi mới". Nhưng `flush_pending` chỉ có
- * MỘT nơi gọi và nó nằm trong vòng `due`, nên worker tỉnh dậy giữa hai kỳ đọc
- * bỏ qua hàng đợi ghi. Đo trên bo Foxlinx (`poll_ms=1000`): độ trễ từ lúc API
- * trả `200 success` tới lúc relay đổi trạng thái là 16 s / 60 s / 97 s / 153 s
- * — biến thiên đúng kiểu chờ trùng nhịp.
+ * Trước bản sửa, `flush_pending` chỉ có MỘT nơi gọi và nó nằm trong vòng `due`,
+ * nên worker tỉnh dậy giữa hai kỳ đọc bỏ qua hàng đợi ghi. Đo trên bo Foxlinx
+ * (`poll_ms=1000`): độ trễ từ lúc API trả `200 success` tới lúc relay đổi trạng
+ * thái là 16 s / 60 s / 97 s / 153 s — biến thiên đúng kiểu chờ trùng nhịp.
+ * (Từ G7, worker còn được ĐÁNH THỨC khi có lệnh mới thay vì ngủ theo trần
+ * 200 ms — xem `test_bus_worker_wake.cpp`; test này ghim riêng việc `poll_once`
+ * phục vụ hàng đợi ghi độc lập với lịch đọc.)
  *
  * Cổng phải MỞ THẬT thì `flush_pending` mới chạy tới, nên test dùng PTY chứ
  * không dùng `/dev/null`: cổng chết đẩy worker vào `PORT_ERROR` + backoff và
@@ -875,8 +876,7 @@ TEST(BusWorkerWriteQueue, LenhGhiKhongPhaiChoToiLuotDocCuaSlave)
     ASSERT_TRUE(worker.enqueue_write(w));
     ASSERT_EQ(worker.pending_write_count(), 1u);
 
-    /* Ba vòng cách nhau 100 ms — đúng nhịp `run_loop` tỉnh dậy khi mọi slave
-       còn lâu mới tới hạn. Không vòng nào có slave tới hạn ĐỌC. */
+    /* Ba vòng cách nhau 100 ms, không vòng nào có slave tới hạn ĐỌC. */
     for (uint64_t t = 1100; t <= 1300; t += 100)
         worker.poll_once(t, cache, metrics);
 
