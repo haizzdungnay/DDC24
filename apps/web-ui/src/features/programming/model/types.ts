@@ -147,9 +147,17 @@ export interface ProgrammingRuntime {
   task?: ProgrammingTaskMetrics | null
 }
 
+export type ProgrammingTaskHealthReason =
+  | 'OVERRUN'
+  | 'MISSED_RELEASE'
+  | 'JITTER_VIOLATION'
+  | 'MISSED_BASE_STEP'
+  | 'JITTER_MAX_EXCEEDED'
+
 export interface ProgrammingTaskMetrics {
   taskId: string
   periodMs: number
+  /** Chỉ để tương thích đọc (ADR-061 mục 4.3) — dùng `budgetUs`. */
   budgetMs: number
   state: 'STOPPED' | 'RUNNING' | 'FAULT'
   runCount: number
@@ -158,6 +166,18 @@ export interface ProgrammingTaskMetrics {
   maxExecNs: number
   overrunCount: number
   consecutiveOverruns: number
+  /**
+   * Metric C2–C4 (ADR-061 mục 4.9). Optional + nullable: server/Core đời cũ
+   * không gửi khoá, và `null` nghĩa là "Core không cấp" — KHÔNG được hiện
+   * thành `0`.
+   */
+  budgetUs?: number | null
+  baseStepUs?: number | null
+  jitterMaxUs?: number | null
+  jitterViolationCount?: number | null
+  missedBaseStepCount?: number | null
+  health?: 'HEALTHY' | 'DEGRADED' | 'FAULT' | 'UNKNOWN'
+  healthReasons?: ProgrammingTaskHealthReason[]
 }
 
 export interface ProgrammingMonitorSample {
@@ -280,6 +300,9 @@ export interface ProgrammingTrace {
   variableIds: string[]
   durationMs: number
   samplePeriodMs: number
+  /** Chu kỳ lấy mẫu THẬT = max(yêu cầu, base step Core) — ADR-061 mục 4.6.
+   *  Vắng (server đời cũ) thì coi bằng `samplePeriodMs`. */
+  effectiveSamplePeriodMs?: number
   startedAt: string
   updatedAt: string
   stopReason: 'DURATION_REACHED' | 'QUOTA_REACHED' | 'USER_STOPPED' | 'SOURCE_UNAVAILABLE' | null
@@ -425,7 +448,13 @@ export interface ProgrammingTaskConfig {
   taskId: string
   name?: string
   enabled?: boolean
-  periodMs: 1000 | 5000 | 30000
+  /**
+   * `number`, KHÔNG phải union chu kỳ: Draft đã lưu có thể mang một chu kỳ
+   * không còn trong tập (30000 ms của profile 2.1, ADR-061 mục 4.14). Kiểu
+   * union cũ buộc FE ép giá trị đó về 1000 ms — đổi âm thầm chu kỳ của một
+   * Program. Kiểm theo tập bằng `programmingPeriodValidity`.
+   */
+  periodMs: number
   programOrder: string[]
 }
 

@@ -4,12 +4,17 @@ import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { useProgrammingActionAllowed } from '../../api/authorization'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation } from '../../model/types'
-
-const ALLOWED_PERIODS = [1000, 5000, 30000] as const
+import {
+  formatProgrammingPeriod,
+  nearestProgrammingPeriods,
+  programmingPeriodChoices,
+  programmingPeriodValidity
+} from '../../model/cyclePeriods'
 
 /**
  * Tab "Thực thi" của PGM-02 (`UJ-PROG-04`) — đúng một Task
- * `Control_Main`, chu kỳ chỉ `1/5/30 s`, thứ tự Program. Ngăn kéo nâng cao
+ * `Control_Main`, chu kỳ thuộc tập của profile (ADR-061: 10 ms … 50 s, lấy từ
+ * `capabilities.taskPeriodsMs`, không chép tay), thứ tự Program. Ngăn kéo nâng cao
  * (base step/watchdog/ngân sách) là placeholder chỉ-đọc: các trường đó đến
  * từ Core runtime profile, chưa có route đọc ở P5 (UX §3.1 — không đặt trên
  * luồng chính, chỉ ở đây khi thật sự có producer).
@@ -42,7 +47,8 @@ export function ExecutionTab({
   onSave,
   onPendingOperationsChange,
   discardVersion,
-  forceReadOnly = false
+  forceReadOnly = false,
+  allowedPeriodsMs
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -50,16 +56,24 @@ export function ExecutionTab({
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
   forceReadOnly?: boolean
+  /** `capabilities.taskPeriodsMs`; vắng thì dùng tập sinh từ product profile. */
+  allowedPeriodsMs?: readonly number[] | null
 }) {
   const { pick } = useI18n()
   const canEdit = useProgrammingActionAllowed('execution') && !forceReadOnly
+  const choices = useMemo(() => programmingPeriodChoices(allowedPeriodsMs), [allowedPeriodsMs])
   const [period, setPeriod] = useState<number>(document.task.periodMs)
   const [order, setOrder] = useState<string[]>(document.task.programOrder)
   const previousCommittedTask = useRef(document.task)
+  const periodValidity = programmingPeriodValidity(period, choices)
   const dirty = period !== document.task.periodMs || order.join(',') !== document.task.programOrder.join(',')
+  // Chu kỳ ngoài tập KHÔNG được gửi lên: server từ chối bằng `ST-SCHED-001`,
+  // và gửi nó chỉ để nhận lỗi là bắt người dùng đoán vì sao Lưu không được.
+  // Đổi thứ tự khi chu kỳ còn không hợp lệ cũng phải đợi người dùng chọn chu kỳ.
+  const savable = dirty && periodValidity === 'VALID'
   const pendingOperations = useMemo<ProgrammingDraftOperation[]>(
-    () => dirty ? [{ op: 'setTask', task: { ...document.task, periodMs: period as 1000 | 5000 | 30000, programOrder: order } }] : [],
-    [dirty, document.task, order, period]
+    () => savable ? [{ op: 'setTask', task: { ...document.task, periodMs: period, programOrder: order } }] : [],
+    [savable, document.task, order, period]
   )
 
   useEffect(() => {
@@ -105,14 +119,46 @@ export function ExecutionTab({
           className="mt-1 w-40 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]"
           value={period}
           disabled={!canEdit}
+          aria-invalid={periodValidity === 'VALID' ? undefined : true}
+          aria-describedby={periodValidity === 'VALID' ? undefined : 'programming-task-period-invalid'}
           onChange={(event) => setPeriod(Number(event.target.value))}
         >
-          {ALLOWED_PERIODS.map((value) => (
+          {/* Chu kỳ đã lưu nhưng không còn hợp lệ vẫn phải HIỆN ĐÚNG giá trị của
+              nó (ADR-061 4.13/4.14): một `<select>` không có option khớp sẽ tự
+              hiện option đầu (10 ms) — tức nói dối về cấu hình đang lưu. Option
+              này bị vô hiệu hoá nên không chọn lại được. */}
+          {periodValidity !== 'VALID' && (
+            <option value={period} disabled>
+              {pick(
+                `${formatProgrammingPeriod(period)} — không còn hợp lệ`,
+                `${formatProgrammingPeriod(period)} — no longer valid`
+              )}
+            </option>
+          )}
+          {choices.map((value) => (
             <option key={value} value={value}>
-              {value / 1000} s
+              {formatProgrammingPeriod(value)}
             </option>
           ))}
         </select>
+        {periodValidity !== 'VALID' && (
+          <p id="programming-task-period-invalid" role="alert" className="mt-1 text-xs text-[var(--c-warn-fg)]" data-testid="programming-task-period-invalid">
+            {(() => {
+              const suggestion = nearestProgrammingPeriods(period, choices).map(formatProgrammingPeriod)
+              const joinedVi = suggestion.join(' hoặc ')
+              const joinedEn = suggestion.join(' or ')
+              return periodValidity === 'LEGACY'
+                ? pick(
+                  `${formatProgrammingPeriod(period)} — không còn hợp lệ, chọn ${joinedVi}. Chương trình đang chạy vẫn giữ chu kỳ cũ cho tới lần Đưa vào vận hành kế tiếp.`,
+                  `${formatProgrammingPeriod(period)} — no longer valid, choose ${joinedEn}. The running program keeps its old period until the next commission.`
+                )
+                : pick(
+                  `${formatProgrammingPeriod(period)} — không thuộc tập chu kỳ cho phép, chọn ${joinedVi}.`,
+                  `${formatProgrammingPeriod(period)} — not an allowed period, choose ${joinedEn}.`
+                )
+            })()}
+          </p>
+        )}
       </div>
 
       <div>
@@ -152,8 +198,8 @@ export function ExecutionTab({
           size="sm"
           icon={<Save className="h-4 w-4" aria-hidden="true" />}
           loading={saving}
-          disabled={!dirty}
-          onClick={() => void onSave([{ op: 'setTask', task: { ...document.task, periodMs: period as 1000 | 5000 | 30000, programOrder: order } }])}
+          disabled={!savable}
+          onClick={() => void onSave([{ op: 'setTask', task: { ...document.task, periodMs: period, programOrder: order } }])}
         >
           {pick('Lưu', 'Save')}
         </Button>

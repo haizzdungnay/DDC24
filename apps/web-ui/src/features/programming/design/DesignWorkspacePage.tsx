@@ -1200,7 +1200,7 @@ export function DesignWorkspacePage({
         />
       </div>
       <div hidden={tab !== 'execution'}>
-        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} forceReadOnly={mobileReadOnly} />
+        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} forceReadOnly={mobileReadOnly} allowedPeriodsMs={capabilities.data?.taskPeriodsMs} />
       </div>
 
       {canEdit && <Modal

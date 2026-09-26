@@ -1,4 +1,5 @@
 import type { ProgrammingBinding, ProgrammingDraftDocument, ProgrammingProgram, ProgrammingTaskConfig, ProgrammingVariable } from './types'
+import { DEFAULT_PROGRAMMING_PERIOD_MS } from './cyclePeriods'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const BINDING_DIRECTIONS = new Set<ProgrammingBinding['direction']>(['READ', 'WRITE', 'READ_WRITE'])
@@ -135,11 +136,15 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
   // lỗi người gọi") và người dùng thấy `PRG-ERR-REQ-001` khi Xoá Program, Thêm
   // Program hoặc đổi chu kỳ ở tab Thực thi, không kèm lý do nào đọc được.
   // Ràng buộc fail-closed đó của backend là ĐÚNG; chỗ sai là danh sách gửi lên.
-  // Chu kỳ là enum đóng ở contract; giá trị lạ rơi về 1000 thay vì ép kiểu, để
-  // giao diện không hiển thị một chu kỳ mà profile không cho phép.
-  const rawPeriod = Number(configs[0]?.periodMs ?? 1000)
+  // ADR-061 mục 4.13/4.14: GIỮ NGUYÊN chu kỳ đã lưu, kể cả khi nó không còn
+  // trong tập (30000 ms của profile 2.1). Bản trước ép mọi giá trị lạ về 1000
+  // ms (X12) — tức có thể đổi âm thầm một Program 10 ms hay 30 s thành 1 s rồi
+  // gửi ngược lên ở lần Lưu kế tiếp. Giao diện hiện rõ giá trị đó là không hợp
+  // lệ (`programmingPeriodValidity`); chỉ khi Draft chưa có Program nào mới dùng
+  // chu kỳ mặc định 1000 ms.
+  const rawPeriod = Number(configs[0]?.periodMs)
   const periodMs: ProgrammingTaskConfig['periodMs'] =
-    rawPeriod === 5000 ? 5000 : rawPeriod === 30000 ? 30000 : 1000
+    Number.isFinite(rawPeriod) && rawPeriod > 0 ? rawPeriod : DEFAULT_PROGRAMMING_PERIOD_MS
   const library = (source.library ?? {}) as Record<string, unknown>
   return {
     schemaVersion: draft.schemaVersion,

@@ -19,6 +19,7 @@ import {
   validatePouName
 } from './pouCommands'
 import { filterPouItems, groupPouItems, pouItems, resolvePouSelection, type PouItem, type PouKind, type PouLanguage } from './pouViewModel'
+import { formatProgrammingPeriod } from '../../model/cyclePeriods'
 
 /**
  * `T59-803` (`PGM02-V22-WP-02`) — MỘT POU Explorer duy nhất cho PGM-02.
@@ -999,7 +1000,7 @@ export function PouInspector({ item }: { item: PouItem }) {
       <Field label={pick('Loại', 'Kind')} value={item.kind} />
       <Field label={pick('Ngôn ngữ', 'Language')} value={item.language} />
       {isProgram && item.periodMs !== undefined && (
-        <Field label={pick('Chu kỳ', 'Period')} value={`${item.periodMs} ms`} />
+        <Field label={pick('Chu kỳ', 'Period')} value={formatProgrammingPeriod(item.periodMs)} />
       )}
       {isProgram && (
         <Field
