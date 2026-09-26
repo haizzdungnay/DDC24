@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.12.0",
+  "catalogVersion": "1.13.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -1062,6 +1062,11 @@
     {
       "component": "compiler",
       "detailCode": "ST-WORKER-TIMEOUT",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WORKER-TOOLCHAIN",
       "publicCode": "PRG-ERR-UNAVAILABLE-001"
     },
     {

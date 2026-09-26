@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.12.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.13.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes", "detailCode"] },
@@ -131,6 +131,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-WARN-004": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-WORKER-TIMEOUT": "PRG-ERR-UNAVAILABLE-001",
+  "compiler\u0000ST-WORKER-TOOLCHAIN": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-ACTION-NOT-IMPLEMENTED": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-ACTIVATE-ARM": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-CONTRACT-ONLY": "PRG-ERR-UNAVAILABLE-001",

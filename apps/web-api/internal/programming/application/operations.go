@@ -1035,9 +1035,9 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges,
 		"publishedSignals": current.PublishedSignals, "controlLibrary": current.ControlLibrary,
 		"programSet": current.ProgramSet, "enableIntent": current.EnableIntent,
-		"physicalMappingChanges": current.PhysicalMappingChanges,
-		"virtualPointChanges": current.VirtualPointChanges,
-		"modbusMappingChanges": current.ModbusMappingChanges,
+		"physicalMappingChanges":  current.PhysicalMappingChanges,
+		"virtualPointChanges":     current.VirtualPointChanges,
+		"modbusMappingChanges":    current.ModbusMappingChanges,
 		"writableOutputsAffected": current.WritableOutputsAffected}
 	missing, unexpected := make([]string, 0), make([]string, 0)
 	for key, group := range groups {

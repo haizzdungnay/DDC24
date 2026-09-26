@@ -356,7 +356,7 @@ if(CORE_BUILD_TESTS)
       adapters/ipc/tests/test_iobus_reader.cpp domain/graph/tests/test_point_quality.cpp
       domain/priority/test_priority_resolver.cpp
       domain/safety/tests/test_safe_state.cpp domain/safety/tests/test_overrun_monitor.cpp
-      application/runtime/test_scan_loop.cpp
+      application/runtime/test_scan_loop.cpp application/runtime/test_cpu_idle_check.cpp
       application/programming/tests/test_program_ipc_server.cpp
       application/programming/tests/test_programming_runtime_coordinator.cpp
       application/programming/tests/test_programming_package_v2_stage.cpp

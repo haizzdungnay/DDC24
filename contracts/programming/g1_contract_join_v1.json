@@ -55,13 +55,13 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781",
+      "sha256": "f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "571e69a5c8f274c14f2f182b2876a368d4efd9e9556eaae0363054176b3ad7f6",
+      "manifestSha256": "f1fde98dcec38db7fe48baec320a57bc164a18a7a4b5b31ed8ed63fe5f848d90",
       "major": 1,
-      "version": "1.12.0",
+      "version": "1.13.0",
       "publicErrorCount": 38,
-      "componentDetailCount": 159
+      "componentDetailCount": 160
     },
     {
       "name": "store",
@@ -186,5 +186,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms)"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms); error catalog 1.12.0->1.13.0 (+ST-WORKER-TOOLCHAIN: ST tool build does not match web profile) re-pinned 2026-09-26"
 }

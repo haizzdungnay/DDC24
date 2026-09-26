@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.12.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.13.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -109,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 159> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 160> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -195,6 +195,7 @@ inline constexpr std::array<ComponentErrorMapping, 159> kComponentErrorMappings 
     {"compiler", "ST-WARN-004", ProgramPublicError::Check },
     {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
     {"compiler", "ST-WORKER-TIMEOUT", ProgramPublicError::Unavailable },
+    {"compiler", "ST-WORKER-TOOLCHAIN", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-ACTION-NOT-IMPLEMENTED", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-ACTIVATE-ARM", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-CONTRACT-ONLY", ProgramPublicError::Unavailable },

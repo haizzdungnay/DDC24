@@ -8,6 +8,25 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng layout xanh lại sau PR #757 (gofmt, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/app/shm_reader.go`, `apps/web-api/internal/programming/application/{operations.go,operations_test.go}`.
+- Ba file vào main khi chưa chạy gofmt làm `verify-project.sh --component layout` exit 1 và 3 test `test_programming_production_tool_gate` FAIL. Đã `gofmt -w`, không đổi logic. Kiểm chứng: layout exit 0, pytest `tests/integration` 40 PASS / 14 skip.
+
+### Fixed — Check không còn treo 30 s rồi báo `ST-WORKER-CRASH` khi tool ST lệch profile với web (F12, Issue #758, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/programming/compiler/{toolchain.go,toolchain_test.go,runner.go}`, `apps/web-api/internal/programming/application/{checks.go,checks_toolchain_test.go}`, `apps/web-api/internal/app/main.go`; `contracts/programming/error_catalog_v1.json` 1.12.0→1.13.0 (+`ST-WORKER-TOOLCHAIN`) và các file sinh (Go/TS/C++), manifest, `g1_contract_join_v1.json`; `tests/integration/test_programming_error_catalog.py`; `docs/03_implementation/DEPLOY_FOXLINX.md`, `.claude/skills/foxlinx-deploy/SKILL.md`.
+- Triệu chứng trên Foxlinx: bấm Check thì treo khoảng 30 s rồi `PRG-ERR-UNAVAILABLE-001 · ST-WORKER-CRASH`. Nguyên nhân: lượt deploy ADR-061 bỏ sót `/usr/sbin/mkddc-st-{compile,package,validate}` (compiler còn profile v2.1 `d2866c41…`, web đòi v2.2 `1cb61fec…`); runner gộp "profile khác" vào "metadata sai", còn Check thử lại sau lease 30 s rồi đóng bằng mã crash chung.
+- Sửa: `ToolchainProbe` kiểm `--version` của compiler/packager lúc web khởi động (`INFO/ERROR programming.toolchain`) và mỗi lần worker nhận Check. Kết quả cache theo inode/mtime/size, nên cài bản mới là tự dò lại. Runner tách `ErrToolchainMismatch` cho version/ABI/profile khác hằng sinh từ hợp đồng. Check lệch bản thì FAILED ngay (attempt 1) với `ST-WORKER-TOOLCHAIN`, không thử lại. Quy trình deploy từng phần thêm bước 2b đồng bộ tool ST và smoke test `programming.toolchain ok`; đồng thời sửa lệnh build FE (`VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`), cổng SSH WAN 2223, và khởi động web qua unit systemd.
+- Kiểm chứng: trên bo, cài lại 3 tool (sao lưu `…T0506Z-st-tools`) rồi Check lại revision `7adb079d` **PASSED trong 0,6 s**. Host: 7 test `compiler` mới (gồm dòng `--version` thật của compiler cũ trên Foxlinx) và 3 test `CheckService` (thất bại ngay không gọi compiler; output profile khác; lỗi dò không tất định không chặn Check); `go vet` exit 0, `MKDDC_REQUIRE_PRODUCTION_TOOLS=1 go test ./... -count=1` exit 0 (21 package); ctest 1553/1553; 5 generator `--check` PASS; pytest `tests/integration` 40 PASS / 14 skip; vitest 3455/3455, lint, build exit 0; `verify-project.sh --component layout` exit 0.
+
+### Fixed — Vòng quét 10 ms không còn thức dậy trễ vì CPU3 vào `cpu-sleep` (F11, 2026-09-26)
+
+- Phạm vi: `apps/core/application/runtime/{cpu_idle_check.hpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `apps/core/CMakeLists.txt`, `platform/systemd/mkddc-core.service`; `docs/adr/ADR-061-…` mục 4.11; `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` §2/§9 (skeleton scan loop, unit đầy đủ); hồ sơ `EV-PROG-FBD-ST-MB-20260925` lượt 3.
+- Triệu chứng: ở base step 10 ms, 13,07 % lần thức dậy lệch > 100 µs (785/6008 trong 60 s). Nguyên nhân: trạng thái cpuidle `cpu-sleep` của CPU3 có exit latency 370 µs, và vòng quét ngủ 10 ms nên governor chọn nó gần như mọi lần.
+- Sửa: unit core đặt `pm_qos_resume_latency_us=20` cho CPU3 bằng root (`ExecStartPre=-+`), trả về 0 khi stop; Core đọc cpuidle/QoS lúc khởi động và log `ERROR rt.cpu_idle_exposed` khi còn trạng thái > 100 µs.
+- Kiểm chứng trên Foxlinx (300 s, 30 006 lần chạy): 0,07 % lần lệch > 100 µs, lệch trung bình 55 → 22 µs, missed step/release 0, overrun 0; C4 vẫn FAIL (tối đa 276 µs), cần PREEMPT_RT. Restore về gói legacy 30000 ms (#52) SUCCEEDED 0,6 s, có `WARN programming.legacy_period`, không lỡ step. Host: 6 test `CpuIdleSysfs`, ctest 1553/1553.
+
 ### Changed — ADR-061 nền: profile v2.2, tương thích chu kỳ cũ 30000 ms, CPU3 dành cho Core (2026-09-26)
 
 - Phạm vi: `contracts/programming/product_profile_v2.json` và các file sinh (`st_profile_generated.hpp`, `profile_generated.go`, `profile.ts`); `docs/adr/ADR-061-…` mục 4.14; `platform/systemd/*.service`, `platform/systemd/irqbalance-mkddc-rt.conf`, `platform/systemd/install.sh`; `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` §5 (T3), `docs/03_implementation/22_SOM_SRC_IMPLEMENTATION_PLAN.md`.

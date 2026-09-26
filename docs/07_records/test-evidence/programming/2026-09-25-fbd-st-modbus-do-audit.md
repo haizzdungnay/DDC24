@@ -2,7 +2,7 @@
 
 **ID:** EV-PROG-FBD-ST-MB-20260925  
 **Ngày:** 2026-09-25  
-**Trạng thái:** Lượt 1 và lượt 2 đã đo xong trên target, bo đã về baseline. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07 đã sửa, deploy và kiểm trên Foxlinx; F08, F10 đã sửa và deploy cùng PR kế tiếp; F09 kết luận không phải lỗi. F02/F03 (spec "cycle 10 ms") cần ADR Rev B trước khi code. Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng.  
+**Trạng thái:** Lượt 1, 2 và 3 đã đo trên target. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07, F08, F10, F11, F12 đã sửa, deploy và kiểm trên Foxlinx; F09 kết luận không phải lỗi. F02 đóng bằng ADR-061 (base step 10 ms, tập chu kỳ {10…50000} ms; lượt 3 đo C1–C3 PASS trên target). C4 vẫn FAIL: kernel non-RT, PREEMPT_RT chờ BSP Forlinx (G2). Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng.  
 **Workspace:** bắt đầu từ `main@e8a14ff0`; binary đang chạy trên bo build từ nhánh `fix/programming-modbus-command-seq-20260925` (chưa commit): core `222dbe9e…`, iobus `2439512b…`, web `5c5861e3…`, FE `index.html` `8e86b065…`.  
 **Đích:** `OK1126B-buildroot` (Forlinx OK1126B-S, Rockchip RV1126B 4×Cortex-A53 1,296 GHz, RAM 2 GB, Linux 6.1.141 `PREEMPT_VOLUNTARY`, HZ=250), `mekong-fac.ddns.net:2223`, web `:8082`.
 
@@ -115,6 +115,8 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 | F08 | P3 | `journalctl -p warning` không bắt được dòng WARN/ERROR của ứng dụng; baseline "0 dòng" trước đây bị mù | 16:13:46 web in `WARN health degraded err=shm /dev/shm/mkddc_io_shm: không đọc được snapshot nhất quán` nhưng `-p warning` trả "No entries" | Ứng dụng in ra stderr, journald gán mức info | **ĐÃ SỬA (PR kế tiếp)**: Core/iobus bọc stderr, web bọc stdout/stderr. Dòng được gắn `<3>`/`<4>`/`<6>`/`<7>` theo token mức, chỉ khi fd THẬT SỰ là stream journald (so `dev:inode` của `JOURNAL_STREAM`); buffer tĩnh, không cấp phát ở đường RT |
 | F09 | P3 | `Draft.latestCheck` trỏ tới Check PASSED của Revision thử nghiệm trong khi nội dung Draft là WIP chưa Check (`dirty=true`) | `GET /projects` sau khôi phục | Check gắn với base revision | **KHÔNG PHẢI LỖI**: FE xét `dirty` trước `latestCheck` (`draftStateLabel` hiện "Có thay đổi chưa phát hành", CTA ra `CONTINUE_EDITING`), nên Check PASSED của base revision không bị hiển thị như kết quả của Draft đang sửa |
 | F10 | P3 | Chẩn đoán FBD gây hiểu nhầm: biến đã khai trong bảng locals (OUTPUT) nhưng không có khối OUTPUT thì báo "not declared in VAR_INPUT/VAR_OUTPUT" | Check `f90e1433…` của Draft WIP | Bộ biên dịch FBD chỉ khai VAR_OUTPUT từ khối OUTPUT (`st_fbd_compile.cpp:275`) | **ĐÃ SỬA (PR kế tiếp)**: thông điệp `ST-IOMAP-001` nói rõ "in FBD a variable is declared only by an INPUT/OUTPUT block that uses it on the diagram"; test khoá nội dung |
+| F11 | **P1** so với C4 | Ở base step 10 ms, 13,07 % lần thức dậy của vòng quét lệch > 100 µs (785/6008 trong 60 s), gấp khoảng 50 lần `cyclictest` cùng CPU; không log nào nói lý do | Lượt 3, 04:46–04:48 | CPU3 vào trạng thái cpuidle `cpu-sleep` (exit latency 370 µs) trong mỗi khoảng ngủ 10 ms. Unit ghim Core vào CPU3 nhưng không ràng buộc độ trễ thức dậy; `cyclictest` né được vì giữ `/dev/cpu_dma_latency=0`. Core không kiểm nên thiếu ràng buộc là thiếu âm thầm | **ĐÃ SỬA `44425dc6` + `7193ef4a`**: unit core đặt `pm_qos_resume_latency_us=20` cho CPU3 bằng root (`ExecStartPre=-+`), trả về 0 khi stop; Core đọc cpuidle/QoS lúc khởi động, log `ERROR rt.cpu_idle_exposed` khi còn trạng thái > 100 µs. Trên target: 0,15 % lần lệch > 100 µs, trung bình 55 → 22 µs. C4 vẫn cần PREEMPT_RT (G2) |
+| F12 | **P1** vận hành | Bấm Check thì treo khoảng 30 s rồi báo `ST-WORKER-CRASH`; mọi Check trên bo hỏng | Lượt 3, 04:49 và 05:00 | (1) Lượt deploy ADR-061 lúc 04:38 cập nhật web/core/iobus nhưng bỏ sót tool ST trong `/usr/sbin`, nên compiler còn profile v2.1. (2) Runner gộp "profile khác" vào "metadata sai"; Check thử lại sau lease 30 s rồi mới đóng bằng mã crash chung. (3) Quy trình deploy từng phần (`DEPLOY_FOXLINX.md`, skill `foxlinx-deploy`) không có bước đồng bộ tool ST. Cùng họ với `P5-507-F05` | **ĐÃ SỬA (Issue #758)**: cài lại tool trên bo; `ToolchainProbe` kiểm `--version` lúc khởi động và mỗi lần nhận Check; lệch bản ⇒ FAILED ngay với mã mới `ST-WORKER-TOOLCHAIN` (catalog 1.13.0), không thử lại; tài liệu và skill deploy thêm bước 2b |
 
 ## Audit lượt 2 (2026-09-25 17:08 UTC trở đi) — sau khi sửa F01
 
@@ -143,6 +145,30 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 Bo sau lượt 2: Active #52 RUNNING; DO2 = DO4 = 0, DO3 = 1 như baseline đầu phiên (DO1 do #52 điều khiển); Draft WIP không bị đụng kể từ lần khôi phục 16:35; override rỗng. DO2/DO4 từng kẹt ở 1 từ 17:14 tới 17:47 do lượt 2 Disable trên mã cũ, và chính F06 đã đưa chúng về 0.
 
 Kết luận lượt 2 đến thời điểm này: F01 đã khỏi trên target. Logic 1 s nay ra đúng một lệnh FC05 mỗi giây, lệch tối đa 6 ms. C1 và C4 vẫn FAIL vì đó là bài toán nền tảng: G2–G4.
+
+## Audit lượt 3 (2026-09-26 04:38 UTC trở đi) — ADR-061 base step 10 ms trên target
+
+Mã chạy: `main@3b03208f` (PR #756, ADR-061 Track A + Track B). Cross-build ARM: core `0e9535a1…`, iobus `410b2f55…`, web `0c95fb9f…`, sim worker `51848d72…`, FE `index.html` `16357380…`; cả 4 binary cần tối đa GLIBCXX_3.4.29. Unit systemd mới: core `CPUAffinity=3`, các service khác `0-2`, drop-in `irqbalance.service.d/mkddc-rt.conf` (`IRQBALANCE_BANNED_CPULIST=3`). Unit trên bo trùng bản repo cũ, trừ `mkddc-web-pi` giữ `PORT=8082` của bo.
+
+Trước deploy, bo đã khác baseline đêm qua: một actor khác (không thuộc phiên này) đã Commission revision `891fc521…` (#63, chu kỳ 1000 ms) lúc 03:17:49 thay cho #52. Phiên này **giữ nguyên** #63.
+
+| Thời điểm (UTC) | Bước | Kết quả / bằng chứng | Trạng thái |
+|---|---|---|---|
+| 04:38 | Deploy core + iobus + web + sim worker + FE + unit | Sao lưu `/data/mkddc/deploy-backups/2026-09-26T0438Z-adr061/` (binary, unit, dist, `programming-v1.sqlite` sau khi web dừng sạch). `/proc/MainPID/exe` khớp sha bản build, `NRestarts=0`, 6 service active, health 6/6 `ok`. Core SCHED_FIFO 80 trên CPU3; iobus/web/netcfg/fakemcu trên `0-2`; mọi IRQ không per-CPU rời CPU3 | PASS deploy |
+| 04:38:35 | Log khởi động Core | `core.base_step_ms=10`, `programming.task_main period_ms=10 budget_us=1999`, TTL sàn 60 s | **PASS C1 (Core)** |
+| 04:39 | `GET /programming/runtime` | `periodMs=10`, `budgetUs=1999`, `baseStepUs=10000` cùng `jitterMaxUs`, `jitterViolationCount`, `missedBaseStepCount`, `health=DEGRADED` kèm `healthReasons` | PASS hợp đồng 4.9 |
+| 04:40 | `GET /programming/capabilities` | `taskPeriodsMs=[10,50,100,500,1000,5000,10000,50000]` | **PASS C1 (API)** |
+| 04:41 | `setTask` 5 / 30000 / 7 ms trên Draft thật | Cả ba nhận 400 `PRG-ERR-REQ-001`, `detailCode=ST-SCHED-001`, `field=operations[0].setTask`; etag Draft không đổi | **PASS C1 (từ chối)** |
+| 04:39:55–04:45:26 | Lấy mẫu 30 s × 12 | `runCount` tăng đúng 100/s; overrun 0; `maxExecNs` 36,8–163,9 µs; `jitterMaxUs` (cửa sổ 60 s) 183–319 µs; khoảng 11–13 % lần thức dậy lệch > 100 µs; `missedBaseStepCount = missedReleaseCount = 1`, cả hai xảy ra trong phút khởi động (lần thức dậy trễ 12,2 ms) | C2 PASS; C3, C4 **FAIL** |
+| 04:46–04:48 | Tìm nguyên nhân C4 (F11) | CPU3 có `cpu-sleep` exit latency 370 µs, residency 900 µs, QoS mặc định không ràng buộc. Cửa sổ 60 s: không ràng buộc 785/6008 (13,07 %) lần lệch > 100 µs; `pm_qos_resume_latency_us=20` 9/6006 (0,15 %), bộ đếm `cpu-sleep` của CPU3 đứng yên. Dời `prog-ipc`/`st-retain` khỏi CPU3: 5 so với 4 vi phạm, không khác biệt | Nguyên nhân gốc xác nhận |
+| 04:48–04:49 | Quan sát (không thuộc phiên này) | Actor khác thay `/opt/mkddc-web/mkddc-web` (`a6d4fa26…`) và `dist/` rồi restart web lúc 04:49:01; web mới vẫn trả khoá C4 nên đã có ADR-061. Các đỉnh 1,8 / 4,4 / 3,3 ms của `core.jitter` trùng lúc chép file và restart web | Ghi nhận |
+| 04:56 | Deploy core + unit sửa F11 (commit `44425dc6`, `7193ef4a`) | Sao lưu `…T0456Z-c4-cpuidle/`. QoS về 0 trước khi stop; `ExecStartPre` đặt 20 khi start. Log `rt.cpu_idle_ok cpu=3 worst_state=WFI exit_latency_us=1 qos_resume_latency_us=20`. Phút đầu không lỡ step | PASS deploy F11 |
+| 04:57–04:59 | `core.jitter` từng phút sau F11 | Phút 2: tối đa 136 µs, 10/6000 > 100 µs, trung bình 21,7 µs (trước F11: 55 µs). `core.step_wcet`: tổng tối đa 1171–1307 µs mỗi step, lớn nhất là IPC web 528–686 µs, publish 318–531 µs, schedule 316–394 µs | C4 vẫn **FAIL** (> 100 µs) |
+| 04:57:30–05:02:30 | Cửa sổ 300 s sau F11 (`GET /runtime` đầu và cuối) | 30 006 lần chạy; 21 lần lệch > 100 µs (0,07 %); `missedBaseStepCount` +0, `missedReleaseCount` +0, overrun +0; `maxExecNs` 184 µs; lệch tối đa theo phút 136 / 142 / 276 / 203 µs, trung bình 21,5–21,9 µs | C2 **PASS**, C3 **PASS**; C4 **FAIL** |
+| 05:02:06 | Restore về #52 (`69b6ba15…`, Program 30000 ms, ADR-061 4.14) | Operation `887179d4…` SUCCEEDED 0,6 s; Core log `WARN programming.legacy_period instance=136d8ab2… period_ms=30000`; Program RUNNING với `periodMs=30000`; trong 65 s: missed step 0, missed release 0 | **PASS 4.14** trên target |
+| 05:03:15 | Restore trả về #63 (`891fc521…`) | Operation `8618601e…` SUCCEEDED 0,6 s; missed step/release 0 qua cả hai lần kích hoạt. Core vào safe-state `no_ctrl` 1,38 s (05:03:15,13 → 05:03:16,51) cho tới khi vòng reconcile intent bật Program của #63 | PASS; bo trả về đúng Active của actor khác |
+| 05:00:30 | Báo lỗi của chủ sở hữu (F12) | Check revision `7adb079d…` treo khoảng 30 s rồi `PRG-ERR-UNAVAILABLE-001 · ST-WORKER-CRASH`. Log web `compiler output không hợp lệ: metadata success thiếu/sai` (04:49:32, 05:00:30; mỗi lần thử lại sau khoảng 31 s). `/usr/sbin/mkddc-st-compile` build 2026-09-13 mang `profile_sha256=d2866c41…` (v2.1); web đòi `1cb61fec…` (v2.2) | Nguyên nhân xác nhận |
+| 05:06 | Gỡ F12 trên bo | Sao lưu `…T0506Z-st-tools/`; cài `mkddc-st-compile`, `mkddc-st-package`, `mkddc-st-validate` build từ `main@3b03208f` (GLIBCXX ≤ 3.4.29). `--version` cả hai tool: `profile_sha256=1cb61fec…`. Check lại `7adb079d…` (check `61835d13…`) **PASSED trong 0,6 s**, 0 diagnostic | PASS |
 
 ### Bản đồ gap Rev B cho bộ chu kỳ {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms
 
@@ -227,7 +253,7 @@ Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt
 | Lệnh FC05 trên RS-485 | PASS lớp truyền | 234/234 ACK, 29,0 ms |
 | Readback coil qua API | PASS | Trễ trung vị 712 ms |
 | Cạnh vật lý | NOT RUN | Không có dụng cụ đo |
-| Chu kỳ theo spec 10 ms (C1–C4) | **FAIL** | C1, C3, C4 FAIL; C2 PASS |
+| Chu kỳ theo spec 10 ms (C1–C4) | **FAIL** (chỉ còn C4) | Lượt 1: C1, C3, C4 FAIL. Lượt 3 (ADR-061 trên target): C1 PASS (Core, capabilities, từ chối 5/7/30000 ms), C2 PASS, C3 PASS trong 300 s; C4 FAIL, lệch tối đa 276 µs, 0,07 % lần > 100 µs sau F11, cần PREEMPT_RT (G2) |
 | Service logs | PASS có ghi chú | 0 restart; 1 dòng WARN io_shm lúc 16:13:46 mà `-p warning` không bắt được (F08) |
 | Hồi quy mã nguồn (phiên 15:19–15:54) | PASS host | C++ 1513/1513 (2 skipped); Go vet + toàn bộ Go test; FE Vitest 3439/3439, lint, build Foxlinx; ARM 3 binary |
 | UI Programming qua trình duyệt | PASS target | Sau 2 lượt deploy FE (15:51, 15:54): Console 0, request 200 |

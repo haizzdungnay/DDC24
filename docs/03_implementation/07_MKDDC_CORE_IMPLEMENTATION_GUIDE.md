@@ -126,18 +126,22 @@ thật là `<domain>/tests/test_*.cpp` theo cây trên, không phải `tests/` p
 10. Update metrics      : scan_count++, đo exec time, phát hiện overrun.
 11. Sleep tới scan kế   : clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, next).
 ```
-> Scan mặc định **1s** (Rev A). `next += 1s` từ mốc TUYỆT ĐỐI (không drift).
-> sd_notify READY=1 sau scan đầu tiên hoàn tất. watchdog_kick mỗi scan (WatchdogSec=3 → kick 1s OK).
+> Base step mặc định **10 ms** (ADR-061 C1; trước đây 1 s). Mốc thứ k = t0 + k × base step, ngủ tới mốc TUYỆT ĐỐI (không drift). Trễ ≥ 1 base step thì BỎ các mốc đã qua và nhảy tới mốc kế tiếp, không chạy dồn; số mốc bị bỏ đếm ở `missedBaseStepCount` (ADR-061 4.9).
+> sd_notify READY=1 sau scan đầu tiên hoàn tất. `WATCHDOG=1` tối đa 1 lần/giây, chỉ ngay sau một scan trọn vẹn (ADR-061 4.8, `WatchdogSec=6`).
+> CPU của vòng quét (CPU3 trên Foxlinx) phải có ràng buộc `pm_qos_resume_latency_us` ≤ 100 µs, nếu không lần thức dậy sau mỗi base step có thể trễ bằng exit latency của trạng thái nghỉ sâu (RV1126B `cpu-sleep` 370 µs). Unit đặt 20 µs; Core log `rt.cpu_idle_ok` hoặc `ERROR rt.cpu_idle_exposed` lúc khởi động.
 
 **Skeleton scan loop (copy được):**
 ```cpp
-struct timespec next;
-clock_gettime(CLOCK_MONOTONIC, &next);
+// Bản thật: application/runtime/scan_loop.cpp (ScanLoop::run) + base_step_pacer.hpp.
+BaseStepPacer pacer;
+pacer.start(base_step_ns /* 10 ms */, now_ns());
+IntervalGate watchdog{1000000000ull};             // ADR-061 4.8: tối đa 1 lần/giây
 while (!g_shutdown) {
+    pacer.on_wake(now_ns());                      // C4: lệch so với mốc tuyệt đối
     const uint64_t t0 = now_ns();
     IoSnapshot io;
     if (iobus_reader.read(&io)) point_table.update_inputs(io);
-    point_quality.evaluate(point_table, io);
+    point_quality.evaluate(point_table, io, t0);  // stale theo THỜI GIAN (4.7)
     auto cmds = web_ipc.drain();                  // stub: queue rỗng
     graph_runtime.execute(point_table, resolver); // graph → resolver mức 5
     auto out = priority_resolver.resolve(point_table, cmds);
@@ -145,8 +149,10 @@ while (!g_shutdown) {
     output_writer.write(out);                     // seqlock-an-toàn (xem §7.2)
     bacnet_objtable.publish(point_table);
     core_metrics.end_scan(now_ns() - t0);
-    sd_notify(0, "WATCHDOG=1");
-    next.tv_sec += 1;                              // scan 1s
+    if (watchdog.due(now_ns())) sd_notify(0, "WATCHDOG=1");
+    const uint64_t deadline = pacer.advance(now_ns()); // trễ >= 1 step: bỏ, không chạy dồn
+    struct timespec next{static_cast<time_t>(deadline / 1000000000ull),
+                         static_cast<long>(deadline % 1000000000ull)};
     clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
 }
 ```
@@ -525,8 +531,8 @@ ctest --test-dir build/fw --output-on-failure
 **Chạy dev không cần board:** chạy `mkddc-iobus` + fake MCU trước (06 §11.1) →
 `./build/core/mkddc-core --log-level debug` → xem point table phản ánh UI ramp của fake MCU.
 
-**systemd unit ĐẦY ĐỦ (file thật: `packaging/systemd/mkddc-core.service` — SKEL-005,
-install bằng `packaging/install.sh`):**
+**systemd unit ĐẦY ĐỦ (file thật: `platform/systemd/mkddc-core.service` — SKEL-005,
+install bằng `platform/packaging/install.sh`; bản dưới là trích các dòng cấu hình, chú thích lý do nằm trong file thật):**
 ```ini
 # /etc/systemd/system/mkddc-core.service
 [Unit]
@@ -537,17 +543,23 @@ Wants=mkddc-iobus.service
 
 [Service]
 Type=notify                     # READY=1 sau scan đầu tiên
-ExecStart=/usr/sbin/mkddc-core
+ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkddc/keys/device.pub
+# ADR-061 C4: CPU3 chỉ được vào WFI (root, "-" = bo không có cpuidle vẫn khởi động)
+ExecStartPre=-+/bin/sh -c 'echo 20 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
+ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
 ExecReload=/bin/kill -HUP $MAINPID   # reload config ở ranh giới scan (§8, COR-008)
 User=mkddc
 Group=mkddc
 RuntimeDirectory=mkddc          # /run/mkddc (core.sock)
+RuntimeDirectoryMode=0770
 RuntimeDirectoryPreserve=yes
+StateDirectory=mkddc
 Restart=always
 RestartSec=2
-WatchdogSec=3                   # core kick mỗi scan (1s)
+WatchdogSec=6                   # kick tối đa 1 lần/giây (ADR-061 4.8)
 CPUSchedulingPolicy=fifo
 CPUSchedulingPriority=80        # cao hơn iobus (70)
+CPUAffinity=3                   # ADR-061 4.11: CPU3 dành riêng cho Core
 LimitRTPRIO=85
 LimitMEMLOCK=infinity           # mlockall() tránh page fault trong scan
 AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK
