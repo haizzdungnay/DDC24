@@ -35,6 +35,7 @@
 #include "ipc/output_writer.hpp"
 #include "config/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
+#include "runtime/cpu_idle_check.hpp"
 #include "runtime/interval_gate.hpp"
 #include "runtime/scan_loop.hpp"
 #include "runtime/thread_policy.hpp"
@@ -464,6 +465,36 @@ int main(int argc, char** argv)
                          SCHED_FIFO, rt_prio);
         else
             std::fprintf(stderr, "INFO  rt.ok policy=SCHED_FIFO prio=%d mlock=1\n", rt_prio);
+
+        /* ADR-061 C4 / 4.11 — CPU nào của vòng quét còn được vào trạng thái
+         * nghỉ có exit latency > 100 µs thì lần thức dậy sau mỗi base step có
+         * thể trễ hơn cả ngưỡng C4 (Foxlinx: `cpu-sleep` 370 µs, 13 % lần thức
+         * dậy vi phạm). Ràng buộc `pm_qos_resume_latency_us` do unit systemd
+         * đặt bằng root; ở đây chỉ đọc và nói ra khi thiếu. */
+        cpu_set_t affinity;
+        CPU_ZERO(&affinity);
+        if (sched_getaffinity(0, sizeof(affinity), &affinity) == 0) {
+            const int c4_limit_us = static_cast<int>(BaseStepPacer::kJitterLimitNs / 1000ull);
+            for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+                if (!CPU_ISSET(cpu, &affinity)) continue;
+                const CpuIdleExposure idle = cpu_idle_exposure("/sys/devices/system/cpu", cpu);
+                if (!idle.known) continue;
+                if (idle.worst_allowed_exit_latency_us > c4_limit_us)
+                    std::fprintf(stderr,
+                                 "ERROR rt.cpu_idle_exposed cpu=%d state=%s exit_latency_us=%d"
+                                 " qos_resume_latency_us=%d — C4 (<= %d us) KHONG dat duoc; can"
+                                 " pm_qos_resume_latency_us <= %d cho CPU nay (unit mkddc-core)\n",
+                                 cpu, idle.worst_state_name.c_str(),
+                                 idle.worst_allowed_exit_latency_us, idle.qos_resume_latency_us,
+                                 c4_limit_us, c4_limit_us);
+                else
+                    std::fprintf(stderr,
+                                 "INFO  rt.cpu_idle_ok cpu=%d worst_state=%s exit_latency_us=%d"
+                                 " qos_resume_latency_us=%d\n",
+                                 cpu, idle.worst_state_name.c_str(),
+                                 idle.worst_allowed_exit_latency_us, idle.qos_resume_latency_us);
+            }
+        }
     }
 
     struct sigaction sa {};
