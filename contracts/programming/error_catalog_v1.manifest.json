@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.12.0",
-  "catalogSha256": "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781",
+  "catalogVersion": "1.13.0",
+  "catalogSha256": "f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171",
   "schemaSha256": "53a42d03f97b41424fb510f2670866506e789578a740cf9f48129daaab38f513",
   "publicErrorCount": 38,
-  "componentDetailCount": 159,
+  "componentDetailCount": 160,
   "generatedConsumers": [
     "apps/web-api/internal/programming/domain/errors_generated.go",
     "apps/core/application/programming/program_error_generated.hpp",

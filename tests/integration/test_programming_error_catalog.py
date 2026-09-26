@@ -123,9 +123,11 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # ngoài tập {10…50000} ms; trước đó Check dùng lại `ST-LIM-009` ("quá
         # nhiều Program") và người đọc đi sửa sai chỗ. Ánh xạ vào
         # `PRG-ERR-SCOPE-001` (ngoài phạm vi profile) nên số public giữ 38.
-        self.assertEqual(catalog["catalogVersion"], "1.12.0")
+        # Cập nhật 2026-09-26: +ST-WORKER-TOOLCHAIN (tool ST lệch bản với web),
+        # 159→160 detail, catalog 1.12.0→1.13.0.
+        self.assertEqual(catalog["catalogVersion"], "1.13.0")
         self.assertEqual(len(catalog["publicErrors"]), 38)
-        self.assertEqual(len(catalog["componentDetails"]), 159)
+        self.assertEqual(len(catalog["componentDetails"]), 160)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 
