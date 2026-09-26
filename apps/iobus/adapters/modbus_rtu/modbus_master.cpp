@@ -4,8 +4,10 @@
  */
 #include "modbus_master.hpp"
 #include "fieldbus_time.hpp"
+#include "thread_policy.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
@@ -26,6 +28,9 @@ void ModbusMaster::bind_workers(const FieldbusConfig& cfg, ExtCache& cache,
     /* Generation mới ⇒ ánh xạ slot có thể đã đổi và dedup cũ vô nghĩa: lấy lại
      * mốc ở lượt drain kế tiếp thay vì phát lại (`MBA-FW-02`). */
     write_baseline_pending_ = true;
+    /* G7: ảnh `ext_cmd_seq` của generation cũ không nói gì về generation mới. */
+    observed_valid_      = false;
+    write_retry_pending_ = false;
 
     init_metrics(metrics);
 
@@ -112,6 +117,9 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
 
 void ModbusMaster::close()
 {
+    /* Dừng `mb-extcmd` TRƯỚC khi huỷ worker: luồng đó duyệt `workers_` trong
+     * `drain_ext_writes`, còn `workers_.clear()` dưới đây không giữ khoá. */
+    stop_ext_command_watch();
     stop_workers();
     for (auto& worker : workers_) worker->close_port();
     workers_.clear();
@@ -243,10 +251,29 @@ bool ModbusMaster::submit_write(const PendingWrite& w, uint8_t bus_id)
     return false;
 }
 
+bool ModbusMaster::ext_commands_unchanged(const kx_plc_shm_t* shm, uint64_t now_ms) const
+{
+    if (write_baseline_pending_ || !observed_valid_) return false;
+    if (write_retry_pending_ && now_ms >= write_retry_at_ms_) return false;
+    if (__atomic_load_n(&shm->ext_count, __ATOMIC_ACQUIRE) != observed_ext_count_) return false;
+    /* Chỉ dải RTU `[0, ext_cursor_)`: slot TCP đứng sau và không đi đường ghi
+     * này. Đọc từng số 32-bit bằng atomic load — không thể rách; nếu Core đang
+     * ghi dở, lần soi này thấy giá trị cũ và lần 5 ms sau thấy giá trị mới. */
+    const size_t n = std::min<size_t>(ext_cursor_, KX_N_EXT);
+    for (size_t i = 0; i < n; i++) {
+        if (__atomic_load_n(&shm->ext_cmd_seq[i], __ATOMIC_ACQUIRE) != observed_cmd_seq_[i])
+            return false;
+    }
+    return true;
+}
+
 void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
 {
     std::lock_guard<std::mutex> lock(workers_mu_);
     if (!shm || workers_.empty()) return;
+    /* Magic sai (Core chưa khởi tạo, hoặc layout khác) ⇒ không có gì tin được.
+     * Kiểm TRƯỚC khi chụp: trước G7 lượt này tốn 5 lần memcpy 24 KB rồi mới bỏ. */
+    if (__atomic_load_n(&shm->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) return;
 
     /* MBA-FW-08: lệnh đã bỏ KHÔNG được tạo lại chỉ vì cờ dirty vẫn là 1.
      * BusWorker giữ danh sách slot bỏ để chẩn đoán, nhưng chỉ ext_cmd_seq do
@@ -254,6 +281,10 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     for (auto& worker : workers_) {
         (void)worker->take_dropped_write_slots();
     }
+
+    /* G7 — đường nhanh: không có gì đổi kể từ lần chụp trước ⇒ lượt đầy đủ
+     * chắc chắn không phát lệnh nào (xem khai báo trong header). */
+    if (ext_commands_unchanged(shm, now_ms)) return;
 
     kx_plc_shm_t snapshot{};
     bool stable = false;
@@ -274,6 +305,8 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     if (baseline) last_command_seq_.fill(0);
     size_t seeded = 0;
     size_t identity_skipped = 0;
+    size_t enqueue_rejected = 0;
+    ext_command_scans_.fetch_add(1, std::memory_order_relaxed);
 
     for (auto& worker : workers_) {
         for (size_t si = 0; si < worker->slave_count(); si++) {
@@ -368,6 +401,10 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                                     std::fprintf(stderr, "INFO  modbus_master.ext_release_safe slave=%s"
                                                  " point=%s safe_value=%g\n",
                                                  sc.name.c_str(), pt.name.c_str(), pt.safe_value);
+                            } else {
+                                /* Hàng đợi đầy: sequence CHƯA được tiêu, lượt
+                                 * sau phải chụp lại dù `ext_cmd_seq` không đổi. */
+                                enqueue_rejected++;
                             }
                         }
                     }
@@ -379,6 +416,14 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
             }
         }
     }
+
+    /* G7: ghi ảnh cho đường nhanh — chỉ sau một lượt chụp NHẤT QUÁN. */
+    std::copy(std::begin(snapshot.ext_cmd_seq), std::end(snapshot.ext_cmd_seq),
+              observed_cmd_seq_.begin());
+    observed_ext_count_  = snapshot.ext_count;
+    observed_valid_      = true;
+    write_retry_pending_ = enqueue_rejected > 0;
+    if (write_retry_pending_) write_retry_at_ms_ = now_ms + kExtWriteRetryMs;
 
     if (baseline) {
         write_baseline_pending_ = false;
@@ -473,6 +518,61 @@ bool ModbusMaster::apply_config(const std::string& config_path, uint64_t expecte
                  static_cast<unsigned long long>(prov_.generation),
                  workers_.size(), cfg_.slaves.size(), ext_cursor_);
     return true;
+}
+
+void ModbusMaster::start_ext_command_watch(PlcShmSource source, uint32_t period_ms)
+{
+    std::lock_guard<std::mutex> lock(watch_mu_);
+    if (watch_thread_.joinable()) return;
+    if (period_ms == 0) period_ms = 1;   /* 0 là vòng quay rỗng — cấm */
+    watch_stop_ = false;
+    watch_thread_ = std::thread([this, source = std::move(source), period_ms]() {
+        ext_watch_loop(source, period_ms);
+    });
+    std::fprintf(stderr, "INFO  modbus_master.ext_watch_started period_ms=%u idle_period_ms=%u\n",
+                 period_ms, std::max(period_ms, kExtCommandIdlePollMs));
+}
+
+void ModbusMaster::stop_ext_command_watch()
+{
+    {
+        std::lock_guard<std::mutex> lock(watch_mu_);
+        if (!watch_thread_.joinable()) return;
+        watch_stop_ = true;
+    }
+    watch_cv_.notify_all();
+    watch_thread_.join();
+}
+
+bool ModbusMaster::ext_command_watch_running() const
+{
+    std::lock_guard<std::mutex> lock(watch_mu_);
+    return watch_thread_.joinable() && !watch_stop_;
+}
+
+void ModbusMaster::ext_watch_loop(const PlcShmSource& source, uint32_t period_ms)
+{
+    /* Thread tạo từ `main` đang SCHED_FIFO sẽ thừa hưởng nó (`MBA-FW-01`). */
+    demote_to_normal_sched("mb-extcmd");
+    using WatchClock = std::chrono::steady_clock;
+    WatchClock::time_point next = WatchClock::now();
+    std::unique_lock<std::mutex> lock(watch_mu_);
+    while (!watch_stop_) {
+        lock.unlock();
+        const kx_plc_shm_t* shm = source ? source() : nullptr;
+        drain_ext_writes(shm, monotonic_ms());
+        ext_watch_ticks_.fetch_add(1, std::memory_order_relaxed);
+        const uint32_t step_ms =
+            (bus_count() > 0) ? period_ms : std::max(period_ms, kExtCommandIdlePollMs);
+        lock.lock();
+        const auto step = std::chrono::milliseconds(step_ms);
+        next += step;
+        const WatchClock::time_point now = WatchClock::now();
+        /* Trễ ≥ một chu kỳ (chờ `workers_mu_` trong lúc `apply_config`, CPU
+         * bận): bỏ mốc đã qua, KHÔNG chạy dồn một loạt lượt soi liền nhau. */
+        if (next <= now) next = now + step;
+        watch_cv_.wait_until(lock, next, [this]() { return watch_stop_; });
+    }
 }
 
 uint32_t ModbusMaster::sleep_ms_until_next(uint64_t now_ms) const
