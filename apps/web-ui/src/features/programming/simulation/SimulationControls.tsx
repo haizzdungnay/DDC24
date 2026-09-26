@@ -26,6 +26,9 @@ export function SimulationControls({
   onAction,
   onStop,
   onStopActive,
+  onStart,
+  canStart,
+  isStaleSession,
   onFocusWatch,
 }: {
   slice: SimulationSlice
@@ -33,6 +36,9 @@ export function SimulationControls({
   onAction: (action: SimulationAction, speed?: number) => void
   onStop: () => void
   onStopActive?: () => void
+  onStart?: () => void
+  canStart?: boolean
+  isStaleSession?: boolean
   /** Đưa tiêu điểm xuống bảng giá trị đã hiển thị sẵn, không dựng bảng thứ hai. */
   onFocusWatch?: () => void
 }) {
@@ -137,6 +143,13 @@ export function SimulationControls({
           enabled={canControl && !busy && session !== null && !isTerminalState(session.state)}
           onClick={onStop}
         />
+        {isStaleSession && onStart && (
+          <ControlButton
+            label={pick('Mô phỏng bản nháp mới', 'Simulate latest draft')}
+            enabled={Boolean(canControl && !busy && canStart)}
+            onClick={() => onStart()}
+          />
+        )}
         <ControlButton
           label={pick('Ngắt phiên', 'Abort session')}
           enabled={canControl && !busy && (session !== null || typeof onStopActive === 'function')}
