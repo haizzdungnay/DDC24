@@ -21,6 +21,10 @@ ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkdd
 # `rt.cpu_idle_exposed` khi ràng buộc này thiếu.
 ExecStartPre=-+/bin/sh -c 'echo 20 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
 ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
+# ADR-061 4.11: workqueue unbound (kworker không gắn CPU) chỉ chạy trên CPU0–2
+# (mask 7), cùng lý do với `system.conf.d/mkddc-rt.conf`: việc nền của kernel
+# trên CPU3 làm vòng quét thức dậy trễ tới hàng ms trên kernel non-RT.
+ExecStartPre=-+/bin/sh -c 'echo 7 > /sys/devices/virtual/workqueue/cpumask'
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc
