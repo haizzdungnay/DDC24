@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Changed — Hợp nhất các bản rà tài liệu đang chờ ở checkout gốc vào `main@12af1082`; đối chiếu mã finding và trạng thái (2026-09-27)
+
+- **Phạm vi:** bốn entry ngay dưới (đề xuất tính năng, tăng cường bảo vệ bo lab, rà kiến trúc, rà Product Spec/kế hoạch đóng release) được viết trên mốc cũ `0f5d46f3`; nay đưa lên `main`. Không đổi mã nguồn.
+- **Đánh số lại, không đè bản đã ghim:** `main` đã có Product 3.3, SRS 1.3, VVP 2.4 và manifest 1.66. Phần rà của nhánh cũ vì vậy thành **Product 3.4**, **SRS 1.4**, **VVP 2.5**; manifest **1.67** ghim lại `#1/#5/#7/#12/#15`; hai dòng register ở `CONTROL.md` ghi bản rà chờ ký.
+- **Đối chiếu mã finding:** bản rà gọi "F19 = output khi thay package, F20 = SafeState owner". Hai số này trùng với finding khác của `EV-PROG-FBD-ST-MB-20260925`. Theo hồ sơ đó, output khi thay package là **F20** (+ **F22** cho EXT) và SafeState owner là **F21**. Cả ba **đã sửa trong mã** trên `main` (PR #779/#778), F20 PASS target 2026-09-27.
+  - Sửa ở Product §3/§8.1, SRS, VVP, Plan 59 §6.0, Release Handover `REL-03/04`, manifest.
+  - `REL-03/04` đổi từ "FAIL source" sang "SOURCE FIXED", còn thiếu đo target/HIL/physical và policy khi thiếu `safe_value`.
+  - Hai record kiến trúc thêm dòng "Đối chiếu khi hợp nhất", giữ nguyên nhận định tại mốc source.
+- **Đối chiếu soak/ngưỡng:**
+  - Phụ lục VVP của bản rà đòi `VS-PROG-009` chạy "đủ 24 giờ", trái quyết định chủ sở hữu ở VVP v2.4 (≥ 10 chu kỳ mỗi lớp). Nay giữ ngưỡng v2.4. Soak độ bền 24 h C1–C4 trên image sạch được ghi là phép thử riêng, vẫn là điều kiện claim chu kỳ ở Product §8.1.
+  - Plan 59 §6.0, `REL-06` và ghi chú ma trận của hồ sơ audit ghi đủ soak lần 2 (15 h 53 ph, 0 vi phạm) và soak lần 3 (đạt ngưỡng v2.4). Trước đó chỉ ghi "lượt 3 dừng sau ~11 phút".
+- **Không commit:** tệp `tok` chưa theo dõi ở gốc repo. Tệp này không đọc được nội dung để xác định, có thể là credential nên để nguyên.
+- **Kiểm chứng:** `candidate_pin_check.py` PASS 17/17; `docs_iso_harness.py --expect` PASS (0 lệch metadata/lịch sử); `generate_programming_profile.py --check` PASS 3/3; `verify-project.sh --component layout` exit 0; `git diff --check` sạch. Không chạy build/browser/target vì chỉ sửa tài liệu.
+
+### Added — Đề xuất tính năng cạnh tranh DDC-24 để Product review (2026-09-27)
+
+- Bổ sung §9 của `REC-DDC-ARCH-COMP-20260926`: chín đề xuất `CP-01..09` từ nghiệm thu I/O tại tủ, mẫu AHU/VAV, nhật ký tại chỗ và chẩn đoán nguyên nhân đầu ra đến backup/thay bo, BACnet/SC, dữ liệu có ngữ nghĩa, FDD/năng lượng và fleet/I/O mở rộng. Mỗi đề xuất nêu lợi ích, mức nền hiện có, công sức tương đối, phép thử pilot và quyết định cần Product Owner review; so với nguồn chính thức Siemens, Johnson Controls, Schneider, Tridium, Honeywell, BACnet International, Project Haystack và ASHRAE.
+- Cập nhật hai chỉ mục tài liệu. Đây là đề xuất khám phá sản phẩm, không sửa Product/SRS/contract/runtime, không thêm vào RC hiện tại và không đổi `RELEASE_READY=NO-GO`. Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` PASS (0 link thiếu, 0 lệch metadata/lịch sử), `python3 scripts/candidate_pin_check.py` PASS 17/17, `git diff --check` PASS; không chạy build/browser/target vì chỉ sửa record/chỉ mục/changelog.
+
+### Security — Tăng cường bảo vệ bo lab Foxlinx sau sự cố SSH (2026-09-26)
+
+- Phạm vi: bo lab `SOM-DDC-24-foxlinx` và hồ sơ `SEC-INC-20260926-FOXLINX`; không đổi mã nguồn sản phẩm. Đổi mật khẩu root theo yêu cầu (không lưu mật khẩu vào hồ sơ), khoá mật khẩu `forlinx`, cách ly thêm 11 tệp gồm ba bản sao cùng hash với mã độc ARM và các điểm tự khởi động/che giấu lệnh hệ thống; gỡ các bản chạy khỏi đường dẫn gốc.
+- Dừng và mask FTP (đang cho anonymous/local, có quyền ghi) cùng ADB TCP/5555. SSH chỉ nhận khoá, tắt chuyển tiếp TCP/agent, giảm `MaxAuthTries` còn 3, chỉ lắng nghe IPv4 do BSP không có `ip6tables`; luật firewall được nạp lại sau boot chỉ cho TCP/22 từ LAN, IP văn phòng `101.99.36.34` và IP nhóm đang dùng `1.53.70.62`, chặn TCP/21/5555.
+- Kiểm chứng: `sshd -t` PASS; đọc ngược `sshd -T` và `iptables -S` PASS; kết nối SSH mới bằng khoá PASS, thử mật khẩu root/forlinx đều bị từ chối, unit bảo vệ enabled/active, 21/5555 không còn lắng nghe; bản sao quarantine kiểm hash 11/11. **Chưa cài lại image, chưa gỡ NAT WAN 2223 trên router, chưa chứng minh bo sạch**; cần IT có image tin cậy và quyền quản trị router.
+- Kiểm tra lại 11:20–11:22 UTC theo yêu cầu chủ sở hữu: journal SSH chỉ ghi nhận khoá đã cho phép từ IP nhóm trong cửa sổ quan sát; không thấy tiến trình/chương trình thực thi bất thường hoặc IoC tái xuất hiện ngoài quarantine; Core/iobus/web `active`, `NRestarts=0`, 18 cửa sổ jitter có 0 vi phạm và 0 bước lỡ. Đây là bằng chứng quan sát tạm thời trên bo từng bị chiếm root, không thay cổng cài lại image và đóng NAT WAN.
+### Changed — Bản rà Product Spec và kế hoạch đóng release (2026-09-27)
+
+- Đối chiếu source/ADR-061/profile v2.2 và cập nhật Product, Requirements, SRS, VVP, interface/software note: tám chu kỳ mới 10–50.000 ms, artifact 1 MiB; giữ gói 30 s ở reader di trú, không Check mới. Đây là bản rà chờ chữ ký Product/Verification, không giả phê duyệt mới.
+- Cập nhật Plan 59 và Release Handover §8 bằng chuỗi thẻ `REL-01..09`, owner, nơi sửa, tiêu chí Test Result, thứ tự RC và rollback. Thêm output cũ còn giữ khi thay package (F20/F22) và SafeState dùng owner mặc định (F21) — mã theo `EV-PROG-FBD-ST-MB-20260925`, đã sửa ở PR #779/#778 — cổng image sạch sau sự cố SSH, BACnet/Modbus và ranh giới phần cứng SKU.
+- Đính chính báo cáo kiến trúc: soak 24 giờ đầu FAIL C4; lượt 3 chỉ khoảng 11 phút rồi dừng, không đủ điều kiện 24 giờ. `RELEASE_READY` vẫn `NO-GO`; không nâng target/HIL, không chạy build/browser vì phiên này chỉ sửa tài liệu. Kiểm chứng: `generate_programming_profile.py --check` PASS 3/3, `docs_iso_harness.py --expect` PASS, `candidate_pin_check.py` PASS 17/17, `git diff --check` PASS.
+
+### Added — Rà soát kiến trúc, logic và so sánh giải pháp DDC-24 (2026-09-26)
+
+- Thêm `REC-DDC-ARCH-COMP-20260926` và `REC-DDC-ARCH-GAP-20260926`: giải thích POU/OB/DB đúng phạm vi, sơ đồ kiến trúc và Commission, so sánh bốn phương án cùng Siemens/Metasys/Niagara theo nguồn chính thức, ma trận chuẩn và bảy finding có bằng chứng, owner/gate/đề xuất kiểm chứng.
+- Đăng ký hai record trong `docs/README.md` và `docs/07_records/reviews/README.md`; chỉnh trạng thái chỉ mục `MBA-FW-08` theo audit sau mốc 25/09; gắn nhãn snapshot lượt 1 cho ma trận audit FBD/ST→Modbus để không hiểu các FAIL lịch sử là kết quả cuối. Không đổi runtime, authority hoặc release gate.
+- Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` PASS (0 link thiếu, 0 ID trùng, 0 lệch metadata/lịch sử); `git diff --check` PASS; liên kết cục bộ của hai record không thiếu. Không chạy build/browser/target vì chỉ sửa tài liệu.
+
 ### Fixed — Bấm Kiểm tra/Build là Check chạy luôn, PASSED thì sang thẳng Mô phỏng (Programming PGM-02/PGM-05, 2026-09-27)
 
 - **Phạm vi:** `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`, `commission/CheckCommissionPage.tsx`, `simulation/SimulateWorkspace.tsx`, tooltip nút Build ở `layout/ProgrammingHeader.tsx`, `layout/ProgrammingContextStrip.tsx` và nút Kiểm tra ở `design/editor/EditorPane.tsx`; test vitest ba trang và e2e UJ-PROG-05 (`e2e/programming.spec.ts`).

@@ -3,26 +3,26 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `SRS-PROG-001` |
-| Phiên bản | 1.3 |
-| Trạng thái | **Active; 89 requirement, gồm 7 requirement PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION nhưng chưa verified/As-Built** |
-| Ngày | 2026-08-20 |
+| Phiên bản | 1.4 — bản rà 2026-09-27 trên 1.3, chờ Product Owner duyệt lại |
+| Trạng thái | **Baseline 1.2 Active; bản đồng bộ 1.3 và bản rà 1.4 chờ Product Owner ký, 89 requirement; RELEASE_READY=NO-GO** |
+| Ngày | baseline 2026-08-20; bản 1.3 và bản rà 1.4 ngày 2026-09-27 |
 | Chủ quản | Product + System Engineering |
 | Reviewer | Software/Runtime Architect, UX/FE Lead, BE Lead, HW/FW Lead, Verification Lead |
 | Approver | Product Owner |
-| Nguồn | `PROD-PROG-001` v3.2; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `CR-PROG-PGM02-V22-001`; ADR-005/020/021/023; Modbus approval 2026-08-05 |
+| Nguồn | `PROD-PROG-001` v3.4 bản rà; ADR-061 Accepted; profile v2.2; baseline `AUTH-PROG-2026-08-20-04`/`AUTH-PROG-2026-08-24-05`; phần output/safe-state mới chờ phê duyệt |
 | Phạm vi | Một Product Programming: multi-Program; PROGRAM/FUNCTION/FUNCTION_BLOCK; ST/FBD; Control Library; Published Signal; Local/VP/MB_RTU |
 
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Baseline chốt 82 điều hệ thống; revision này phê duyệt thêm 7 điều PGM-02 v2.2 cho implementation, tổng 89 ID. Quyền code đã mở nhưng verification/As-Built vẫn phải chứng minh theo từng increment. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Baseline có 82 điều, PGM-02 thêm 7 điều đã được duyệt cho implementation; bản 1.3 đồng bộ chu kỳ ADR-061 trong các ID hiện có và bản rà 1.4 bổ sung tiêu chí di trú/đo target, tổng vẫn 89. Verification/As-Built phải chứng minh theo Test Result. |
 | 2. Ai phải đọc file này? | Product Owner (duyệt phạm vi), mọi discipline lead (nhận phần được phân bổ ở §9), QA (dựng scenario từ tiêu chí chấp nhận). Dev đọc phần của layer mình trước khi đọc thiết kế. |
-| 3. Hệ thống hiện tại đang có gì? | Chưa requirement nào được implement end-to-end. Đường control production vẫn là graph. Modbus RTU Point contract đã `Active` (approval 2026-08-05) và được dùng lại, không viết lại. `contracts/iop/iop_protocol.h` và safe-timeout `200 ms` trên MCU đã có mã nguồn. |
+| 3. Hệ thống hiện tại đang có gì? | R1/R2/R3 đã đóng phạm vi implementation theo Plan59; đường Programming trên target lab đã có nhưng release/HIL chưa đạt. Modbus RTU Point contract đã `Active`; `contracts/iop/iop_protocol.h` và safe-timeout `200 ms` trên MCU có mã nguồn. |
 | 4. Thiết kế mới thay đổi điều gì? | Giữ 82 requirement baseline và phê duyệt `SYS-116`, `FE-119`, `BE-116/117`, `CORE-117/118`, `NFR-112` cho PGM-02 theo `R1 EDIT → R2 LIVE → R3 SIMULATE`. Detailed Design Target là `DDD-SW-PGM02-WORKSPACE-001`. |
 | 5. Team phải sửa module/contract nào? | Phân bổ ở §9: FE → `apps/web-ui`; BE → `mkddc-web`; Core → `mkddc-core`; MCU → firmware STM32; HW → schematic/BOM/test point. Ranh giới không được vượt: FE không quyết quyền, BE không chạy control step, Core không sở hữu Project, MCU không biết Revision (§12). |
-| 6. Điều gì còn bị chặn? | Không còn blocker authority để viết code PGM-02: `T59-801=DONE`, `T59-802=READY`, task sau `ORDERED` theo dependency. U13–U15, target/HIL, residual risk và release evidence vẫn là cổng riêng. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Baseline trace tới 44 scenario; PGM-02 nối `VS-PROG-U13..U15`, tất cả `NOT_RUN`. Không kế thừa host/browser/docs thành Test Result hoặc target/HIL PASS. |
+| 6. Điều gì còn bị chặn? | Bản 1.3/1.4 chờ Product Owner ký; đo target/HIL cho F20/F21/F22 (mã đã sửa), target image sạch, U15 physical, 24 giờ C1–C4 và W7/release theo Plan59 §6.0. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | 89 ID nối 47 scenario; U13/U14 có closeout phạm vi increment, U15 PASS MỘT PHẦN. Không kế thừa host/browser/docs thành Test Result target/HIL hoặc release PASS. |
 
 Mọi giới hạn một Task/một Program trong revision cũ chỉ còn là As-Built migration
 input. `AUTH-PROG-2026-08-20-04` supersede quyết định phạm vi trái Product v3.0.
@@ -43,7 +43,7 @@ không phải điều kiện xin phép trước P1.
 
 | ID | Yêu cầu quy phạm | Nguồn | Ưu tiên | Kiểm chứng | Tiêu chí chấp nhận |
 |---|---|---|---|---|---|
-| `SYS-REQ-PROG-101` | Hệ thống phải hỗ trợ nhiều Program độc lập trên một controller, ST + FBD, đúng ba Point category `LOCAL/VP/MB-RTU` và period Program thuộc tập {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms trên base step 10 ms (ADR-061); phải từ chối scope ngoài allowlist. | `PR-PROG-001/002/006/008` | Must | T+I | Package nhiều Program hợp lệ chạy qua Check; LD/SFC/Point type/period khác bị từ chối bằng mã ổn định. |
+| `SYS-REQ-PROG-101` | Hệ thống phải hỗ trợ nhiều Program độc lập trên một controller, ST + FBD, đúng ba Point category `LOCAL/VP/MB-RTU` và period Program mới `10/50/100/500/1000/5000/10000/50000 ms`; phải từ chối scope ngoài allowlist. | `PR-PROG-001/002/006/008`; ADR-061 | Must | T+I | Package nhiều Program hợp lệ chạy qua Check; LD/SFC/Point type/period khác bị từ chối bằng mã ổn định; gói cũ 30 s chỉ được reader di trú. |
 | `SYS-REQ-PROG-102` | Hệ thống phải tách `Draft/Candidate` khỏi `Active`; Save hoặc Check không được làm thay đổi control đang chạy. | PRG-BACS-003; PRG-UX-002 | Must | T+D | Hash/Revision active và output không đổi qua Save/Check thành công hoặc lỗi. |
 | `SYS-REQ-PROG-103` | Commission/Restore phải là giao dịch atomic, chỉ báo thành công sau read-back authoritative; lỗi phải giữ Last-Known-Good. | PRG-RT-003/004; PRG-COM-003/004 | Must | T+HIL | Không có trạng thái active một phần; response và runtime status khớp cùng revision/correlation. |
 | `SYS-REQ-PROG-104` | Hệ thống phải duy trì control local khi FE/BE/network mất, miễn core/iobus/MCU còn healthy. | NFR-PRG-PROP-006 | Must | Fault injection | Restart Web/BE không đổi active revision, output hoặc run counter ngoài sai số đã duyệt. |
@@ -69,7 +69,7 @@ không phải điều kiện xin phép trước P1.
 | `SWR-REQ-PROG-FE-103` | ST editor phải có keyboard-first, line/column diagnostics, symbol/type, tìm/tham chiếu và không làm mất Draft khi lỗi. | UX-REQ-004 | Must | Component+E2E | Diagnostic điều hướng đúng source range; reload phục hồi Draft từ BE. |
 | `SWR-REQ-PROG-FE-104` | ST/FBD editor phải tạo và sửa PROGRAM/FUNCTION/FUNCTION_BLOCK, chỉ hiện property hợp lệ theo kind và hỗ trợ structured typed FBD bằng bàn phím. | `PR-PROG-002/003/005` | Must | Component+a11y | Function không thấy cycle/mapping/RETAIN; FB có instance interface; flow hoàn tất bằng bàn phím. |
 | `SWR-REQ-PROG-FE-105` | Mapping UI phải dùng canonical identity, type, direction, writable, unit, quality và chỉ cho phép category trong allowlist. | UX-REQ-006/013 | Must | T+E2E | Invalid binding bị đánh đúng field, chặn Check/Commission, không đổi missing thành zero. |
-| `SWR-REQ-PROG-FE-106` | FE phải cấu hình cycle trong tập ADR-061 {10…50000} ms và hiển thị enable intent/runtime state riêng cho từng Program; không expose internal Task order như product dependency. | `PR-PROG-005/006/011` | Must | T+E2E | Nhiều Program có period khác nhau; UI không có Program order tạo semantic dependency. |
+| `SWR-REQ-PROG-FE-106` | FE phải cấu hình chu kỳ mới theo profile v2.2 và hiển thị enable intent/runtime state riêng cho từng Program; không expose internal Task order như product dependency. | `PR-PROG-005/006/011`; ADR-061 | Must | T+E2E | Nhiều Program có period khác nhau; UI không có Program order tạo semantic dependency. |
 | `SWR-REQ-PROG-FE-107` | Trang Commission phải hiện readiness, change manifest, output/RETAIN/cutover/override impact, confirmation mạnh, progress và read-back; timeout phải chuyển `UNKNOWN`. | UX-REQ-009/010/020 | Must | E2E | Không optimistic success; retry status không replay mutation. |
 | `SWR-REQ-PROG-FE-108` | Runtime UI phải tách `program_value`, `actual_value`, `overridden_by`, `effective_priority`, actor và TTL khi có. | UX-REQ-011/014 | Must | E2E | Override mức 1–4 không bị trình bày như Program đang thắng. |
 | `SWR-REQ-PROG-FE-109` | FE phải dùng core state `RUNNING/DEGRADED/UNREACHABLE`, Point freshness/quality riêng, và không tạo fake metric/default. | UX-REQ-012/013/019 | Must | T+E2E | Thiếu producer hiển thị `—/Không xác định`; data cũ có nhãn freshness. |
@@ -111,13 +111,13 @@ không phải điều kiện xin phép trước P1.
 | ID | Yêu cầu quy phạm | Nguồn | Ưu tiên | Kiểm chứng | Tiêu chí chấp nhận |
 |---|---|---|---|---|---|
 | `SWR-REQ-PROG-CORE-101` | Core chỉ được nạp artifact đã verify magic/schema/target/profile/size/hash/section/control-flow/resource; không parse ST/FBD trên RT path. | PRG-IEC-001/004; PRG-SEC-002 | Must | Unit+fuzz | One-over/corrupt/wrong-target đều reject trước swap, không crash/OOM. |
-| `SWR-REQ-PROG-CORE-102` | Base control step phải tách Task period, dùng coherent input snapshot, dispatch due task deterministic, stage output, resolve/interlock/safe-state rồi commit một lần. | PRG-RT-001/002/009 | Must | Unit+target | Thứ tự lặp lại được; Program chu kỳ dài nhất (50 s, ADR-061) không kéo dài base step 10 ms hay sleep theo chu kỳ của nó. |
+| `SWR-REQ-PROG-CORE-102` | Base control step 10 ms phải tách chu kỳ Program, dùng coherent input snapshot, dispatch due Program deterministic, stage output, resolve/interlock/safe-state rồi commit một lần. | PRG-RT-001/002/009; ADR-061 | Must | Unit+target | C1–C4 đo trên target 24 giờ; Program 50 s không kéo dài base step; I/O fieldbus có budget riêng. |
 | `SWR-REQ-PROG-CORE-103` | RT path sau init không được heap allocation, filesystem, DB, HTTP, DNS, blocking network hoặc dynamic native load. | PRG-RT-005 | Must | Static+instrumented | Allocation/blocking detector không ghi vi phạm trong 10.000 cycle/period. |
 | `SWR-REQ-PROG-CORE-104` | Program output phải ghi mức Local logic 5, qua resolver hiện hữu; runtime phải publish program/actual/winner/priority/TTL riêng. | PRG-RT-002/007 | Must | Unit+HIL | Không có direct IOP write; override các mức 1–4 thắng đúng. |
 | `SWR-REQ-PROG-CORE-105` | PI/PID phải back-calculate khi mức 5 thắng nhưng bị limit, và freeze integrator khi thua arbitration; không track `actual_value` ngoại lai. | PRG-RT-007 | Must | Unit+HIL | Test saturation/override/release đạt transition policy đã phê duyệt. |
 | `SWR-REQ-PROG-CORE-106` | Activation/Restore phải hold-last trên `previous_program_value` mức 5, chỉ phát Revision mới sau cycle đầu không fault. | PRG-RT-008 | Must | Unit+HIL | Sai lệch first commit không quá độ phân giải binding; LKG giữ khi lỗi. |
 | `SWR-REQ-PROG-CORE-107` | Overrun phải được đo theo Task; lần đầu warning, ba lần liên tiếp fault đúng Task; plant safe-state chỉ do SafetyManager condition độc lập. | PRG-RT-006 | Must | Unit+target | Không nuisance plant safe-state chỉ vì Check load/Task overrun. |
-| `SWR-REQ-PROG-CORE-108` | Watchdog chỉ được kick sau base step hoàn tất và cấu hình phải thỏa công thức được phê duyệt. | PRG-RT-009 | Must | Target | Không restart loop ở mọi chu kỳ của tập ADR-061 {10…50000} ms; log cadence và WCET chứng minh margin. |
+| `SWR-REQ-PROG-CORE-108` | Watchdog chỉ được kick sau base step hoàn tất và cấu hình phải thỏa công thức được phê duyệt. | PRG-RT-009; ADR-061 | Must | Target | Không restart loop ở các chu kỳ mới; log cadence/WCET và fault injection chứng minh margin. |
 | `SWR-REQ-PROG-CORE-109` | RETAIN phải versioned, có integrity, ghi atomic/bounded; mismatch/corrupt phải cold-init có diagnostic, không chặn boot. | PRG-IEC-003; PRG-COM-002 | Must | Unit+power fault | Không đọc sai layout; power loss không tạo record được chấp nhận một phần. |
 | `SWR-REQ-PROG-CORE-110` | Online monitor mặc định read-only; trace phải bounded và không nằm critical path. | PRG-BACS-005; NFR-PRG-PROP-004/005 | Must | T+soak | 1 Hz mặc định; tối đa 10.000 sample/10 phút; dừng có reason. |
 | `SWR-REQ-PROG-CORE-111` | Loader/runtime phải hỗ trợ artifact v2 nhiều POU/Program và giữ dual-reader v1 trong migration window. | `SYS-109..115` | Must | Unit+integration | Offset/count/DAG/layout/profile corrupt reject trước mutation; v1 LKG vẫn restore. |
@@ -174,6 +174,9 @@ ba `IMPLEMENT_READY=GO`; `T59-801=DONE`, `T59-802=READY`, các task sau
 `ORDERED` và chỉ chạy khi dependency R1→R2→R3 thỏa. Điều này không đổi U13–U15
 `NOT_RUN` hoặc `RELEASE_READY=NO-GO`.
 
+**Đính chính trạng thái 2026-09-27:** đoạn trên là snapshot quyền mở code ngày
+24/08. R1/R2/R3 đã đóng theo Plan59; U15 còn phần physical và release vẫn NO-GO.
+
 ## 9. Rationale và phân bổ theo nhóm
 
 | Nhóm requirement | Rationale sản phẩm/an toàn | Owner thiết kế chính | Consumer bắt buộc |
@@ -195,7 +198,7 @@ vật lý. Một requirement chỉ được đóng khi tất cả consumer của
 | Requirement/giá trị | Trạng thái | Decision | Owner quyết định | Ghi chú thực thi/kiểm chứng |
 |---|---|---|---|---|
 | Type/conversion/ST limits/FBD `256/512` | `DECIDED` | `OD-PROG-002/003` | Product + Runtime | hiện thực boundary/one-over suite |
-| Tối đa 32 Program/Revision, 16 Enabled; period {10…50000} ms trên base step 10 ms | `DECIDED` | `AUTH-PROG-2026-08-20-04`; period theo ADR-061 (2026-09-26) | Product + Runtime | due queue/per-Program state/WCET/watchdog/target fixture |
+| Tối đa 32 Program/Revision, 16 Enabled; period mới theo ADR-061/profile v2.2 | `DECIDED` cho chu kỳ; release claim chờ VVP | `AUTH-PROG-2026-08-20-04`; chu kỳ theo `ADR-061` (2026-09-26) | Product + Runtime | due queue/per-Program state/WCET/watchdog/target fixture |
 | Viewer/operator read-only; admin mutation | `DECIDED` | `OD-PROG-001` | Product + Security | hiện thực permission matrix và negative authorization cases |
 | PROGRAM/FUNCTION/FUNCTION_BLOCK + SYSTEM/PROJECT Library | `DECIDED` | `AUTH-PROG-2026-08-20-04` | Product + Controls | registry/version/DAG/POU semantics; PID evidence gate riêng |
 | Structured FBD keyboard editor | `DECIDED` | `OD-PROG-006` | Product + UX + Runtime | hiện thực canonical FBD schema/order/conversion/source map |
@@ -281,6 +284,7 @@ biến kết quả thành PASS nếu không có phê duyệt thay đổi baselin
 | 1.1-candidate | 2026-08-24 | Thêm 7 requirement PGM-02 v2.2 (`SYS-116`, `FE-119`, `BE-116/117`, `CORE-117/118`, `NFR-112`), tổng 89; nối R1/R2/R3 và Simulation admin-only theo Owner change request; Architect exact pin và code/release giữ PENDING/NO-GO. |
 | 1.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, phê duyệt 7 requirement PGM-02 cho implementation, mở ba increment theo thứ tự R1→R2→R3; chốt Check/Package fail closed `ST-POU-005` cho PROGRAM POU chưa xếp lịch; giữ U13–U15 NOT_RUN và release NO-GO. |
 | 1.3 | 2026-09-27 | Đồng bộ ADR-061 (tập chu kỳ {10…50000} ms trên base step 10 ms, thay `1/5/30 s`) vào `SYS-101`, `FE-106`, tiêu chí nghiệm thu của `CORE-102`/`CORE-108` và bảng quyết định; đồng bộ ADR-062 (Program mới có intent Enable đã lưu được bật tại boundary kích hoạt) vào `SYS-113` và `CORE-115`. Cả hai ADR đã Accepted 2026-09-26; bản 1.2 chưa phản ánh — lộ ra ở cổng `candidate-pin` khi tổng hợp release 2026-09-27. Không thêm/bỏ requirement (vẫn 89), không đổi priority/verification level, không nâng trạng thái verified. |
+| 1.4 — bản rà | 2026-09-27 | Trên 1.3: gói cũ 30 s chỉ được reader di trú (`SYS-101`); `CORE-102` đo C1–C4 24 giờ trên target, I/O fieldbus có budget riêng; `CORE-108` thêm fault injection; đính chính trạng thái R1/R2/R3, U15 và blocker release. Không thêm ID hoặc tự nâng Verification. Chờ Product Owner ký bản mới. |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|

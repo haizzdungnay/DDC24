@@ -2,14 +2,15 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (đồng bộ As-Built hash/compiler Programming sau `TASK-PROG-203`)
+**Cập nhật:** 2026-09-27 (đính chính chu kỳ Programming theo ADR-061; phần interface lịch sử bên dưới cần rà riêng)
 
-## Programming Rev A — trạng thái interface
+## Programming — ghi chú interface
 
 Product authority là
-[Product Spec Programming Rev A](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md).
+[Product Spec Programming](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md).
 Programming chỉ nhận Local Physical I/O, Virtual Point và Modbus RTU Point;
-ngôn ngữ chỉ gồm ST/FBD; cycle time chỉ gồm 1 s/5 s/30 s. Modbus TCP và
+ngôn ngữ gồm ST/FBD; chu kỳ Program mới theo ADR-061/profile v2.2 là
+10/50/100/500/1000/5000/10000/50000 ms. Modbus TCP và
 BACnet/IP trong các interface product-wide bên dưới không phải Programming
 Point Rev A.
 
@@ -263,8 +264,8 @@ package cũ tiếp tục. Metric quan sát được: `cycle_count`, `overrun_cou
 (exec vượt budget), `exec_fault_count`, `last_exec_ns`, `max_exec_ns`.
 `StTraceEvent` kind: `VALIDATE_RESULT`, `ACTIVATION_RESULT`, `RUNTIME_FAULT`,
 `OVERRUN`, `ROLLBACK` — giữ trong `StTraceLog` (bounded ring buffer, in
-process, chưa persist). Cycle component host không chứng minh cycle time 1 s,
-5 s hoặc 30 s trên production target, cũng không đóng Activation/Rollback,
+process, chưa persist). Cycle component host không chứng minh tám chu kỳ mới
+trên production target, cũng không đóng Activation/Rollback,
 RETAIN hay Online Monitor requirement.
 
 ## Web/API

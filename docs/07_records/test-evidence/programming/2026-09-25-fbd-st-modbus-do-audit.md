@@ -558,6 +558,8 @@ Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt
 
 ## Ma trận kiểm chứng
 
+> Các dòng chức năng dưới đây là **snapshot lượt 1 (25/09)**, giữ nguyên để truy vết lỗi ban đầu; không phải trạng thái cuối sau F04/F05/F06/F08 và các lượt deploy sau đó. Đọc phần Finding và lượt 2–3 ở trên để biết diễn biến sửa/đo lại. Riêng dòng C1–C4 đã cập nhật tới soak lần 3 (ngưỡng `VS-PROG-009` của `VVP-PROG-001` v2.4); soak độ bền 24 h trên image tin cậy là phép thử riêng. Không được dùng bảng này để suy diễn HIL vật lý hoặc release PASS.
+
 | Lớp / tính năng | Kết quả | Bằng chứng |
 |---|---|---|
 | FBD dùng Function Block: parse/compile/Check | **PASS target** | Revision `cfe17ec5…` Check PASSED 0,64 s, 0 diagnostic |

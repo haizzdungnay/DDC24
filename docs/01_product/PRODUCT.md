@@ -2,7 +2,7 @@
 
 **ID:** PROD-BASE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-04 (đăng ký Product Requirement Modbus RTU và ghi nhận xung đột số bus RS485)
+**Cập nhật:** 2026-09-27 (rà soát Programming theo ADR-061; cấu hình phần cứng phát hành chờ quyết định)
 
 ## Định vị
 
@@ -23,7 +23,7 @@ nhãn `certified`/`compliant` cho tới khi có evidence theo release gate riên
 | UI modes | 0–10 V, 4–20 mA, NTC 10k/20k/configurable, auxiliary dry contact |
 | AO | 4 kênh qua DAC8554, command vật lý V/mA |
 | Network | Ethernet; BACnet/IP; Modbus TCP; **1 × Modbus RTU** (quyết định PM/CTO 2026-08-04) |
-| Programming | Product scope Rev A chỉ gồm Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Revision/Deployment/Activation/Rollback, RETAIN và Online Monitor tuân theo `PROD-PROG-001`. Trạng thái implementation: chưa được xác nhận. |
+| Programming | Một Product theo `PROD-PROG-001`: ST/FBD, PROGRAM/FUNCTION/FUNCTION_BLOCK, LOCAL/VP/MB_RTU, multi-Program, Revision/Commission/Restore, RETAIN và Monitor. Chu kỳ mới theo ADR-061/profile v2.2; release vẫn NO-GO. |
 | Runtime As-Built | Component graph 28 loại node là hiện trạng legacy. Quan hệ migration sang Programming chưa được quyết định; không gọi graph này là FBD và không dùng nó làm bằng chứng Programming. |
 | Configuration | REST API + React Web UI, form/JSON |
 | Local display | HMI LVGL/DRM feature-gated, MIPI DSI + FT5436 touch + 6 nút GPIO; limited operator HMI theo ADR-016 |
@@ -36,17 +36,23 @@ nhãn `certified`/`compliant` cho tới khi có evidence theo release gate riên
 - protocol integration và safe output behavior;
 - HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service, vận hành giới hạn các point được whitelist qua authority/core; phục hồi/cấu hình Ethernet IPv4 cơ bản nằm trong surface Service nhưng network mutation yêu cầu role Admin theo ADR-017.
 
-## Phạm vi Programming Rev A
+## Phạm vi Programming hiện hành
 
 - Product Spec chủ quản: [PROD-PROG-001](DDC24_PROGRAMMING_PRODUCT_SPEC.md).
 - Point source duy nhất: Local Physical I/O, Virtual Point và Modbus RTU Point.
 - Ngôn ngữ duy nhất: ST và FBD.
-- Cycle time duy nhất: 1 s, 5 s và 30 s.
+- Chu kỳ Program mới: 10/50/100/500/1000/5000/10000/50000 ms; gói 30 s chỉ đọc để di trú theo ADR-061. Không suy độ trễ fieldbus từ base step 10 ms.
 - Modbus TCP/BACnet IP trong dòng `Network` là capability giao tiếp toàn sản
   phẩm, không phải Programming Point Rev A.
 - Product Spec quy định sản phẩm phải làm gì; requirement quy định nghĩa vụ của
-  từng layer; Programming Design chưa được thực hiện; As-Built phải lấy từ
-  source/evidence và không được suy ra từ Product Spec.
+  từng layer; As-Built và mức release phải lấy từ source/evidence, không suy từ spec.
+
+**Quyết định phần cứng còn mở:** bảng Rev A.0 ghi Radxa CM3/RK3566 và Debian;
+test target Programming gần đây dùng Foxlinx OK1126B-S và Buildroot. Owner phải
+chọn SKU/image phát hành rồi kiểm lại trên đúng cấu hình; không dùng test lab trên
+Foxlinx để chứng minh baseline Radxa. Hồ sơ bo lab bị xâm nhập tại
+[`SEC-INC-20260926-FOXLINX`](../07_records/security/2026-09-26-foxlinx-ssh-intrusion.md)
+cũng chặn việc dùng image hiện tại làm bằng chứng release.
 
 ## Modbus RTU — Product Requirement riêng
 
