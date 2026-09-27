@@ -2,14 +2,15 @@
 
 **ID:** SW-DES-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-05 (đồng bộ bộ thiết kế Modbus RTU theo quyết định PM/CTO và kết quả Track A)
+**Cập nhật:** 2026-09-27 (đính chính chu kỳ Programming theo ADR-061; phần Software lịch sử bên dưới cần rà riêng)
 
-## Ranh giới Programming Rev A
+## Ranh giới Programming
 
-[Product Spec Programming Rev A](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
+[Product Spec Programming](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
 chỉ quy định Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và
-cycle time 1 s/5 s/30 s. Tài liệu Software này không phải Programming Design đã
-được phê duyệt cho scope mới. Trong nhiệm vụ đồng bộ ngày 2026-08-03:
+chu kỳ Program mới theo ADR-061/profile v2.2. Phần ghi chú lịch sử của tài liệu
+này không thay thế Unified Detailed Design đã được duyệt. Trong nhiệm vụ đồng bộ
+ngày 2026-08-03:
 
 - Product Spec trả lời sản phẩm phải làm gì;
 - `REQUIREMENTS.md` trả lời từng layer phải đáp ứng gì;

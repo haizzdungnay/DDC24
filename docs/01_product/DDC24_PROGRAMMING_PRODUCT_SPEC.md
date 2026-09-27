@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROD-PROG-001` |
-| Phiên bản | 3.3 |
-| Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, chưa phải As-Built** |
-| Ngày hiệu lực | 2026-08-20 |
+| Phiên bản | 3.4 — bản rà 2026-09-27 trên 3.3; chờ Product Owner ký lại bản ghim |
+| Trạng thái | **Bản rà soát để chốt release; ADR-061 đã Accepted, phần chính sách mới ở §8.1 chờ phê duyệt; RELEASE_READY=NO-GO** |
+| Ngày hiệu lực baseline | 2026-08-20; bản 3.3 và bản rà 3.4 (2026-09-27) chưa thay chữ ký baseline |
 | Ngày phê duyệt PGM-02 | 2026-08-24 |
 | Chủ quản / phê duyệt baseline | Product Owner/CTO — Phạm Đình Chương |
 | Disposition PGM-02 v2.2 | `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect duyệt exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` cho implementation |
@@ -13,7 +13,7 @@
 | Supersedes | Nội dung Programming “Rev A/Rev B” trước đây và candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` |
 | As-Built tham chiếu | Source/contract tại baseline `49a2ad1`; giới hạn hiện tại không làm giảm phạm vi Product Target |
 | Nguồn Target đã pin | [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md), [`PGM02-WORKSPACE-V1`](../../contracts/programming/pgm02_workspace_v1.json) và exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` |
-| Gate PGM-02 | `T59-801=DONE`; `T59-802=READY`; `T59-803..817=ORDERED` theo dependency; `PLAN_READY[PGM02-V22]=PASS`; `IMPLEMENT_READY[PGM02-R1|PGM02-R2|PGM02-R3]=GO`; thực thi bắt buộc `R1→R2→R3`; `RELEASE_READY=NO-GO` |
+| Gate PGM-02 | R1/R2/R3 đã đóng theo Plan 59 ở phạm vi implement; `VS-PROG-U15` còn thiếu phép đo physical; `RELEASE_READY=NO-GO` |
 
 ## 0. Đọc nhanh
 
@@ -97,14 +97,14 @@ một controller mà không cần desktop IDE riêng.
 |---|---:|
 | Program trong một Project/Revision | 32 |
 | Program có thể Enable trên một controller | 16 |
-| Chu kỳ Program | `10`, `50`, `100`, `500`, `1000`, `5000`, `10000`, `50000` ms trên base step 10 ms (ADR-061; trước 2026-09-26 là `1 s`, `5 s`, `30 s`) |
+| Chu kỳ Program mới | `10`, `50`, `100`, `500`, `1000`, `5000`, `10000`, `50000 ms` theo ADR-061/profile v2.2; runtime hiện dùng một main Task base step 10 ms, phát hành từng Program theo chu kỳ. Gói cũ 30.000 ms chỉ đọc để di trú, không được Check mới. |
 | User Function + Function Block mỗi Project | 256 |
 | Instance Function Block trong một Revision | 1024 |
 | Published Signal trong một Revision | 512 |
 | Point Binding trong một Revision | 512 |
 | Source ST mỗi POU | 64 KiB |
 | FBD node / connection mỗi POU | 256 / 512 |
-| Artifact package | 4 MiB |
+| Artifact package | 1 MiB (`maxArtifactBytes=1048576` trong profile v2.2); giới hạn nguồn khác do profile/contract quy định. |
 
 Backstop vật lý có thể lớn hơn nhưng không được quảng bá. One-over phải fail bằng
 mã ổn định trước Commission.
@@ -155,8 +155,11 @@ Program → Output Candidate → Ownership → Priority Arbitration
         → Interlock → Safe-State → OutputWriter → iobus/IOP → MCU/I/O
 ```
 
-- Disable rút toàn bộ Output Candidate của Program tại safe boundary; resolver
-  chọn owner/priority/default/safe-state còn hợp lệ. Không giữ output ngầm.
+- Disable **và thay/khôi phục package** phải rút toàn bộ Output Candidate của
+  Program cũ tại safe boundary; resolver chọn owner/priority/default/safe-state
+  còn hợp lệ. EXT write cần lệnh `safe_value` có cấu hình và kết quả ghi quan sát
+  được. Mã đã sửa theo chính sách này ở F20/F22 (`EV-PROG-FBD-ST-MB-20260925`, PR #779/#778; F20 PASS
+  target 2026-09-27); chưa có phép đo vật lý bằng thiết bị.
 - Web/BE mất không được dừng Program đang chạy; Web/HMI không được bypass Core.
 
 ## 4. Vòng đời và trạng thái
@@ -297,9 +300,9 @@ identity, capability và failure state phải theo contract Candidate; khi chưa
    cleanup; Test Result target/HIL chứng minh Active/LKG và physical AO/DO/relay
    không đổi trong toàn bộ create/run/step/input/reset/stop/fault path.
 
-Ba tiêu chí này hiện **chưa chạy** và không phải evidence. Quyền implementation
-đã được mở bằng `AUTH-PROG-2026-08-24-05`; chỉ được đổi trạng thái nghiệm thu
-sau khi có Test Result đúng increment và đúng lớp bằng chứng.
+R1/R2/R3 có hồ sơ đóng increment tại Plan 59, nhưng `VS-PROG-U15` mới **PASS MỘT
+PHẦN**: chưa đo AO/DO/relay bằng thiết bị. Chỉ nâng nghiệm thu đầy đủ bằng Test
+Result đúng increment, đúng lớp bằng chứng và baseline target đáng tin cậy.
 
 ## 8. Ranh giới release
 
@@ -314,6 +317,21 @@ Với PGM-02 v2.2, `PLAN_READY` và ba `IMPLEMENT_READY` đã mở theo
 không biến document/contract/host test thành target/HIL/Test Result hoặc quyền
 release.
 
+### 8.1 Quyết định cần ký trước RC và điều kiện claim
+
+| Mục | Chốt kỹ thuật từ source/ADR | Điều kiện để Product Owner ký hoặc claim |
+|---|---|---|
+| Chu kỳ | ADR-061 Accepted và profile v2.2 dùng tập 10…50.000 ms; 10 ms là base step của local control, không phải độ trễ Modbus hay vòng kín vật lý. | C1–C4 đủ 24 giờ trên image/board tin cậy, đúng fixture release; HIL đo sensor→actuator riêng. Soak 600 s và soak trên bo từng bị xâm nhập chỉ là dữ liệu điều tra. |
+| Thay package/Restore | Program mất quyền phải nhả AO/DO mức 5 và EXT safe command tại safe boundary, giữ owner ưu tiên cao hơn; không replay lệnh cũ khi bus hồi phục. | Product Owner ký policy output khi `safe_value` thiếu. Mã đã sửa ở F20/F22 (PR #779/#778, F20 PASS target qua lần đổi gói của soak lần 3); còn test rollback, bus fault/reconnect không replay, read-back cùng phép đo vật lý. |
+| SafeState `PROGRAM_ONLY` | Kiểm nguồn điều khiển thực đang active, không suy từ graph còn được load làm backup. | Mã đã sửa ở F21 (PR #778, test host đỏ→xanh; bo lab không có `graph.json` nên chưa đo target đường graph dự phòng); còn test T6/T7 trên target, power/restart và HIL fail-safe. |
+| Phần cứng phát hành | Product baseline Radxa CM3/RK3566 + Debian khác bo Foxlinx OK1126B-S + Buildroot dùng trong lab. | Chốt SKU/image/MCU/RS485 bằng quyết định có chữ ký; chạy lại gate trên đúng production configuration hoặc ghi rõ giới hạn SKU. |
+| Bảo mật và provenance | Bo Foxlinx đã bị đăng nhập root trái phép; chặn IoC không chứng minh image sạch. | Cài lại image tin cậy, xoay credential, đóng đường WAN và thu hash/provenance trước khi dùng kết quả làm release evidence. |
+
+Các quyết định chưa ký **không được mặc định là approved**. [Kế hoạch đóng
+release](../03_implementation/15_RELEASE_HANDOVER_CHECKLIST.md) định nghĩa thứ tự,
+owner và Test Result; [finding](../07_records/reviews/DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md)
+ghi source cụ thể. `RELEASE_READY=NO-GO`.
+
 ## 9. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
@@ -324,3 +342,4 @@ release.
 | 3.1-candidate | 2026-08-24 | Thêm `PC-PROG-013`, `PR-PROG-025..030` cho Target Candidate PGM-02 v2.2 theo R1 EDIT → R2 LIVE → R3 SIMULATE; ghi Owner approved WP-00 only, Architect exact revision/hash pin PENDING và code/release NO-GO; baseline 3.0 giữ nguyên hiệu lực. |
 | 3.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, mở `PLAN_READY` và ba `IMPLEMENT_READY` nhưng giữ thứ tự R1→R2→R3 cùng `RELEASE_READY=NO-GO`; chốt PROGRAM POU chưa xếp lịch chỉ hợp lệ trong Draft, Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`. |
 | 3.3 | 2026-09-27 | Đồng bộ hai quyết định đã Accepted mà bản 3.2 chưa phản ánh (lộ ra ở cổng `candidate-pin` khi tổng hợp release `DDC24-RELEASE-RECORD-2026-09-27`): **ADR-061** — chu kỳ Program thành tập {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms trên base step 10 ms, Product Owner/CTO chốt 2026-09-26, thay `1/5/30 s`; **ADR-062** — Program mới có intent Enable đã lưu được bật ngay tại boundary kích hoạt, Program mới không có intent vẫn Disabled (T59-305 không bị supersede). Không đổi trần 32/16, scope, maturity hay trạng thái nghiệm thu nào. |
+| 3.4 — bản rà | 2026-09-27 | Trên 3.3: nói rõ gói cũ 30 s chỉ đọc để di trú, artifact 1 MiB theo profile v2.2; chính sách rút output khi thay/khôi phục package (F20/F22, mã đã sửa); thêm §8.1 các quyết định output/safe-state/phần cứng/bảo mật phải ký và gate trước release; đính chính trạng thái R1/R2/R3 và `VS-PROG-U15`. Chưa thay chữ ký Product Owner baseline. |

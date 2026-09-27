@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 2.4 |
-| Trạng thái | **Kế hoạch Active: 32 legacy + 12 unified + 3 PGM-02; 47 total, U13–U15 `NOT_RUN`, 0/47 PASS** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 2.5 — bản rà 2026-09-27 trên 2.4, chờ Verification Lead duyệt lại |
+| Trạng thái | **Baseline 2.2 Active, ngưỡng `VS-PROG-009` theo 2.4; 47 scenario; trạng thái từng scenario theo Test Result, không suy từ số đếm cũ; RELEASE_READY=NO-GO** |
+| Ngày | 2026-09-27 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
 | Người phê duyệt | Verification Lead + Product Owner |
-| Nguồn | Product v3.2; `SRS-PROG-001` v1.2; ADR-050/053; `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; Unified/PGM-02 DDD; Risk/Traceability |
+| Nguồn | Product v3.4/SRS v1.4 bản rà, ADR-061 Accepted, profile v2.2; `AUTH-PROG-2026-08-24-05`; Unified/PGM-02 DDD; Risk/Traceability |
 | Requirement | `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -18,11 +18,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Giữ 32 scenario legacy + 12 unified baseline và kích hoạt kế hoạch ba scenario PGM-02 `VS-PROG-U13..U15` cho R1 EDIT, R2 LIVE, R3 SIMULATE. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | Catalog legacy có 2 record `BLOCKED`, 30 `NOT_RUN`, 0/32 PASS; 12 unified và 3 PGM-02 Candidate đều `NOT_RUN`. Supporting host/target evidence cũ không tự kế thừa. |
+| 3. Hệ thống hiện tại đang có gì? | Catalog legacy tại mốc 2026-08 có 2 record `BLOCKED`, 30 `NOT_RUN`; U13/U14 đã có closeout theo phạm vi increment, U15 PASS MỘT PHẦN. Các kết quả này không thay formal target/HIL/release verdict; phải đọc Test Result theo RC. |
 | 4. Thiết kế mới thay đổi điều gì? | Target đã pin bổ sung acceptance typed EDIT/Quick Library, coherent LIVE và isolated Simulation admin-only/zero-output theo ba increment độc lập. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
-| 6. Điều gì còn bị chặn? | Không còn blocker authority để viết code; `T59-802=READY`, task sau `ORDERED` theo dependency. U13 cần R1 source/browser evidence, U14 cần producer-chain/target fault, U15 cần target/HIL/physical-output evidence. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | File định nghĩa 47/47 scenario. Hiện **2/47 record, 0/47 PASS**; 45 scenario `NOT_RUN` hoặc chưa có record PASS. Không cộng supporting evidence thành verdict. |
+| 6. Điều gì còn bị chặn? | R1/R2/R3 đã đóng implementation; U15 còn phép đo physical. Đo target/HIL cho F20/F21/F22 (mã đã sửa), image sạch, 24 giờ C1–C4 và các gate W7/RC còn mở theo Plan59 §6.0. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | File định nghĩa 47/47 scenario. Dùng từng Test Result và authority theo RC; số đếm 0/47 ở bản 2.2 là snapshot lịch sử, không cộng supporting evidence thành release verdict. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
 unit test trên máy host thay cho đo trên target/HIL; và ảnh chụp màn hình mock
@@ -52,6 +52,27 @@ thay ADC/DAC/relay/UART/RS485 thật. Không dùng từ `PASS` cho check chưa c
 
 ## 3. Catalog scenario
 
+### Phụ lục điều kiện chạy lại trước RC (bản rà 2026-09-27)
+
+- `VS-009`/`VS-PROG-009`: dùng đúng binary/image/SKU sẽ phát hành. Ngưỡng của
+  `VS-PROG-009` theo bản 2.4 (chủ sở hữu chốt 2026-09-27): mỗi chu kỳ trong tập
+  ADR-061 chạy ≥ 10 chu kỳ đồng thời, C1–C4 PASS, missed release = 0. Soak độ
+  bền C1–C4 là phép thử **riêng**, vẫn là điều kiện claim chu kỳ ở Product §8.1:
+  fixture 10 Program, ít nhất 3 chu kỳ, signal/fault/RETAIN như Product §7, **đủ
+  24 giờ**. Ghi raw monotonic wake/release, C1–C4, governor/affinity/kernel, số
+  restart và hash artifact. Soak trên image chưa sạch chỉ là điều tra.
+- `VS-011/014/015` và `VS-PROG-U15`: package A bật DO/AO local mức 5 và EXT
+  coil; package B bỏ Program. Commission, Restore, rollback khi output còn active;
+  đọc resolver winner/actual, EXT `safe_value`/write result, và đo đầu cực bằng
+  thiết bị. Higher-priority override phải giữ quyền; bus offline/reconnect không
+  replay command đã rút. Thử graph vẫn được load nhưng owner `PROGRAM_ONLY`,
+  rồi fault/restart để xác nhận T6/T7 chọn SafeState theo owner thực.
+- Tất cả target/HIL test cần image được cài lại từ nguồn tin cậy sau
+  `SEC-INC-20260926-FOXLINX`, credential đã xoay, đường WAN đã đóng và
+  provenance đọc ngược. Test trên image đã xâm nhập chỉ là evidence điều tra.
+  Bản rà này **không phát hành Test Result hoặc PASS mới**; Verification Lead
+  quyết định fixture/authority trước khi thi hành.
+
 ### 3.0 Regression migration v1
 
 `VS-PROG-001..032` giữ acceptance của baseline cũ để kiểm dual-reader/redirect/
@@ -75,7 +96,7 @@ theo `VS-PROG-U01..U15`.
 | `VS-PROG-012` | RT path no allocation/filesystem/DB/HTTP/DNS/blocking/dynamic load | L0/L2/L6 | CORE-103 | symbol/static + instrumentation |
 | `VS-PROG-013` | Overrun warning→Task fault; concurrent Check không nuisance safe-state | L2/L6 | CORE-107; NFR-103 | load profile + metrics |
 | `VS-PROG-014` | Hold-last mức 5, output under override, `max_iop_poll_gap<200 ms` | L6 HIL | CORE-106; NFR-108 | logic analyzer + AO/DO waveform |
-| `VS-PROG-015` | Graph/Program cutover 3 state, Task 30 s không kéo step/watchdog restart | L3/L6 | SYS-105; CORE-108 | boot/config/fault logs |
+| `VS-PROG-015` | Graph/Program cutover 3 state, Program 50 s không kéo base step/watchdog; SafeState nhận owner thực | L3/L6 | SYS-105; CORE-108 | boot/config/fault logs; T6/T7 và no-controller khi graph chỉ là backup |
 | `VS-PROG-016` | TIME/timer monotonic qua RTC/NTP/DST jump | L1/L6 | CORE-102 | controlled clocks |
 | `VS-PROG-017` | Mapping identity/type/direction/writable/unit và đúng 3 category | L1/L3/L5 | FE-105 | catalog contract + UI |
 | `VS-PROG-018` | GOOD/UNCERTAIN/BAD/STALE/OFFLINE/UNKNOWN không thành zero | L2/L5 | BE-109; FE-109 | clock/producer fixtures |
@@ -211,7 +232,7 @@ Executed / reviewed / date:
 Known limitation / follow-up:
 ```
 
-## 8. Trạng thái hiện tại
+## 8. Snapshot Test Result cũ và trạng thái release
 
 Trạng thái hiện hành: `VS-PROG-001` và `VS-PROG-019` có record `BLOCKED` tại
 `PROG-TR-REPO-001`; 30 scenario còn lại `NOT_RUN`. Tổng số là `2/32` record,
@@ -219,9 +240,10 @@ Trạng thái hiện hành: `VS-PROG-001` và `VS-PROG-019` có record `BLOCKED`
 raw checksum, nhưng chưa có service/Check/API/UI E2E và independent QA review;
 do đó không được dùng mở release gate hoặc nâng trace `P/R`.
 
-`VS-PROG-U01..U12` và ba scenario PGM-02 Candidate `U13..U15` đều `NOT_RUN`,
-chưa có Test Result. Tổng toàn catalog là **2/47 record, 0/47 PASS**. Việc tạo
-contract/DDD/asset Candidate chỉ là L0 inspection input, không đổi verdict.
+Tại **snapshot ban đầu 2026-08-24**, `VS-PROG-U01..U12` và ba scenario PGM-02
+Candidate `U13..U15` đều `NOT_RUN`; toàn catalog **2/47 record, 0/47 PASS**.
+Sau đó U13/U14 có closeout increment, U15 PASS MỘT PHẦN; chưa có bộ Test Result
+RC mới đủ target/HIL/release. Không cộng closeout increment thành release PASS.
 
 ## 9. Test specification cho từng scenario
 
@@ -239,13 +261,13 @@ quyền ký Test Result, không phải người tự chạy.
 | `VS-006` | H sanitizer/fuzzer | limit−1/limit/+1; malformed UTF-8/topology/type; fuzz ≥10^7 cases | đúng boundary/code/location; 0 crash/OOM/hang/OOB | H; corpus/fuzz/sanitizer report; Compiler / Security+QA |
 | `VS-007` | H; PROGRAM/FUNCTION/FB corpus | init/start/stop/state, forbidden recursion/native/cross-project | instance state isolation; pure function; forbidden reject; deterministic restart | H; unit/integration trace; Compiler+Core / Controls+QA |
 | `VS-008` | H+B; Project có tag/view | add/rename/remove metadata; inspect DB/API/runtime | không thêm lifecycle/output authority; artifact semantic hash chỉ đổi theo policy | H+B; API/UI/DB inspection; FE+BE / Product+QA |
-| `VS-009` | T; one Task each 1/5/30 s | 10.000 release/period; reorder programs; request period ngoài enum | drift/jitter/WCET trong approved target; deterministic order; invalid 422 | T; monotonic trace/metrics/UI; Core+FE / Architect+QA |
+| `VS-009` | T; một main Task 10 ms, Program theo tám chu kỳ profile v2.2 | 10.000 release/period; reorder programs; request period ngoài enum; 24 h C1–C4 | jitter mọi wake ≤100 µs, missed release/overrun 0, deterministic order; invalid 422 | T; raw monotonic trace/metrics/UI; Core+FE / Architect+QA |
 | `VS-010` | L; PID→AO + manual/safety override | saturate, apply/release higher priority, manual↔auto | winner/actual correct; priority 5; no bump vượt approved envelope; no windup | L; waveform/runtime snapshot; Controls+Core / Safety+QA |
 | `VS-011` | H+T; active/LKG + candidate; bốn nhóm impact dựng được cả `NONE`/`PRESENT`/`UNAVAILABLE` | inject corrupt/crash/power at every lifecycle state, Commission/Restore; gửi request thiếu ack, thừa ack, `impactRef` cũ, và có nhóm `UNAVAILABLE` | exactly one active; no partial output/double activation; LKG remains loadable; thiếu ack → `PRG-ERR-ACK-MISSING-001`, thừa ack → `PRG-ERR-ACK-UNEXPECTED-001`, `UNAVAILABLE` → `PRG-ERR-IMPACT-UNAVAILABLE-001` chặn, `impactRef` cũ → `PRG-ERR-IMPACT-STALE-001`; `0` trường hợp bỏ re-auth hoặc bỏ read-back | T; journal/operation/hash/waveform + contract log; BE+Core / Architect+QA |
 | `VS-012` | H+T instrumented RT | scan symbols; trap malloc/file/socket/blocking; execute max artifact | 0 forbidden symbol/call/allocation/block; bounded memory; scan continues | H+T; nm/static/instrument log; Core / Architect+QA |
 | `VS-013` | T; max Task + concurrent compiler | create 1 then 3 consecutive overrun; compiler load | warning then Task FAULT; no plant nuisance safe; IOP within limit | T; timing/health/safe counters; Core+BE / Safety+QA |
 | `VS-014` | L; Program AO/DO + override | Commission/Restore/fault under IOP; measure poll and hold | `max_iop_poll_gap<200 ms`, target ≤100 ms; hold Local prior proposal; no unsafe pulse | L; logic analyzer/waveform/status; Core+FW+HW / Safety+QA |
-| `VS-015` | T+L; graph backup/program candidate | fault each GRAPH↔PROGRAM step; Task 30 s; restart | no dual owner; rollback backup; base-step/watchdog independent and live | T+L; owner generation/boot/config/IOP; Core+Ops / Architect+QA |
+| `VS-015` | T+L; graph backup/program candidate | fault each GRAPH↔PROGRAM step; Program 50 s; restart; graph load nhưng owner PROGRAM_ONLY | no dual owner; T6/T7 theo owner thực; rollback backup; base-step/watchdog độc lập | T+L; owner generation/boot/config/IOP; Core+Ops / Architect+QA |
 | `VS-016` | H+T controlled clocks | jump RTC/NTP/DST ±24 h while timer/task runs | monotonic Task/timer unaffected; wall timestamp only presentation/audit | T; clock+runtime trace; Core / QA |
 | `VS-017` | H+B; 3 category catalog | valid and wrong ID/type/unit/direction/writable/category mapping | valid exact; invalid 422 with field/node; UI blocks; no artifact/active change | H+B; contract/UI/diagnostic; FE+BE+Core / Controls+QA |
 | `VS-018` | H+B; producer clock/quality fixtures | inject GOOD/UNCERTAIN/BAD/STALE/OFFLINE/UNKNOWN/missing | value never fabricated zero; freshness/source/quality end-to-end exact | H+B; API/event/UI snapshots; All SW / QA |
@@ -541,6 +563,7 @@ thuộc mặc định profile mới là tiếng Việt.
 | 1.8 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full host gate, deploy/read-back/rollback rehearsal/tái deploy Foxlinx, Chrome desktop/mobile và axe 8/8 scan PASS. Đóng blocker SSH/tool scan; giữ source chưa merge, positive Monitor/Trace có binding, reviewer/usability/HIL/Test Result độc lập. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 1.9 | 2026-08-13 | Bổ sung audit live HTTP cho `EV-PROG-P5-510` rev 1.1: UUID/SHA fallback không cần secure context, deep-link qua auth, ST save rồi phục hồi byte gốc, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile nav/no-overflow và axe 6/6 scan sạch. Ghim hash artifact/index/rollback; ghi rõ một deploy trung gian thiếu build flag đã bị thay. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 2.0 | 2026-08-20 | ADR-050: giữ 32 scenario migration và thêm `VS-PROG-U01..U12` cho POU/library/multi-Program/signal/enable/package/output/soak/PID; 44 scenario total, 12 unified đều NOT_RUN. |
+| 2.5 — bản rà | 2026-09-27 | Trên 2.4: fixture chu kỳ ADR-061 cho `VS-009`/`VS-015`, phép thử package output (F20/F22) và SafeState (F21), ranh giới bo sạch sau `SEC-INC-20260926-FOXLINX`; nói rõ số 2/47 là snapshot lập plan. Giữ ngưỡng `VS-PROG-009` của 2.4 (soak 24 h C1–C4 là phép thử độ bền riêng) và mọi verdict hiện có; chờ Verification Lead duyệt. |
 | 2.4 | 2026-09-27 | `VS-PROG-009`: chủ sở hữu chốt lại ngưỡng sau soak lần 3 trên Foxlinx — mỗi chu kỳ trong tập ADR-061 chạy ≥ 10 chu kỳ đồng thời, với C1–C4 PASS và missed release = 0. Ngưỡng 10 000 chu kỳ / soak 24 h của v2.3 bỏ. Bằng chứng hỗ trợ: soak lần 3 (`EV-PROG-FBD-ST-MB-20260925`, 10 ph 08 s, lớp 50 s đạt 12 chu kỳ, lệch nhịp tối đa theo phút 52,34 µs); độ bền C1–C4 dài hạn là soak lần 2 (15 h 53 ph, 0 vi phạm). Không đổi trạng thái PASS nào: vẫn cần Test Result độc lập. |
 | 2.3 | 2026-09-27 | `VS-PROG-009` theo ADR-061: tập chu kỳ {10…50000} ms thay cho 1/5/30 s, mã từ chối `ST-SCHED-001`; ngưỡng 10 000 chu kỳ giữ cho chu kỳ ≤ 5 s, còn 10 s và 50 s đo trong soak 24 h (8 640 / 1 728 chu kỳ) vì 10 000 chu kỳ 50 s mất 5,8 ngày — chủ sở hữu chốt 2026-09-27 (X20, `EV-PROG-FBD-ST-MB-20260925`). Không đổi trạng thái PASS nào. |
 | 2.2 | 2026-08-26 | `VS-PROG-U13` chuyển **PASS ở phạm vi R1/HOST-LOCAL** kèm record `EV-PGM02-R1-CLOSEOUT-001` tại commit `d32e560`; ghi rõ PASS này không tuyên bố target/HIL/release và không nâng `I/T/P/R`. `U14`/`U15` giữ `NOT_RUN`. |
@@ -554,7 +577,7 @@ thuộc mặc định profile mới là tiếng Việt.
 | Verification Lead | **WAIVED FOR IMPLEMENTATION** | giữ độc lập khi ký Test Result; không phải entry condition |
 | Product Owner/CTO + System Architect | **ACCEPT — 2026-08-20** | `AUTH-PROG-2026-08-20-04`; scope unified và evidence boundary |
 | Product Owner/CTO + System Architect — PGM-02 v2.2 | **AUTHORIZED FOR IMPLEMENTATION — 2026-08-24** | `AUTH-PROG-2026-08-24-05`; exact Candidate pin; không phải Test Result approval |
-| Verification Lead + discipline reviewers — PGM-02 | **WAIVED FOR IMPLEMENTATION; EVIDENCE PENDING** | U13–U15 giữ NOT_RUN; review/authority ký PASS vẫn độc lập |
+| Verification Lead + discipline reviewers — PGM-02 | **WAIVED FOR IMPLEMENTATION; EVIDENCE PENDING CHO RELEASE** | U13/U14 có closeout increment, U15 PASS MỘT PHẦN; review/authority ký release vẫn độc lập |
 
 ## 13. Phụ lục — Tự kiểm cổng M3 (loại: V&V)
 
@@ -570,8 +593,8 @@ thuộc mặc định profile mới là tiếng Việt.
 | Môi trường và target | PASS | §9 cột cuối ghi rõ chạy ở đâu; §5 gate theo discipline |
 | Evidence | PASS | §7 mẫu Test Result; §10 đường dẫn `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS` |
 | Thẩm quyền ký PASS | PASS | §9 cột cuối tách “execute” và “review”; §11 quy trình review |
-| Trạng thái trung thực | PASS | Legacy: 2 `BLOCKED`, 30 `NOT_RUN`, 0 PASS; unified baseline: 12 `NOT_RUN`; PGM-02 Candidate: 3 `NOT_RUN`; §10 cấm kế thừa PASS cũ |
-| Quyền implementation | PASS toàn PGM-02 | `AUTH-PROG-2026-08-24-05` mở ba `IMPLEMENT_READY`; U13–U15 vẫn NOT_RUN và không mở release |
+| Trạng thái trung thực | PASS cho snapshot cũ | Legacy: 2 `BLOCKED`, 30 `NOT_RUN`; unified: 12 `NOT_RUN` ở mốc lập plan; PGM-02 có closeout theo increment, chưa có verdict release; §10 cấm kế thừa PASS cũ |
+| Quyền implementation | PASS toàn PGM-02 | `AUTH-PROG-2026-08-24-05` mở ba `IMPLEMENT_READY`; closeout increment không mở release |
 
-Số Test Result hiện tại: **2/47 record, 0/47 PASS**; hai record legacy `BLOCKED`,
-45 scenario chưa có record PASS. Hồ sơ này không chứng minh target/HIL đã đạt.
+Số **2/47 record, 0/47 PASS** là snapshot lập plan 2026-08-24; cần kiểm kê lại
+Test Result theo đúng RC trước verdict. Hồ sơ này không chứng minh target/HIL đạt.
