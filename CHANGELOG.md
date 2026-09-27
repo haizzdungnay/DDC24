@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+### Changed — Đồng bộ ADR-061/062 vào Product Spec v3.3 và SRS v1.3; manifest authority v1.65 (2026-09-27)
+
+- **Phạm vi:**
+  - `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` 3.2→3.3;
+  - `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` 1.2→1.3;
+  - `docs/00_governance/CONTROL.md` (hai dòng register);
+  - `PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md` 1.64→1.65;
+  - hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927` (lượt F-FR-04 trên bo).
+- **Triệu chứng:** cổng `candidate-pin` của W7 trên RC `main@4b833b38` FAIL: `CONTROL.md`, `DECISIONS.md` và VVP lệch so với manifest đã ghim. Cổng đã đỏ từ 2026-09-09 mà không ai phát hành manifest.
+- **Nguyên nhân gốc:** ADR-061 (base step 10 ms, chu kỳ {10…50000} ms) và ADR-062 (intent Enable đi cùng ACTIVATE) được Accepted 2026-09-26 và đã vào mã, VVP, DDD-CTRL. Nhưng Product Spec và SRS vẫn ghi `1/5/30 s` và "Program mới Disabled" không điều kiện, tức **authority mâu thuẫn**. Theo manifest §5, không được re-pin `DECISIONS.md` một cách phản xạ khi impact chưa xử lý.
+- **Cách sửa:**
+  - Product "Chu kỳ Program" và hai đoạn activation.
+  - SRS `SYS-101/113`, `FE-106`, `CORE-102/108/115` và bảng quyết định theo hai ADR. Không thêm/bỏ requirement (vẫn 89), không đổi priority hay trạng thái verified.
+  - Manifest re-pin `#1/#2/#5/#7/#12`, kèm đánh giá impact từng dòng. Risk `#13` và Trace `#14` không đổi (`RSK-PROG-002` vẫn đúng với lớp 50 s, giữ Open).
+- **Kiểm chứng:** `python3 scripts/candidate_pin_check.py` → 17/17 khớp, PASS; `docs_iso_harness.py --expect` PASS; `verify-project.sh --component layout` exit 0.
+
 ### Fixed — Ba cổng W7 đỏ trên RC `main@4b833b38`: Tag/Label của Virtual Point rộng 0 px, spec `gate369` lọt vào hai lane e2e, gói release nhận cache cross-build (2026-09-27)
 
 Lộ ra khi chạy `scripts/verify-project.sh --wave W7` để tổng hợp release (6 PASS / 4 FAIL / 4 NOT_RUN).
@@ -49,7 +65,7 @@ Lộ ra khi chạy `scripts/verify-project.sh --wave W7` để tổng hợp rele
   - `TestLoadConfigRejectsShortJWTSecret` đỏ trên `config.go` cũ.
   - `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok).
   - `tools/test_rotate_jwt_secret.sh` 17/17; `test_release_packaging_guard.py` 13/13; `verify-project.sh --component layout` exit 0.
-- **Target:** deploy và kiểm trên bo sau khi merge.
+- **Target:** deploy và PASS 2026-09-27 07:48 (`main@4b833b38`): cài thử fresh và nâng cấp-từ-secret-yếu ngay trên bo (busybox/coreutils) đều ra 64 hex, quyền `600`; nâng cấp thật giữ nguyên secret 64 hex đang dùng (dấu băm dòng trước/sau trùng); health 6/6; Modbus 4/4. Hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`.
 
 ### Deploy — Nâng cấp bo lab Foxlinx lên `main@3cb08fbc`, đóng F-FR-01 trên target (2026-09-27)
 
