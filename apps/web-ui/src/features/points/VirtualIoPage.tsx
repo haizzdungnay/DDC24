@@ -506,7 +506,17 @@ function Basics({ item, tagError, nameError, fieldIndex, onChange }: { item: Vir
       <TextInput fieldPath={`items[${fieldIndex}].name`} label="Label" value={item.label} error={nameError} onChange={(label) => onChange({ label, name: label })} />
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
-      <CheckField label="Writable" checked={item.writable} onChange={(writable) => onChange({ writable })} />
+      {/* U-05 — `writable` là quyền của NGƯỜI VẬN HÀNH. Với VP do chương trình sở
+          hữu, người vận hành không bao giờ ghi được, nên ô này khoá lại và nói
+          rõ, thay vì để người dùng tưởng nó quyết định chương trình có ghi được
+          hay không. */}
+      <CheckField
+        label="Writable"
+        checked={item.writable}
+        disabled={virtualPointOwner(item) === 'PROGRAM'}
+        hint={virtualPointOwner(item) === 'PROGRAM' ? t('writableNotApplicableProgram') : undefined}
+        onChange={(writable) => onChange({ writable })}
+      />
       <RestartPolicyField item={item} onChange={onChange} />
     </div>
   )
@@ -1050,12 +1060,15 @@ function SelectField({ label, value, options, onChange }: { label?: string; valu
   )
 }
 
-function CheckField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+function CheckField({ label, checked, disabled, hint, onChange }: { label: string; checked: boolean; disabled?: boolean; hint?: string; onChange: (value: boolean) => void }) {
   return (
-    <label className="flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--c-text)]">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      {label}
-    </label>
+    <div>
+      <label className="flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--c-text)]">
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+        {label}
+      </label>
+      {hint && <p className="text-xs text-[var(--c-text-dim)]">{hint}</p>}
+    </div>
   )
 }
 

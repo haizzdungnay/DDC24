@@ -127,10 +127,18 @@ func TestVirtualOutputBindingRequiresProgramOwnership(t *testing.T) {
 	}
 }
 
-func TestVirtualOutputBindingRequiresWritable(t *testing.T) {
-	readonly := virtualSnapshot(VirtualPointFacts{PointID: "VP1", Enabled: true, Writable: false, SignalType: "float", Source: "PROGRAM"})
-	if reason := checkVirtualBinding(readonly, "VP1", "output", "REAL"); reason == "" {
-		t.Fatal("VP chỉ đọc vẫn nhận binding ghi")
+/* U-05 (REC-DDC-FIELD-USE-20260927) — `writable` là quyền của NGƯỜI VẬN HÀNH,
+ * không phải của chương trình. VP trạng thái do PROGRAM sở hữu mà khoá khỏi
+ * người vận hành (`writable=false`) phải qua Check; quyền ghi của chương trình
+ * đến từ `source`, và VP do web-api sở hữu vẫn bị chặn dù `writable=true`. */
+func TestVirtualOutputBindingFollowsOwnershipNotOperatorWritable(t *testing.T) {
+	locked := virtualSnapshot(VirtualPointFacts{PointID: "VP1", Enabled: true, Writable: false, SignalType: "float", Source: "PROGRAM"})
+	if reason := checkVirtualBinding(locked, "VP1", "output", "REAL"); reason != "" {
+		t.Fatalf("VP do chương trình sở hữu, khoá khỏi người vận hành, vẫn bị chặn: %s", reason)
+	}
+	webWritable := virtualSnapshot(VirtualPointFacts{PointID: "VP1", Enabled: true, Writable: true, SignalType: "float", Source: "WEB"})
+	if reason := checkVirtualBinding(webWritable, "VP1", "output", "REAL"); reason == "" {
+		t.Fatal("VP do web-api sở hữu vẫn nhận binding ghi chỉ vì writable=true")
 	}
 }
 
