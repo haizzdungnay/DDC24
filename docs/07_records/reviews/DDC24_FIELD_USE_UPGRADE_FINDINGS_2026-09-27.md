@@ -3,6 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
+| Phiên bản | 1.1 |
 | Ngày | 2026-09-27 |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
@@ -39,10 +40,10 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | ID | Mức | Nhóm | Vấn đề | Trạng thái |
 |---|---|---|---|---|
 | U-01 | P1 | Check / Point | Check từ chối mọi binding vào VP `integer` và `multistate` | **Đã sửa ở PR #795, chờ merge**; bo lab đang chạy bản vá |
-| U-02 | P2 | Trace | Phiên Trace thứ hai âm thầm lấy mẫu thưa (~500 ms) nhưng vẫn báo 100 ms, 0 mẫu rơi | Mở |
-| U-03 | P3 | Hợp đồng API | Trace trả `freshness = "FRESH"` ngoài enum OpenAPI | Mở |
+| U-02 | P2 | Trace | Phiên Trace thứ hai âm thầm lấy mẫu thưa (~500 ms) nhưng vẫn báo 100 ms, 0 mẫu rơi | **Đã sửa ở PR #797** (`source` + đếm chu kỳ bị bỏ) |
+| U-03 | P3 | Hợp đồng API | Trace trả `freshness = "FRESH"` ngoài enum OpenAPI | **Đã sửa ở PR #797** (`LIVE`) |
 | U-04 | P2 | Trace / quan sát | Một mẫu Trace có thể trộn đầu vào mới với đầu ra cũ; `actualValue` của DO Modbus là lệnh chứ không phải giá trị đọc lại | Mở |
-| U-05 | P3 | Virtual Point | "writable" mang hai nghĩa ngược nhau giữa UI và Check | Mở |
+| U-05 | P3 | Virtual Point | "writable" mang hai nghĩa ngược nhau giữa UI và Check | **Đã sửa ở PR #797** |
 | U-06 | P2 | Thư viện | Không có đường UI để POU ST khai phụ thuộc vào khối Thư viện PROJECT | Mở (theo mã) |
 | U-07 | P1 | Modbus | Ghi từng coil một, không gộp FC15: 16 DO mất ≈ 0,46 s và tốn băng thông bus | Phần đánh thức theo sự kiện và ghi trước đọc của G7 đã có trên `main` (2026-09-26); gộp FC15 chưa làm |
 | U-08 | P2 | Compiler | Trần 512 slot/Program; mỗi lời gọi FUNCTION/FB được inline và cấp slot riêng | Mở |
@@ -51,14 +52,14 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | U-11 | P3 | Compiler | Nhãn CASE bị bung thành tập giá trị, nên dải lớn bị từ chối | Mở |
 | U-12 | P2 | Thư viện hệ thống | Thiếu khối DDC thường dùng; tự viết thì dễ sai (phiên này mắc 4 lỗi trong các khối tự viết) | Mở |
 | U-13 | P1 | Sản phẩm | `PID` bị cổng review chặn, nên không Program nào dùng được vòng PID | Chờ quyết định sản phẩm |
-| U-14 | P3 | API | Sai `baseRevisionId` khi PATCH Draft chỉ nhận `409` chung chung | Mở |
+| U-14 | P3 | API | Sai `baseRevisionId` khi PATCH Draft chỉ nhận `409` chung chung | **Đã sửa ở PR #797** |
 | U-15 | P3 | API | `upsertObject` thay cả object, dễ xoá mất biến và binding khi chỉ muốn sửa mã | Mở |
 | U-16 | P3 | Công cụ | CLI biên dịch đòi khoá ký cả khi chỉ kiểm cú pháp; chưa có công cụ mô phỏng Program cho người viết | Mở |
-| U-17 | P3 | Tài liệu | `FBD_CREATION_AND_ACTIVATION_GUIDE.md` lạc hậu (chu kỳ, danh sách xác nhận) | Mở |
+| U-17 | P3 | Tài liệu | `FBD_CREATION_AND_ACTIVATION_GUIDE.md` lạc hậu (chu kỳ, danh sách xác nhận) | **Đã sửa ở PR #797** |
 | U-18 | P3 | Chẩn đoán | Frame Monitor không ghi giá trị của lệnh ghi | Mở |
 | U-19 | P3 | Hiệu năng API | Một lệnh ghi VP mất ~4 s (các lệnh khác ~0,1 s) | Ghi nhận, chưa tái hiện |
 | U-20 | P2 | An toàn đầu ra | Program FAULTED thì DO Modbus giữ giá trị cuối tới 60 s | Theo mã; gắn với #384 |
-| U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | Mở |
+| U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | **Phần kiểm binary cũ đã sửa ở PR #797**; bo lệch RC hết khi #795 merge và deploy lại |
 
 ## 3. Chi tiết và đề xuất
 
@@ -77,7 +78,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 - *Đóng khi:* test mở 2 phiên đồng thời thấy phiên thứ hai hoặc bị từ chối rõ ràng, hoặc báo đúng nguồn và chu kỳ thật.
 
 **U-03 — `freshness = "FRESH"` ngoài hợp đồng (P3).**
-- `trace.go:597` trả `FRESH` cho mẫu từ Core, trong khi `ProgrammingTraceValue.freshness` ở `contracts/openapi/openapi.yaml:4353` chỉ cho `LIVE | STALE | UNAVAILABLE`. FE đã tự xử lý `FRESH` (`WatchTab.tsx:547`), nên lệch này chỉ được "vá" ở phía đọc.
+- `trace.go:597` trả `FRESH` cho mẫu từ Core, trong khi `ProgrammingTraceValue.freshness` ở `contracts/openapi/openapi.yaml:4353` chỉ cho `LIVE | STALE | UNAVAILABLE`. *(Đính chính 1.1: bản 1.0 ghi FE đã tự xử lý `FRESH` ở `WatchTab.tsx:547`. Sai: dòng đó xử lý độ tươi của Published Signal, nơi `FRESH` hợp lệ. Bảng Trace hiện nguyên chữ "FRESH".)*
 - *Đề xuất:* cập nhật enum (hoặc dùng trường `source` của U-02), sinh lại client, thêm contract test kiểm response Trace theo schema.
 
 **U-04 — Mẫu Trace không nhất quán vào/ra; `actualValue` không phải giá trị đọc lại (P2).**
@@ -193,7 +194,16 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Cần quyết định sản phẩm | U-13 (duyệt `PID`); U-20 (#384) | Thuộc thẩm quyền Controls/Safety và Product |
 | Theo dõi | U-19 | Chưa tái hiện |
 
-## 5. Giới hạn của đánh giá
+## 5. Tiến độ xử lý
+
+| Đợt | Finding | PR | Trạng thái |
+|---|---|---|---|
+| Ngay | U-01 | #795 | Chờ merge |
+| Ngay | U-02, U-03, U-05, U-14, U-17, U-21 (phần kiểm binary cũ) | #797 | Chờ merge; `go test` 21 package ok, vitest 267 file / 3 476 test, cổng layout PASS |
+
+Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastProvider` không huỷ timer khi unmount, làm cả bộ vitest exit 1 dù mọi test PASS. Lỗi này đã sửa trong #797.
+
+## 6. Giới hạn của đánh giá
 
 - Chỉ một chương trình (16 DO Modbus, 8 chế độ + AUTO) trên một bo lab. Không đánh giá BACnet, HMI, Scheduler, Historian, cũng như I/O cục bộ với MCU thật (bo dùng fake MCU).
 - Không có phép đo điện tại tiếp điểm relay; mọi kết luận về đầu ra dừng ở lệnh FC05 được ACK và giá trị coil đọc lại.
@@ -204,4 +214,5 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.1 | 2026-09-27 | Ghi tiến độ: U-02/U-03/U-05/U-14/U-17/U-21 sửa ở PR #797; đính chính nhận định sai về `WatchTab.tsx:547` ở U-03; thêm §5 tiến độ |
 | 1.0 | 2026-09-27 | Bản đầu: 21 vấn đề rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo lab Foxlinx |
