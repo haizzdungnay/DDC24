@@ -316,9 +316,17 @@ void ScanLoop::step()
         d_.programming_coordinator->capture_priority_overrides(*d_.resolver);
 
     /* TASK-PROG-404: áp owner swap tại đúng một safe boundary. Sau dòng này
-     * toàn scan dùng cùng một mode; graph/program không thể cùng publish. */
-    if (d_.programming_coordinator) d_.programming_coordinator->on_safe_boundary();
-    else if (d_.cutover) (void)d_.cutover->apply_pending_at_boundary();
+     * toàn scan dùng cùng một mode; graph/program không thể cùng publish.
+     *
+     * F20: coordinator cần resolver + writer để rút claim mức 5 và lệnh EXT của
+     * instance vừa rời gói ngay tại boundary đổi gói — TRƯỚC khi Program của gói
+     * mới chạy ở bước 5b, nên điểm gói mới cũng nắm không bao giờ bị nhả. */
+    if (d_.programming_coordinator) {
+        PointWriter boundary_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        d_.programming_coordinator->on_safe_boundary(d_.resolver, &boundary_writer);
+    } else if (d_.cutover) {
+        (void)d_.cutover->apply_pending_at_boundary();
+    }
     const CutoverMode active_mode = d_.cutover ? d_.cutover->current() : d_.mode;
 
     /* 5. Execute graph — CHỈ khi GRAPH là producer Local logic (TASK-PROG-306,

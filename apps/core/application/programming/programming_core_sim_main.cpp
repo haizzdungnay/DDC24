@@ -232,7 +232,11 @@ int main(int argc, char** argv)
         const uint64_t now_ns = monotonic_now_ns();
         priority_resolver.begin_cycle();
         coordinator.capture_priority_overrides(priority_resolver);
-        coordinator.on_safe_boundary();
+        /* F20: cùng đường boundary với ScanLoop, để đổi gói trên simulator cũng
+         * rút claim mức 5 của gói cũ. Simulator không có PLC SHM nên không có
+         * lệnh EXT nào để nhả. */
+        PointWriter boundary_writer(point_table, nullptr);
+        coordinator.on_safe_boundary(&priority_resolver, &boundary_writer);
         if (cutover.current() == CutoverMode::PROGRAM_ONLY) {
             StIoBridgeStats bridge_stats;
             (void)st_capture_due_inputs(&scheduler, point_table, now_ns, &bridge_stats);
