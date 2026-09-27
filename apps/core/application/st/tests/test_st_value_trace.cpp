@@ -4,7 +4,10 @@
  */
 #include <gtest/gtest.h>
 
+#include <array>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "st/st_compile.hpp"
@@ -256,6 +259,96 @@ TEST(StValueTrace, SamplingDoesNotAllocate)
         allocations = counter.allocations();
     }
     EXPECT_EQ(allocations, 0u);
+}
+
+
+/* ===================================================================
+ * F05 còn mở / ADR-061 4.10 bước 2 (X19) — trace có HAI luồng chạm vào: luồng
+ * IPC Programming (start/stop/đọc) và luồng quét (on_boundary).
+ * =================================================================== */
+
+/* Luồng quét KHÔNG bao giờ chờ: khi luồng IPC đang giữ trace, boundary bỏ lượt,
+ * đếm lại, và mẫu tới hạn được lấy ở boundary kế với mốc thời gian THẬT của nó. */
+TEST(StValueTrace, BoundaryNeverWaitsForReaderAndDefersTheDueSample)
+{
+    StScheduler scheduler;
+    build_scheduler(&scheduler);
+    StValueTrace trace;
+    const StTraceVariable variable = variable_of("n");
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 1000, 10000, 0, &error)) << error;
+
+    {
+        StValueTrace::ConsistentRead hold(trace);
+        trace.on_boundary(scheduler, 0);   /* phải trả về ngay, không treo */
+        EXPECT_EQ(hold.sample_count(), 0u) << "boundary bị chặn không được ghi mẫu";
+        EXPECT_EQ(hold.status().contended_boundary_count, 1u);
+    }
+    trace.on_boundary(scheduler, 10 * kMs);
+    ASSERT_EQ(trace.sample_count(), 1u) << "mẫu tới hạn phải được lấy ở boundary kế";
+    EXPECT_EQ(trace.sample(0).timestamp_ns, 10 * kMs) << "mốc là thời điểm lấy thật";
+    EXPECT_TRUE(trace.sample(0).valid[0]);
+    EXPECT_EQ(trace.status().contended_boundary_count, 1u);
+}
+
+/* Tên → slot phân giải trên LUỒNG QUÉT ở boundary đầu tiên sau `start()`: luồng
+ * IPC không đọc cấu trúc Program đang chạy (activation cũng đổi nó ở boundary). */
+TEST(StValueTrace, NameResolutionHappensAtTheScanBoundary)
+{
+    StScheduler scheduler;
+    build_scheduler(&scheduler);
+    StValueTrace trace;
+    const StTraceVariable variable = variable_of("n");
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 1000, 10000, 0, &error)) << error;
+    EXPECT_FALSE(trace.variable(0).resolved) << "start() không được tự phân giải trên luồng gọi";
+    trace.on_boundary(scheduler, 0);
+    EXPECT_TRUE(trace.variable(0).resolved);
+    EXPECT_TRUE(trace.sample(0).valid[0]);
+}
+
+/* Hai luồng thật cùng chạy: luồng "quét" gọi on_boundary liên tục, luồng "IPC"
+ * start/đọc/stop liên tục. Chạy dưới ThreadSanitizer thì bất kỳ truy cập không
+ * đồng bộ nào cũng thành lỗi; ở build thường test khoá tính nhất quán của mỗi
+ * lần đọc (mốc thời gian tăng dần, số mẫu không vượt trần). */
+TEST(StValueTrace, ConcurrentIpcReaderAndScanBoundaryStayConsistent)
+{
+    StScheduler scheduler;
+    build_scheduler(&scheduler);
+    scheduler.set_base_step_ns(10 * kMs);
+    StValueTrace trace;
+    std::atomic<bool> stop{false};
+    std::thread scan([&] {
+        uint64_t now = 0;
+        while (!stop.load(std::memory_order_acquire)) {
+            trace.on_boundary(scheduler, now);
+            now += 10 * kMs;
+        }
+    });
+    std::array<StTraceVariable, 4> variables{};
+    for (auto& variable : variables) variable = variable_of("n");
+    std::string error;
+    for (int session = 0; session < 200; ++session) {
+        const std::string id = "s" + std::to_string(session);
+        (void)trace.start(id, scheduler, variables.data(), variables.size(), 10, 600000, 0, &error);
+        for (int read = 0; read < 5; ++read) {
+            StValueTrace::ConsistentRead view(trace);
+            const std::size_t count = view.sample_count();
+            EXPECT_LE(count, kMaxTraceCells / variables.size());
+            uint64_t previous = 0;
+            for (std::size_t index = 0; index < count; ++index) {
+                const StTraceSample sample = view.sample(index);
+                EXPECT_GE(sample.timestamp_ns, previous) << "mẫu đọc ra không theo thứ tự";
+                previous = sample.timestamp_ns;
+            }
+        }
+        (void)trace.status();
+        (void)trace.sample_count();
+        (void)trace.stop(id, &error);
+    }
+    stop.store(true, std::memory_order_release);
+    scan.join();
+    EXPECT_NE(trace.status().state, StTraceState::RUNNING);
 }
 
 } // namespace core

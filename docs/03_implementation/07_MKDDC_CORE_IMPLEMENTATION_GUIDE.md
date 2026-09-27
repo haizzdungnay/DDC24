@@ -117,18 +117,19 @@ thật là `<domain>/tests/test_*.cpp` theo cây trên, không phải `tests/` p
 1. Read IO state        : iobus_reader đọc kx_io_shm (seqlock) → IoSnapshot.
 2. Update point table   : value + ts; point_quality tính quality (kể cả stale check ts_ns).
 3. Read ext cache       : ext_cache snapshot → cập nhật Protocol node inputs (Modbus_RTU_Read, Modbus_TCP_Read); gọi trước graph_runtime.execute() — xem §12
-4. Read web/BACnet cmd  : web_ipc.drain() → command queue (KHÔNG ghi thẳng IO).
+4. Read web/BACnet cmd  : lấy lệnh ĐÃ validate khỏi hàng đợi SPSC của web_ipc rồi áp vào resolver/PointWriter tại ranh giới scan (KHÔNG ghi thẳng IO). Socket/parse do luồng `web-ipc` làm (X19).
 5. Execute graph        : graph_runtime.execute() (Rev A.1 graph acyclic — node topo order).
 6. Resolve priority     : priority_resolver → 1 output/kênh DO/AO.
 7. Apply safe-state     : safe_state ghi đè nếu trigger (§5).
 8. Write output command : output_writer ghi ao_setpoint[]/do_cmd[] vào kx_io_shm.
-9. Update BACnet object : bacnet_objtable ghi kx_plc_shm (base: value/quality; S7 #5: reliability/priority view).
+9. Update BACnet object : bacnet_objtable ghi kx_plc_shm (base: value/quality; S7 #5: reliability/priority view). Trước đó: dựng point_snapshot (struct cố định) → bộ đệm ba ô, điền kết quả lệnh web → hàng đợi trả lời.
 10. Update metrics      : scan_count++, đo exec time, phát hiện overrun.
 11. Sleep tới scan kế   : clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, next).
 ```
 > Base step mặc định **10 ms** (ADR-061 C1; trước đây 1 s). Mốc thứ k = t0 + k × base step, ngủ tới mốc TUYỆT ĐỐI (không drift). Trễ ≥ 1 base step thì BỎ các mốc đã qua và nhảy tới mốc kế tiếp, không chạy dồn; số mốc bị bỏ đếm ở `missedBaseStepCount` (ADR-061 4.9).
 > sd_notify READY=1 sau scan đầu tiên hoàn tất. `WATCHDOG=1` tối đa 1 lần/giây, chỉ ngay sau một scan trọn vẹn (ADR-061 4.8, `WatchdogSec=6`).
 > CPU của vòng quét (CPU3 trên Foxlinx) phải có ràng buộc `pm_qos_resume_latency_us` ≤ 100 µs, nếu không lần thức dậy sau mỗi base step có thể trễ bằng exit latency của trạng thái nghỉ sâu (RV1126B `cpu-sleep` 370 µs). Unit đặt 20 µs; Core log `rt.cpu_idle_ok` hoặc `ERROR rt.cpu_idle_exposed` lúc khởi động.
+> **ADR-061 4.10 bước 2 (X19) — việc không-RT nằm ngoài luồng quét.** Luồng `web-ipc` (SCHED_OTHER, stack 1 MiB, tự dời khỏi CPU của vòng quét) làm accept/đọc/parse/validate JSON, cache chống lặp, dựng JSON trả lời, in AUDIT, gửi socket và serialize `point_snapshot` khi có yêu cầu. Luồng quét chỉ `rt_next_command()` (lấy lệnh đã validate), `rt_complete()` (trả slot đã điền kết quả POD) và `rt_publish_snapshot()` (chép struct vào triple buffer) — không khoá, không cấp phát, không syscall. Lệnh áp ở đầu bước 4 của scan lấy được nó, kết quả điền sau bước 7 của CÙNG scan. Ở lại luồng quét có lý do: BACnet objtable (`plc_shm` seqlock một writer, luồng quét đã ghi `ext[]`), AlarmRuntime (3–19 µs, trạng thái do luồng quét sở hữu), dựng snapshot (phải khớp output của cùng scan). Không tạo được thread thì IPC chạy inline trong step qua cùng đường mã (log `ERROR web_ipc.service_thread_fail`). Mọi thread phụ của Core (`web-ipc`, `prog-ipc`, `st-retain`) log `INFO rt.thread_off_scan_cpu` hoặc `WARN rt.thread_on_scan_cpu` lúc khởi động. Chi tiết: ADR-061 mục "4.10 bước 2 — As-Built".
 > Cụm CPU chứa CPU của vòng quét phải giữ tần số cố định (governor `performance`): RV1126B có MỘT policy cpufreq cho cả 4 lõi, và mỗi lần `schedutil` đổi tần số theo tải ở CPU0–2 thì vòng quét thức dậy trễ 109–163 µs (F17). Unit gọi `/usr/libexec/mkddc/rt-cpufreq hold 3` / `release 3`; Core log `rt.cpufreq_ok` hoặc `ERROR rt.cpufreq_scaling` lúc khởi động.
 
 **Skeleton scan loop (copy được):**
@@ -143,12 +144,15 @@ while (!g_shutdown) {
     IoSnapshot io;
     if (iobus_reader.read(&io)) point_table.update_inputs(io);
     point_quality.evaluate(point_table, io, t0);  // stale theo THỜI GIAN (4.7)
-    auto cmds = web_ipc.drain();                  // stub: queue rỗng
+    while (auto* cmd = web_ipc.rt_next_command()) // lệnh đã validate bởi luồng web-ipc
+        apply(cmd);                               // X19: không socket/JSON ở đây
     graph_runtime.execute(point_table, resolver); // graph → resolver mức 5
-    auto out = priority_resolver.resolve(point_table, cmds);
+    auto out = priority_resolver.resolve();
     safe_state.apply(io, point_table, &out);      // có thể ghi đè out
     output_writer.write(out);                     // seqlock-an-toàn (xem §7.2)
-    bacnet_objtable.publish(point_table);
+    web_ipc.rt_publish_snapshot(build_snapshot(out)); // triple buffer, không serialize
+    complete_commands(out);                       // kết quả POD → hàng đợi trả lời
+    bacnet_objtable.publish(point_table);         // plc_shm: luồng quét là writer duy nhất
     core_metrics.end_scan(now_ns() - t0);
     if (watchdog.due(now_ns())) sd_notify(0, "WATCHDOG=1");
     const uint64_t deadline = pacer.advance(now_ns()); // trễ >= 1 step: bỏ, không chạy dồn
@@ -409,9 +413,12 @@ socket CHỈ dùng cho command write/release.
 - Core trả lời trong ≤ 2 chu kỳ scan (≤2s Rev A); client timeout 3s → coi là lỗi, KHÔNG retry
   tự động lệnh write (tránh double-actuate) — báo user/BMS thử lại.
 - Socket đóng/core restart: client reconnect với backoff 1s; lệnh đang treo = thất bại.
-- Core drain command queue ở bước 4 scan loop; queue đầy (>64 lệnh/scan) → rejected "busy".
-- Response trả SAU resolve + safe-state (step 7) trong CÙNG scan — applied_value/active_source
-  là giá trị THẬT sau khi mọi nguồn tranh chấp xong, không phải giá trị client vừa gửi.
+- Luồng `web-ipc` (không RT) đọc + validate lệnh rồi nộp vào kênh 64 slot; luồng quét lấy mọi
+  lệnh đang chờ ở đầu bước 4 và áp tại ranh giới scan. Hết slot (64 lệnh đang chờ scan) →
+  rejected "busy" NGAY, có AUDIT, không cache (gửi lại cùng id được xử lý) — ADR-061 4.10 bước 2.
+- Response dựa trên kết quả luồng quét điền SAU resolve + safe-state (step 7) của CÙNG scan đã áp
+  lệnh — applied_value/active_source là giá trị THẬT sau khi mọi nguồn tranh chấp xong, không phải
+  giá trị client vừa gửi. `web-ipc` dựng JSON, in AUDIT và gửi ≤ 1 ms sau khi scan xong.
 - source không trong enum (manual/bacnet) → rejected "unknown_source" — không mở rộng thêm
   source mới mà không cập nhật doc này + 07 §4 bảng priority.
 - Audit core in 1 dòng/lệnh ra stderr→journald, format chuẩn:
@@ -451,7 +458,7 @@ Rules:
 - snapshot operation is strictly parsed top-level JSON and read-only; malformed/duplicate/wrong-type requests are rejected and no point/priority state mutates;
 - server caps 4 clients, 4 accepts/scan, 64 KiB read/scan, 16 KiB read/client, 64 lines/scan, 16 lines/client, 64 KiB write/scan and 16 KiB write/client with rotating client start; one snapshot is accepted per drain;
 - physical AO/DO output is written before nonessential snapshot model serialization/publication;
-- cached payload is serialized once per publication into a fixed 65,536-byte buffer with no heap allocation on the zero-client per-scan path, retained over partial writes/half-close, and fatal send/input-cap states close deterministically;
+- ADR-061 4.10 bước 2 (X19): luồng quét chỉ chép struct snapshot vào triple buffer (`LatestValueBuffer`); luồng `web-ipc` serialize bản mới nhất vào bộ đệm cố định 65,536 byte LÚC CÓ YÊU CẦU (đường inline dự phòng serialize mỗi scan như trước). Payload được giữ qua partial write/half-close, lỗi send/vượt trần input đóng kết nối xác định;
 - synthetic worst-width stress fixture produces a 6,427-byte accepted JSON line including newline; its schedule source and max generation are not legal Rev A runtime metadata, so this is bounded host-stress evidence, not a runtime/protocol maximum.
 
 Evidence commands (WSL/Ninja, Release):

@@ -546,6 +546,11 @@ int main(int argc, char** argv)
         }
     }
 
+    /* ADR-061 4.10 bước 2 (X19): ghi nhận CPU của vòng quét TRƯỚC khi tạo bất kỳ
+     * thread phụ nào, để mọi thread không-RT (`web-ipc`, `prog-ipc`, `st-retain`)
+     * tự dời sang các CPU còn lại (`demote_to_normal_sched`). */
+    core::remember_scan_cpus();
+
     struct sigaction sa {};
     sa.sa_handler = on_signal;
     sigaction(SIGTERM, &sa, nullptr);
@@ -949,7 +954,16 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "WARN  core.pidfile_fail path=%s errno=%d (web reload dung /proc fallback)\n",
                      pid_path.c_str(), errno);
 
+    /* ADR-061 4.10 bước 2 (X19): IPC web (accept/đọc/parse/validate, dựng JSON
+     * trả lời + AUDIT, serialize `point_snapshot`) chạy trên luồng `web-ipc`
+     * SCHED_OTHER ngoài CPU của vòng quét; luồng quét chỉ còn lấy lệnh đã
+     * validate và công bố snapshot qua kênh không khoá. Tạo NGAY trước vòng quét
+     * để yêu cầu đến sớm chỉ chờ tối đa một base step cho snapshot đầu tiên.
+     * Không tạo được thread thì IPC chạy inline như trước (log ERROR). */
+    (void)web.start_service_thread("web-ipc");
+
     loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
+    web.stop_service_thread();
     remove_pid_file_if_owned(pid_path, self_pid);
 
     if (programming_ipc_thread.joinable()) programming_ipc_thread.join();
