@@ -66,6 +66,11 @@ func TestPointFactsAdapterReadsRunningConfig(t *testing.T) {
 	if _, ok := snapshot.Virtual["AV-07"]; !ok {
 		t.Fatal("mã slot AV-07 không tra được về điểm ảo")
 	}
+	/* Slot phải đi kèm facts: Check suy kiểu biến ST từ slot (`AV ⇒ REAL`), kể
+	 * cả khi binding mang mã điểm ảo `VP1` thay vì mã slot. */
+	if vp.BoundPointID != "AV-07" || snapshot.Virtual["AV-07"].BoundPointID != "AV-07" {
+		t.Fatalf("slot không được chở sang facts: VP1=%q AV-07=%q", vp.BoundPointID, snapshot.Virtual["AV-07"].BoundPointID)
+	}
 }
 
 /* `enabled` VẮNG MẶT khác `enabled: false`.
