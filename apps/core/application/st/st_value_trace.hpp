@@ -133,6 +133,17 @@ public:
     /* Số mẫu đã rơi vì hết chỗ — bounded nghĩa là có thể rơi, và giấu con số đó
      * sẽ làm người đọc đồ thị tưởng mình thấy toàn bộ. */
     uint32_t dropped_count() const { return dropped_; }
+    /* F18 (EV-PROG-FBD-ST-MB-20260925) — số thứ tự TUYỆT ĐỐI của mẫu, đánh từ 1
+     * theo lần ghi trong phiên, KHÔNG phụ thuộc vị trí trong ring. Người đọc
+     * (TRACE_READ) đọc tăng dần theo số này thay vì nhận lại TRỌN ring mỗi lần:
+     * ring 10 ms đầy vượt trần phần tử của bộ giải mã phía web sau 256 mẫu
+     * (2,56 s) và vượt trần payload IPC 32 KiB sau ~1 000 mẫu.
+     *  - `first_sequence()` — số của mẫu cũ nhất còn giữ (`sample(0)`);
+     *  - `next_sequence()`  — số mà mẫu kế tiếp sẽ mang.
+     * Ring đã ghi đè thì `first_sequence() > 1`: phần hụt so với chỗ người đọc
+     * dừng lần trước chính là số mẫu người đọc đã mất. */
+    uint64_t next_sequence() const { return total_written_ + 1; }
+    uint64_t first_sequence() const { return total_written_ + 1 - sample_count_; }
 
     void reset();
 
@@ -154,6 +165,7 @@ private:
     std::size_t head_ = 0;
     std::size_t sample_count_ = 0;
     uint32_t dropped_ = 0;
+    uint64_t total_written_ = 0;
     uint32_t sample_period_ms_ = 0;
     uint32_t requested_sample_period_ms_ = 0;
     uint64_t started_at_ns_ = 0;

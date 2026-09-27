@@ -136,6 +136,7 @@ void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns)
         ++dropped_;
     }
     timestamps_[write_index] = now_ns;
+    ++total_written_;
     const std::size_t base = write_index * variable_count_;
     for (std::size_t index = 0; index < variable_count_; ++index) {
         const StTraceVariable& variable = variables_[index];
@@ -189,6 +190,7 @@ void StValueTrace::reset()
     head_ = 0;
     sample_count_ = 0;
     dropped_ = 0;
+    total_written_ = 0;
     sample_period_ms_ = 0;
     requested_sample_period_ms_ = 0;
     started_at_ns_ = 0;

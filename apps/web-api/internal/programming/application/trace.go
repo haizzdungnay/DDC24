@@ -34,22 +34,38 @@ type traceStartPayload struct {
 	Variables      [][2]string
 }
 
-// traceSessionPayload: `[sessionId]` cho TRACE_STOP và TRACE_READ.
+// traceSessionPayload: `[sessionId]` cho TRACE_STOP.
 type traceSessionPayload struct {
 	_         struct{} `cbor:",toarray"`
 	SessionID string
 }
 
-// traceReadReply là thân trả về của TRACE_READ:
-// `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...]]`.
+// traceReadPayload: `[sessionId, fromSequence]` cho TRACE_READ (F18).
+// `fromSequence` là số thứ tự tuyệt đối (từ 1) của mẫu đầu tiên BE CHƯA có.
+type traceReadPayload struct {
+	_            struct{} `cbor:",toarray"`
+	SessionID    string
+	FromSequence uint64
+}
+
+// traceReadReply là thân trả về của TRACE_READ (F18):
+// `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...], firstSequence, nextSequence]`.
+//
+// Core trả TỐI ĐA một lô (≤ 200 mẫu, dưới trần 256 phần tử của `coreipc` và
+// trần payload 32 KiB) bắt đầu từ `max(fromSequence, mẫu cũ nhất còn giữ)`.
+// `firstSequence` là số của `Samples[0]`; `nextSequence` là số mẫu kế tiếp Core
+// sẽ ghi. Bản cũ trả TRỌN ring: ở 10 ms nó vượt trần 256 phần tử sau 2,56 s, mọi
+// lần đọc sau đó giải mã hỏng và phiên rơi âm thầm về poll monitor.
 //
 // `bits` là 8 byte THÔ của ô nhớ, không phải số đã diễn giải: kiểu của ô là dữ
 // liệu của package, và diễn giải hai lần ở hai bên là hai chỗ để lệch nhau.
 type traceReadReply struct {
-	_       struct{} `cbor:",toarray"`
-	State   string
-	Dropped uint32
-	Samples []traceReadSample
+	_             struct{} `cbor:",toarray"`
+	State         string
+	Dropped       uint32
+	Samples       []traceReadSample
+	FirstSequence uint64
+	NextSequence  uint64
 }
 
 type traceReadSample struct {
@@ -63,6 +79,19 @@ type traceReadCell struct {
 	Valid bool
 	Bits  uint64
 }
+
+// F18 — nhịp đọc ring Core tối thiểu và cửa sổ lỗi đọc liên tiếp. Ring giữ
+// mẫu theo số thứ tự nên đọc mỗi 100 ms (≤ 10 mẫu ở 10 ms) là đủ; đọc mỗi 10 ms
+// chỉ nhân số lần mở socket lên 10 lần mà không thêm mẫu nào. Là biến để test
+// rút ngắn được cửa sổ lỗi.
+var (
+	traceCoreReadMinInterval = 100 * time.Millisecond
+	traceCoreReadFailWindow  = 3 * time.Second
+)
+
+// traceCoreReadMaxBatchesPerTick — số lô tối đa rút trong một nhịp khi Core còn
+// mẫu chưa đọc (bắt kịp sau một lần chậm) mà không giữ khoá quá lâu.
+const traceCoreReadMaxBatchesPerTick = 8
 
 const (
 	maxConcurrentTraces = 4
@@ -148,6 +177,15 @@ type traceSession struct {
 	coreVariableIDs []string
 	// Kiểu dữ liệu theo `variableId`, để diễn giải bit thô Core gửi lên.
 	coreDataTypes map[string]string
+	// F18 — số thứ tự tuyệt đối của mẫu Core kế tiếp BE cần đọc (từ 1).
+	coreNextSequence uint64
+	// F18 — mốc neo đổi CLOCK_MONOTONIC của Core sang giờ tường, chụp MỘT lần
+	// ở lần đọc đầu. Tính lại mỗi lô làm độ lệch nhảy theo khoảng giữa hai lần
+	// chụp `wallNow`/`monoNow`, và mẫu đầu của lô sau có thể đứng TRƯỚC mẫu cuối
+	// của lô trước.
+	coreClockAnchored bool
+	coreClockWall     time.Time
+	coreClockMono     uint64
 }
 
 type traceIdempotency struct {
@@ -376,7 +414,17 @@ func (s *RuntimeService) runTrace(traceID string) {
 	if tickPeriod <= 0 {
 		tickPeriod = session.view.SamplePeriodMS
 	}
-	ticker := time.NewTicker(time.Duration(tickPeriod) * time.Millisecond)
+	tick := time.Duration(tickPeriod) * time.Millisecond
+	s.traces.mu.RLock()
+	coreBacked := len(session.coreVariableIDs) > 0
+	s.traces.mu.RUnlock()
+	// F18: phiên Core giữ mẫu theo số thứ tự trong ring, nên BE không cần đọc
+	// theo nhịp lấy mẫu — chỉ cần đọc trước khi ring kịp ghi đè.
+	if coreBacked && tick < traceCoreReadMinInterval {
+		tick = traceCoreReadMinInterval
+	}
+	ticker := time.NewTicker(tick)
+	var coreFailingSince time.Time
 	timer := time.NewTimer(time.Duration(session.view.DurationMS) * time.Millisecond)
 	defer ticker.Stop()
 	defer timer.Stop()
@@ -411,11 +459,34 @@ func (s *RuntimeService) runTrace(traceID string) {
 				return
 			}
 			// Nguồn ĐÚNG trước: mẫu Core lấy tại ranh giới quét. Chỉ khi Core
-			// không có phiên này mới rơi về poll monitor — và khi đó đồ thị là
+			// KHÔNG nhận phiên này mới dùng poll monitor — và khi đó đồ thị là
 			// dữ liệu xấp xỉ, không phải dữ liệu của một chu kỳ.
-			if reply, ok := s.readCoreTrace(context.Background(), traceID); ok {
-				if !s.applyCoreTraceSamples(traceID, reply) {
+			if coreBacked {
+				// F18: phiên Core KHÔNG bao giờ trộn mẫu poll monitor. Bản cũ trộn
+				// khi một lần đọc hỏng: dãy mẫu đổi nguồn giữa chừng, mốc thời gian
+				// chạy lùi và trùng nhau hàng chục lần, trong khi `droppedSamples`
+				// vẫn báo 0. Đọc hỏng liên tục quá cửa sổ thì phiên thất bại tường
+				// minh.
+				keepGoing, readOK := s.drainCoreTrace(traceID)
+				if !keepGoing {
 					_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
+					return
+				}
+				if readOK {
+					coreFailingSince = time.Time{}
+					continue
+				}
+				now := time.Now()
+				if coreFailingSince.IsZero() {
+					coreFailingSince = now
+				}
+				s.traces.mu.Lock()
+				if current := s.traces.sessions[traceID]; current != nil && current.view.State == "RUNNING" {
+					current.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
+				}
+				s.traces.mu.Unlock()
+				if now.Sub(coreFailingSince) >= traceCoreReadFailWindow {
+					_ = s.finishTrace(traceID, "FAILED", "SOURCE_UNAVAILABLE")
 					return
 				}
 				continue
@@ -436,27 +507,75 @@ func (s *RuntimeService) runTrace(traceID string) {
 	}
 }
 
-// applyCoreTraceSamples thay TOÀN BỘ dãy mẫu bằng thứ Core đang giữ.
+// drainCoreTrace — F18: rút các lô mẫu Core chưa đọc trong một nhịp. Trả
+// `keepGoing=false` khi phiên đã đủ quota (hoặc không còn chạy), `readOK=false`
+// khi lần đọc đầu tiên của nhịp này hỏng.
+func (s *RuntimeService) drainCoreTrace(traceID string) (keepGoing bool, readOK bool) {
+	for batch := 0; batch < traceCoreReadMaxBatchesPerTick; batch++ {
+		reply, ok := s.readCoreTrace(context.Background(), traceID)
+		if !ok {
+			return true, batch > 0
+		}
+		more, room := s.applyCoreTraceSamples(traceID, reply)
+		if !room {
+			return false, true
+		}
+		if !more {
+			return true, true
+		}
+	}
+	return true, true
+}
+
+// applyCoreTraceSamples NỐI lô mẫu Core vừa đọc vào phiên (F18).
 //
-// Thay chứ không nối thêm: ring của Core là bounded và có thể đã ghi đè mẫu cũ
-// nhất. Nối thêm sẽ tạo ra một dãy vừa trùng lặp vừa thiếu, và số `dropped` của
-// Core không còn giải thích được khoảng trống nào.
-func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadReply) bool {
+// Bản cũ THAY toàn bộ dãy bằng trọn ring mỗi lần đọc; với ring lớn hơn một lô
+// thì cách đó không còn dùng được, và nó cũng giấu mất việc ring đã ghi đè mẫu
+// chưa ai đọc. Nay mỗi mẫu có số thứ tự tuyệt đối:
+//   - mẫu có số < `coreNextSequence` là mẫu đã có, bỏ qua;
+//   - `firstSequence > coreNextSequence` nghĩa là ring đã ghi đè phần giữa
+//     trước khi BE kịp đọc: phần hụt được CỘNG vào `droppedSamples` — đúng số
+//     mẫu người xem đồ thị không bao giờ thấy.
+//
+// Trả `more` khi Core còn mẫu chưa đọc sau lô này, `room=false` khi phiên đã đủ
+// quota hoặc Core đã kết thúc phiên.
+func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadReply) (more bool, room bool) {
 	s.traces.mu.Lock()
 	defer s.traces.mu.Unlock()
 	session := s.traces.sessions[traceID]
 	if session == nil || session.view.State != "RUNNING" {
-		return false
+		return false, false
 	}
-	samples := make([]TraceSampleView, 0, len(reply.Samples))
-	wallNow := s.now().UTC()
-	monotonicNow := s.monotonicNow
-	if monotonicNow == nil {
-		monotonicNow = coreipc.MonotonicNowNS
+	if session.coreNextSequence == 0 {
+		session.coreNextSequence = 1
 	}
-	monoNow, monoErr := monotonicNow()
+	if reply.FirstSequence > session.coreNextSequence {
+		gap := reply.FirstSequence - session.coreNextSequence
+		if gap > math.MaxUint32-uint64(session.view.DroppedSamples) {
+			session.view.DroppedSamples = math.MaxUint32
+		} else {
+			session.view.DroppedSamples += uint32(gap)
+		}
+		session.coreNextSequence = reply.FirstSequence
+	}
+	if !session.coreClockAnchored {
+		monotonicNow := s.monotonicNow
+		if monotonicNow == nil {
+			monotonicNow = coreipc.MonotonicNowNS
+		}
+		wallNow := s.now().UTC()
+		if monoNow, monoErr := monotonicNow(); monoErr == nil {
+			session.coreClockAnchored = true
+			session.coreClockWall, session.coreClockMono = wallNow, monoNow
+		}
+	}
 	for index, incoming := range reply.Samples {
-		if len(samples) >= session.maxSamples {
+		sequence := reply.FirstSequence + uint64(index)
+		if sequence < session.coreNextSequence {
+			continue
+		}
+		session.coreNextSequence = sequence + 1
+		if len(session.view.Samples) >= session.maxSamples {
 			break
 		}
 		if len(incoming.Values) != len(session.coreVariableIDs) {
@@ -466,8 +585,8 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 			continue
 		}
 		sample := TraceSampleView{
-			Sequence:   int64(index + 1),
-			ObservedAt: traceSampleWallTime(wallNow, monoNow, monoErr, incoming.TimestampNS).Format(time.RFC3339Nano),
+			Sequence:   int64(len(session.view.Samples) + 1),
+			ObservedAt: s.coreSampleWallTime(session, incoming.TimestampNS).Format(time.RFC3339Nano),
 			Values:     make([]TraceValueView, 0, len(incoming.Values)),
 		}
 		for position, cell := range incoming.Values {
@@ -488,30 +607,27 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 			value.ActualValue = value.ProgramValue
 			sample.Values = append(sample.Values, value)
 		}
-		samples = append(samples, sample)
-	}
-	session.view.Samples = samples
-	if reply.Dropped > 0 {
-		session.view.DroppedSamples = reply.Dropped
+		session.view.Samples = append(session.view.Samples, sample)
 	}
 	session.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
 	if reply.State == "COMPLETED" || reply.State == "STOPPED" {
-		return false
+		return false, false
 	}
-	return len(session.view.Samples) < session.maxSamples
+	if len(session.view.Samples) >= session.maxSamples {
+		return false, false
+	}
+	return len(reply.Samples) > 0 && reply.NextSequence > session.coreNextSequence, true
 }
 
-// traceSampleWallTime — F05c (EV-PROG-FBD-ST-MB-20260925). Core đóng dấu mỗi mẫu
-// bằng CLOCK_MONOTONIC tại ranh giới quét; bản cũ gán cho MỌI mẫu thời điểm web
-// ĐỌC ring, nên trên bo 12 mẫu cách nhau 1 s hiện cùng một `observedAt`, lệch
-// nhau vài µs. Đổi sang giờ tường bằng độ lệch so với đồng hồ đơn điệu hiện tại
-// của cùng máy. Không đọc được đồng hồ, hoặc dấu nằm ở tương lai (Core và web
-// không cùng máy), thì giữ thời điểm đọc thay vì bịa một mốc.
-func traceSampleWallTime(wallNow time.Time, monoNow uint64, monoErr error, sampleNS uint64) time.Time {
-	if monoErr != nil || sampleNS == 0 || sampleNS > monoNow {
-		return wallNow
+// coreSampleWallTime — F18: đổi dấu CLOCK_MONOTONIC của một mẫu Core sang giờ
+// tường theo mốc neo của PHIÊN, nên hai mẫu cách nhau Δ trên đồng hồ đơn điệu
+// luôn cách nhau đúng Δ trên `observedAt`, dù chúng đến ở hai lô khác nhau.
+// Chưa neo được (không đọc được đồng hồ) thì giữ thời điểm đọc, như F05c.
+func (s *RuntimeService) coreSampleWallTime(session *traceSession, sampleNS uint64) time.Time {
+	if !session.coreClockAnchored || sampleNS == 0 {
+		return s.now().UTC()
 	}
-	return wallNow.Add(-time.Duration(monoNow - sampleNS))
+	return session.coreClockWall.Add(time.Duration(int64(sampleNS) - int64(session.coreClockMono)))
 }
 
 func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageView) bool {
@@ -541,6 +657,13 @@ func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageV
 	}
 	if len(sample.Values) != len(selected) {
 		session.view.DroppedSamples++
+		return true
+	}
+	// F18: monitor được coalesce theo snapshot của Core, nên nhiều nhịp liền
+	// nhau đọc lại ĐÚNG một snapshot. Ghi mỗi lần là tạo hàng chục mẫu cùng một
+	// `observedAt` — trên bo 33–45 mẫu mỗi giây — trông như dữ liệu dày đặc
+	// trong khi không có gì mới. Snapshot chưa đổi thì chưa có mẫu mới.
+	if last := len(session.view.Samples) - 1; last >= 0 && session.view.Samples[last].ObservedAt == sample.ObservedAt {
 		return true
 	}
 	session.view.Samples = append(session.view.Samples, sample)
@@ -661,11 +784,15 @@ func (s *RuntimeService) readCoreTrace(ctx context.Context, traceID string) (tra
 	s.traces.mu.RLock()
 	session := s.traces.sessions[traceID]
 	hasCore := session != nil && len(session.coreVariableIDs) > 0
+	from := uint64(1)
+	if session != nil && session.coreNextSequence > 0 {
+		from = session.coreNextSequence
+	}
 	s.traces.mu.RUnlock()
 	if !hasCore {
 		return traceReadReply{}, false
 	}
-	payload, err := coreipc.EncodePayload(traceSessionPayload{SessionID: traceID})
+	payload, err := coreipc.EncodePayload(traceReadPayload{SessionID: traceID, FromSequence: from})
 	if err != nil {
 		return traceReadReply{}, false
 	}

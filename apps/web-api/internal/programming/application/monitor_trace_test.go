@@ -360,6 +360,11 @@ type traceCoreReader struct {
 	samples        []traceReadSample
 	state          string
 	dropped        uint32
+	// F18: số thứ tự tuyệt đối của `samples[0]` (0 ⇒ 1) và cỡ lô tối đa mỗi
+	// lần đọc (0 ⇒ 200, như Core thật). `failReads` giả lập Core đọc hỏng.
+	firstSeq  uint64
+	batch     int
+	failReads bool
 }
 
 // counts trả về ảnh chụp nhất quán của ba bộ đếm. Đọc từng trường rời rạc sẽ
@@ -400,12 +405,44 @@ func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (co
 		return coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", nil), nil
 	case coreipc.ActionTraceRead:
 		f.readCalls++
+		if f.failReads {
+			return coreipc.ResponseFor(request, coreipc.ResultUnavailable, "IPC-TRACE-UNAVAILABLE",
+				"core.programming.ipc", nil), nil
+		}
 		state := f.state
 		if state == "" {
 			state = "RUNNING"
 		}
+		// F18: đọc TĂNG DẦN như Core thật — từ `max(fromSequence, firstSeq)`,
+		// tối đa một lô.
+		var read traceReadPayload
+		if err := coreipc.DecodePayload(request.Payload, &read); err != nil {
+			return coreipc.ResponseFor(request, coreipc.ResultRejected, "IPC-PAYLOAD", "core.programming.ipc", nil), nil
+		}
+		first := f.firstSeq
+		if first == 0 {
+			first = 1
+		}
+		batch := f.batch
+		if batch == 0 {
+			batch = 200
+		}
+		next := first + uint64(len(f.samples))
+		start := read.FromSequence
+		if start < first {
+			start = first
+		}
+		lot := []traceReadSample{}
+		if start < next {
+			begin := int(start - first)
+			end := begin + batch
+			if end > len(f.samples) {
+				end = len(f.samples)
+			}
+			lot = f.samples[begin:end]
+		}
 		payload, err := coreipc.EncodePayload(traceReadReply{
-			State: state, Dropped: f.dropped, Samples: f.samples})
+			State: state, Dropped: f.dropped, Samples: lot, FirstSequence: start, NextSequence: next})
 		if err != nil {
 			return coreipc.Response{}, err
 		}
@@ -430,7 +467,9 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 			{TimestampNS: 1_000_000_000, Values: []traceReadCell{{Valid: true, Bits: uint64(math.Float32bits(21.5))}}},
 			{TimestampNS: 2_000_000_000, Values: []traceReadCell{{Valid: false}}},
 		},
-		dropped: 3,
+		// F18: ring đã ghi đè 3 mẫu đầu trước lần đọc đầu tiên (mẫu cũ nhất còn
+		// giữ mang số 4) — khoảng hụt đó phải hiện thành `droppedSamples`.
+		firstSeq: 4,
 	}
 	service.runtime = reader
 
@@ -488,9 +527,9 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 	if second.ProgramValue != nil || second.Quality != "BAD" || second.Freshness != "UNAVAILABLE" {
 		t.Fatalf("ô không đo được bị trình bày như giá trị thật: %+v", second)
 	}
-	// Số mẫu rơi của Core phải hiện ra, không bị giấu.
+	// Số mẫu rơi (khoảng hụt số thứ tự) phải hiện ra, không bị giấu.
 	if view.DroppedSamples != 3 {
-		t.Fatalf("droppedSamples=%d, phải lấy từ Core", view.DroppedSamples)
+		t.Fatalf("droppedSamples=%d, phải bằng khoảng hụt số thứ tự của ring", view.DroppedSamples)
 	}
 
 	_ = service.StopTrace(context.Background(), accepted.TraceID, Actor{ID: "admin", Role: "admin"}, "monitor-test-core02")
@@ -532,24 +571,162 @@ func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
 	}
 }
 
-// F05c: mẫu từ ring Core phải mang thời điểm Core lấy mẫu, không phải thời
-// điểm web đọc ring. Hai mẫu cách nhau 1 s trên đồng hồ đơn điệu phải cách nhau
-// đúng 1 s trên `observedAt`.
-func TestTraceSampleWallTimeFollowsCoreMonotonicStamp(t *testing.T) {
+// F05c + F18: mẫu từ ring Core mang thời điểm CORE lấy mẫu, quy đổi theo MỘT
+// mốc neo của phiên. Hai mẫu cách nhau 1 s trên đồng hồ đơn điệu phải cách nhau
+// đúng 1 s trên `observedAt`, dù mẫu đứng trước hay sau mốc neo; chưa neo được
+// thì giữ thời điểm đọc thay vì bịa một mốc.
+func TestCoreSampleWallTimeFollowsCoreMonotonicStampAgainstSessionAnchor(t *testing.T) {
 	wallNow := time.Date(2026, 9, 25, 17, 25, 15, 0, time.UTC)
 	const monoNow = uint64(500_000_000_000)
-	first := traceSampleWallTime(wallNow, monoNow, nil, monoNow-2_000_000_000)
-	second := traceSampleWallTime(wallNow, monoNow, nil, monoNow-1_000_000_000)
+	service := &RuntimeService{now: func() time.Time { return wallNow }}
+	session := &traceSession{coreClockAnchored: true, coreClockWall: wallNow, coreClockMono: monoNow}
+	first := service.coreSampleWallTime(session, monoNow-2_000_000_000)
+	second := service.coreSampleWallTime(session, monoNow-1_000_000_000)
 	if got := second.Sub(first); got != time.Second {
 		t.Fatalf("khoảng cách hai mẫu = %v, muốn 1s", got)
 	}
 	if !first.Equal(wallNow.Add(-2 * time.Second)) {
 		t.Fatalf("mẫu đầu = %v", first)
 	}
-	if got := traceSampleWallTime(wallNow, monoNow, nil, monoNow+5); !got.Equal(wallNow) {
-		t.Fatalf("dấu ở tương lai phải giữ thời điểm đọc, nhận %v", got)
+	// Mẫu SAU mốc neo (lô đọc về sau) vẫn tiến đúng theo đồng hồ đơn điệu.
+	if later := service.coreSampleWallTime(session, monoNow+5_000_000); !later.Equal(wallNow.Add(5 * time.Millisecond)) {
+		t.Fatalf("mẫu sau mốc neo = %v", later)
 	}
-	if got := traceSampleWallTime(wallNow, 0, errors.New("clock"), 1); !got.Equal(wallNow) {
-		t.Fatalf("lỗi đồng hồ phải giữ thời điểm đọc, nhận %v", got)
+	unanchored := &traceSession{}
+	if got := service.coreSampleWallTime(unanchored, 1); !got.Equal(wallNow) {
+		t.Fatalf("chưa neo được thì phải giữ thời điểm đọc, nhận %v", got)
+	}
+}
+
+// F18 (EV-PROG-FBD-ST-MB-20260925) — ring Core lớn hơn một lô phải được đọc
+// TRỌN, tăng dần, đúng thứ tự. Trên Foxlinx, Trace 10 ms hỏng sau đúng 256 mẫu:
+// bản cũ đọc trọn ring mỗi lần, `coreipc` từ chối mảng > 256 phần tử, và phiên
+// rơi âm thầm về poll monitor.
+func TestTraceReadsCoreRingIncrementallyBeyond256Samples(t *testing.T) {
+	service, _ := newMonitorTraceService(t)
+	const total = 600
+	samples := make([]traceReadSample, total)
+	for i := range samples {
+		samples[i] = traceReadSample{
+			TimestampNS: 1_000_000_000 + uint64(i)*10_000_000,
+			Values:      []traceReadCell{{Valid: true, Bits: uint64(math.Float32bits(float32(i)))}},
+		}
+	}
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		samples:                 samples,
+	}
+	service.runtime = reader
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 60000, SamplePeriodMS: 10,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-f18-0001", "monitor-test-f18-01")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	var view TraceView
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if view, err = service.GetTrace(accepted.TraceID); err == nil && len(view.Samples) >= total {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(view.Samples) != total {
+		t.Fatalf("đọc được %d/%d mẫu của ring — BE dừng ở một lô", len(view.Samples), total)
+	}
+	if reads := readerReadCalls(reader); reads < 3 {
+		t.Fatalf("600 mẫu mà chỉ %d lần đọc: không phải đọc theo lô 200", reads)
+	}
+	previous := time.Time{}
+	for index, sample := range view.Samples {
+		if sample.Sequence != int64(index+1) {
+			t.Fatalf("mẫu %d mang sequence %d", index, sample.Sequence)
+		}
+		if value, ok := sample.Values[0].ProgramValue.(float32); !ok || value != float32(index) {
+			t.Fatalf("mẫu %d sai thứ tự/giá trị: %#v", index, sample.Values[0].ProgramValue)
+		}
+		observed, parseErr := time.Parse(time.RFC3339Nano, sample.ObservedAt)
+		if parseErr != nil {
+			t.Fatalf("observedAt %q: %v", sample.ObservedAt, parseErr)
+		}
+		if !previous.IsZero() && !observed.After(previous) {
+			t.Fatalf("mốc thời gian không tăng chặt ở mẫu %d: %v sau %v", index, observed, previous)
+		}
+		previous = observed
+	}
+	if view.DroppedSamples != 0 {
+		t.Fatalf("không có khoảng hụt mà droppedSamples=%d", view.DroppedSamples)
+	}
+	_ = service.StopTrace(context.Background(), accepted.TraceID, Actor{ID: "admin", Role: "admin"}, "monitor-test-f18-02")
+}
+
+// F18 — phiên Core KHÔNG được trộn mẫu poll monitor khi đọc ring hỏng. Bản cũ
+// trộn: dãy mẫu đổi nguồn giữa chừng, mốc thời gian chạy lùi 920 ms và trùng nhau
+// 33–45 lần mỗi giây, trong khi `droppedSamples` vẫn báo 0. Hỏng liên tục thì
+// phiên phải thất bại tường minh.
+func TestTraceNeverMixesMonitorSamplesWhenCoreReadsFail(t *testing.T) {
+	previousWindow := traceCoreReadFailWindow
+	traceCoreReadFailWindow = 300 * time.Millisecond
+	t.Cleanup(func() { traceCoreReadFailWindow = previousWindow })
+
+	service, _ := newMonitorTraceService(t)
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		failReads:               true,
+	}
+	service.runtime = reader
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 5000, SamplePeriodMS: 10,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-f18-0002", "monitor-test-f18-03")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	var view TraceView
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if view, err = service.GetTrace(accepted.TraceID); err == nil && view.State != "RUNNING" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(view.Samples) != 0 {
+		t.Fatalf("phiên Core đọc hỏng mà vẫn có %d mẫu (trộn poll monitor)", len(view.Samples))
+	}
+	if view.State != "FAILED" || view.StopReason == nil || *view.StopReason != "SOURCE_UNAVAILABLE" {
+		t.Fatalf("Core đọc hỏng liên tục phải FAILED/SOURCE_UNAVAILABLE: %+v", view)
+	}
+}
+
+// F18 — đường dự phòng (Core không nhận phiên) không được sinh mẫu trùng mốc:
+// monitor được coalesce theo snapshot của Core, nên nhiều nhịp liền nhau đọc lại
+// cùng một snapshot.
+func TestTraceFallbackDoesNotRepeatAnUnchangedMonitorSnapshot(t *testing.T) {
+	service, _ := newMonitorTraceService(t)
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		rejectStart:             true,
+	}
+	service.runtime = reader
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 1000, SamplePeriodMS: 10,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-f18-0003", "monitor-test-f18-04")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	view, err := service.GetTrace(accepted.TraceID)
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	if len(view.Samples) == 0 {
+		t.Fatal("đường dự phòng không có mẫu nào")
+	}
+	for index := 1; index < len(view.Samples); index++ {
+		if view.Samples[index].ObservedAt == view.Samples[index-1].ObservedAt {
+			t.Fatalf("mẫu %d lặp lại mốc %s của mẫu trước", index, view.Samples[index].ObservedAt)
+		}
 	}
 }

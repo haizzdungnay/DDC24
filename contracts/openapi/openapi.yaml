@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.42.0"
+  version: "1.43.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-09-26"
-  note: "v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  date: "2026-09-27"
+  note: "v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1960,6 +1960,30 @@ paths:
         và đều được ghi audit.
       x-websocket: true
       x-rbac: [viewer, operator, engineer, admin]
+      responses:
+        "101": { description: Switching Protocols }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  # 2026-09-27: kênh WebSocket mô phỏng Programming đã chạy từ PR #759
+  # (apps/web-api/internal/app/ws_simulation.go, đăng ký ở http.go) nhưng chưa
+  # được khai ở đây, nên `TestRouteTableMatchesOpenAPI` đỏ trên main.
+  /ws/simulation:
+    get:
+      summary: Kênh WebSocket quan sát phiên mô phỏng Programming (chỉ đọc)
+      description: >
+        Nâng cấp HTTP lên WebSocket. JWT gửi qua Sec-WebSocket-Protocol như
+        /ws/monitor; router đăng ký Public vì requireWSAuth xác thực trong lúc
+        handshake. Query `sessionId` (mặc định `active`) chọn phiên; client có
+        thể gửi `{"op":"subscribe","sessionId":"..."}` để đổi phiên. Server gửi
+        `{"op":"frame", sessionId, virtualTimeMs, snapshotSequence, resetEpoch,
+        observations}` khi khung quan sát đổi (tối đa 25 khung/giây) và định kỳ
+        `{"op":"session", session}`. Kênh chỉ đọc: không có thông điệp nào ghi
+        điểm hay điều khiển phiên — điều khiển phiên đi qua REST
+        /programming/simulation/sessions.
+      x-websocket: true
+      x-rbac: [viewer, operator, engineer, admin]
+      parameters:
+        - { name: sessionId, in: query, required: false, schema: { type: string, minLength: 1, maxLength: 64 } }
       responses:
         "101": { description: Switching Protocols }
         "401": { $ref: "#/components/responses/Error" }
