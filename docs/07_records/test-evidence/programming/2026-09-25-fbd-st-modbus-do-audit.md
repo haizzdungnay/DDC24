@@ -181,8 +181,8 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 | ID | Mức | Mô tả | Bằng chứng | Nguyên nhân gốc | Hướng sửa |
 |---|---|---|---|---|---|
 | F01 | **P1** | Program bỏ release ngẫu nhiên khi chu kỳ Program bằng base step; health vẫn báo HEALTHY, task không đếm missed. Vi phạm C3 và `PROGRAM_TASK_SCHEDULER_SPEC` §4 ("Task 100 ms chạy đúng 10 lần mỗi giây kể cả khi có tick bị trễ"). | 23/30 missed trong 144 chu kỳ; 24/32 chu kỳ thiếu FC05; readback DO đứng yên 2 s | `st_program_mark_released` neo release đầu vào thời điểm chạy thật đã có jitter (`st_scheduler.cpp:100`: `now_ns + period_ns`), còn `st_program_due` so sánh chặt (`:91`). Tick sau có jitter nhỏ hơn tick neo thì bị coi là chưa đến hạn. Program có chu kỳ dài hơn base step cũng có thể chạy trễ thêm một base step. **ĐÃ SỬA `aa016695`**: so hạn với dung sai nửa tick; Program dùng nửa chu kỳ Task, Task dùng nửa min(chu kỳ Task, base step thật). Thêm 6 test (jitter 19–127 µs, bộ chu kỳ mới trên base 10 ms, lỡ thật vẫn đếm). ctest 1519/1519 PASS. Deploy + đo lại trên target: xem lượt 2 |
-| F02 | **P1** so với spec | Profile Rev A: base step 1000 ms, `taskPeriodsMs=[1000,5000,30000]`, 1 Task | Log `core.base_step_ms=1000`; capabilities | Quyết định hợp đồng Rev A | Profile Rev B (G3, G4) |
-| F03 | **P1** so với spec | Kernel non-RT không giữ được jitter ≤ 100 µs | `core.jitter` 105–268 µs; `cyclictest` tối đa 470 µs (10 ms ghim lõi), 3 200 µs (`-S`) | `PREEMPT_VOLUNTARY`, IRQ và tiến trình khác dùng chung lõi, governor `schedutil` | Nền RT (G2) |
+| F02 | **P1** so với spec | Profile Rev A: base step 1000 ms, `taskPeriodsMs=[1000,5000,30000]`, 1 Task | Log `core.base_step_ms=1000`; capabilities | Quyết định hợp đồng Rev A | **ĐÃ SỬA (PR #756, ADR-061)**: profile v2.2, base step 10 ms, `taskPeriodsMs=[10,50,100,500,1000,5000,10000,50000]`, 8 lớp chu kỳ; lượt 3 kiểm C1 trên target (Core, capabilities, từ chối 5/7/30000 ms) |
+| F03 | **P1** so với spec | Kernel non-RT không giữ được jitter ≤ 100 µs | `core.jitter` 105–268 µs; `cyclictest` tối đa 470 µs (10 ms ghim lõi), 3 200 µs (`-S`) | `PREEMPT_VOLUNTARY`, IRQ và tiến trình khác dùng chung lõi, governor `schedutil` | **Giảm thiểu, chưa đóng**: nền RT tạm (F11 cpuidle, F14 CPU3 độc quyền, F15 kernel thread, F16 pidfile, F17 cpufreq). Soak lần 2 (từ 2026-09-26 10:46:27Z) sau 937 phút: 0 lần vượt 100 µs, tối đa 72,9 µs/phút. PREEMPT_RT (G2) vẫn chặn vì thiếu BSP; chỉ được ghi spec sau soak 24 h đạt trên bản cuối |
 | F04 | P2 | Sau Restore, Program của Revision được khôi phục không chạy dù `desiredEnabled=true`; phải PUT intent lại | 16:17:38 task STOPPED; 16:35 PUT intent → RUNNING | Restore không áp lại intent Enable đã lưu (cần đọc mã để chốt) | **ĐÃ SỬA `a1a976dd`**: vòng reconcile 2 s đối chiếu MỨC với snapshot sống; Program đang nghỉ ngược intent được replay, FAULTED/ROLLED_BACK không tự bật lại. 5 test mới. Deploy web + Restore trên target: xem lượt 2 |
 | F05 | P2 | Trace không lên Core: yêu cầu 100 ms nhưng mẫu ~2 s, `programValue` luôn null; monitor mất ~2 s | Trace `1c5cc23f…`; log web `runtime/monitor dur_ms=1972` | `TRACE_START` bị từ chối hoặc lỗi IPC nên rơi về poll; lý do không được log. IPC web chỉ được phục vụ mỗi lần quét (1 s) | **ĐÃ SỬA `aa3f6a57`**: envelope TRACE_* mang actor + correlation của phiên (bản giả trong test chạy `ValidateRequest`; đỏ trên mã cũ, xanh trên mã mới); monitor lấy `programValue` của DO Modbus từ `setpoint` slot `ext`. Còn mở: IPC web chỉ được phục vụ mỗi scan (hết khi base step 10 ms, G3), khoá cho `StValueTrace` (G3) |
 | F06 | P2, cần quyết định | Disable Program có output EXT Modbus để DO giữ giá trị cuối vô thời hạn | DO2 giữ 1 từ 16:17:01 tới khi write-test 16:35 | `PROGRAMMING_CONTROL_SEMANTICS` §6: withdraw rồi "tầng dưới quyết định", nhưng EXT không có resolver/relinquish nên không có tầng dưới | **ĐÃ SỬA `f73ee6a1` (PR #752), đo trên target 17:47**: chủ sở hữu chọn "về safe_value". Core nhả slot (`dirty=0` + seq mới) cho instance đã publish; iobus ghi `safe_value` từ profile (BE sinh khoá này), điểm không khai thì giữ giá trị cuối kèm WARN. Disable lúc 17:47:35,9 thì DO2/DO4 về 0 trong ≤ 1,2 s. Chưa thuộc phạm vi: Program bị bỏ khỏi gói do Commission/Restore |
@@ -324,6 +324,23 @@ Rà toàn repo (chỉ đọc) cho ra các xung đột phải giải quyết tron
 | X19 | BACnet, ext writes, web IPC, alarm, schedule đều chạy trong cùng step, trái yêu cầu "I/O mở rộng không tính vào chu kỳ" | `scan_loop.cpp` |
 | X20 | VS-PROG-009 đòi 10 000 cycle cho mỗi chu kỳ: riêng 50 000 ms ≈ 5,8 ngày | kế hoạch kiểm chứng |
 
+**Trạng thái gap (cập nhật 2026-09-27):**
+
+| Mã | Trạng thái | Cách đóng / lý do |
+|---|---|---|
+| X1 | Đóng | TTL theo instance = max(60 s, 2 × chu kỳ Program), ADR-061 4.4 (PR #756) |
+| X2 | Đóng | Base step 10 ms là của nền tảng khi Programming bật; `graph.json scan_ms` không kéo base step (PR #756) |
+| X3, X4, X5 | Đóng | Task `main` 10 ms, ngân sách µs (`budgetUs` 1999, luật `< 20%` loại trừ ở cả Go và Core); Check ước lượng kịch bản mọi Program cùng release (PR #756) |
+| X6 | Đóng, không đổi hành vi | C2 là tiêu chí ĐO (overrun = 0 trong cửa sổ), còn FAULT ở overrun thứ ba là PHẢN ỨNG an toàn theo ADR-029. Hai điều không mâu thuẫn: mọi overrun đều tăng `overrunCount` và làm task health `DEGRADED` ngay (`task_health.go`, ADR-061 4.9), nên vi phạm C2 luôn hiện ra; FAULT sớm hơn ở overrun thứ nhất sẽ biến một lần trễ đơn lẻ thành mất điều khiển |
+| X7, X8 | Đóng | `missedBaseStepCount`, `jitterMaxUs`, `jitterViolationCount` trong `point_snapshot`/API; `WARN core.base_step_missed` có nguyên nhân (PR #756, #764) |
+| X9, X10, X11, X12 | Đóng | Freshness 10…150000 ms (store v16), Trace 10…50000 ms kèm chu kỳ hiệu lực, capabilities đọc từ profile, FE hiện ms (PR #756). Trace còn lỗi ở chu kỳ ngắn, đã sửa ở F18 (PR #772) |
+| X13 | Đã giảm | Vòng mô phỏng có nhịp tối thiểu 20 ms, gộp bước, ghi SQLite tối đa 1 lần/giây (`c4b48809`). Khoảng 100 lời gọi Step/s tới worker cách ly trên CPU0–2, không chạm Core |
+| X14, X15 | Đóng | RETAIN notify và `WATCHDOG=1` tối đa 1 lần/giây (PR #756) |
+| X16, X17 | Đóng | Giữ `profileId`, re-pin; mã `ST-SCHED-001` (PR #756) |
+| X18 | Đóng | Stale theo thời gian (PR #756) |
+| X19 | Đang làm | Tách IPC web, BACnet publish và alarm khỏi luồng quét (chủ sở hữu chốt "làm ngay" 2026-09-27) |
+| X20 | Đóng | `VS-PROG-009`: 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s và 50 s (chủ sở hữu chốt 2026-09-27; `VVP-PROG-001` v2.3, `DDD-CTRL-PROG-001` v1.2) |
+
 Quy mô: 43 file test ghim giá trị cũ (Core 18, Go 9, FE 13, E2E 3). Phải re-pin `g1_contract_join_v1.json`, `programming_store_v1.manifest.json`, `fbd/manifest.json`, `pgm02_workspace_v1.json` và `error_catalog_v1.manifest.json`, cùng migration store mới cho dải freshness.
 
 Thứ tự bắt buộc:
@@ -356,7 +373,7 @@ Phương án dự phòng (không khuyến nghị): nếu không có kernel RT, c
 
 Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt cổng:
 
-> Chu kỳ quét bộ điều khiển: 10 ms (Task nhanh nhất), tối đa 3 Task từ 10 ms tới 30 s, lệch nhịp ≤ 100 µs. Thời gian cập nhật I/O mở rộng (Modbus RTU/TCP, BACnet) phụ thuộc giao thức và tốc độ truyền, xem bảng; không tính vào chu kỳ quét.
+> Chu kỳ quét bộ điều khiển: 10 ms; chu kỳ của mỗi Program chọn trong {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061); không overrun, không lỡ chu kỳ, lệch nhịp ≤ 100 µs. Thời gian cập nhật I/O mở rộng (Modbus RTU/TCP, BACnet) phụ thuộc giao thức và tốc độ truyền, xem bảng; không tính vào chu kỳ quét.
 
 ## Rủi ro và giới hạn đã xác nhận
 
