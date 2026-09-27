@@ -56,11 +56,11 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 
 | Hồ sơ | Lớp/trách nhiệm |
 |---|---|
-| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.3 Active; PGM-02 R1/R2/R3 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; v3.3 đồng bộ ADR-061 (chu kỳ {10…50000} ms) và ADR-062 |
+| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.3 Active; PGM-02 R1/R2/R3 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; v3.3 đồng bộ ADR-061 (chu kỳ {10…50000} ms) và ADR-062; bản rà v3.4 (2026-09-27: §8.1 quyết định cần ký trước RC, chính sách output F19) chờ Product Owner ký |
 | [Quy trình clean code & clean docs](CLEAN_CODE_WORKFLOW.md) | `WF-CLEAN-001` v1.0 Active — ba vai tách biệt, ma trận quyền, workflow state, branch/merge rule, quality gate, truy xuất và lịch chạy; thi hành bằng `scripts/workflow_guard.py` |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
 | [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` v1.4 — 12 quyết định unified CLOSED; change request/exact pin CLOSED; ghost-POU policy RESOLVED nhưng corrective implementation còn PENDING; `ADR-053` Accepted |
-| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.3 Active cho implementation: 82 baseline + 7 PGM-02 = 89 requirement; v1.3 đồng bộ ADR-061/062; evidence vẫn theo VVP |
+| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.3 Active cho implementation: 82 baseline + 7 PGM-02 = 89 requirement; v1.3 đồng bộ ADR-061/062; bản rà v1.4 chờ Product Owner ký; evidence vẫn theo VVP |
 | [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` v1.3 — overlay PGM-02 exact-pinned cho implementation; maturity M3, không giả M4/M5 |
 | [PGM-02 Workspace ST/FBD Detailed Design](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | `DDD-SW-PGM02-WORKSPACE-001` v0.3 `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; route/identity/EDIT/LIVE/SIMULATE/NFR/test/rollback |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.4-candidate — register và thứ tự đọc authority hiện hành/Candidate |

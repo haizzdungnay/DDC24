@@ -238,7 +238,7 @@ export function ProgrammingContextStrip({
               aria-label={pick('Build', 'Build')}
               icon={<Hammer className="h-4 w-4" aria-hidden="true" />}
               disabled={actions.checkDisabledReason !== null}
-              title={actions.checkDisabledReason ?? pick('Build gói', 'Build package')}
+              title={actions.checkDisabledReason ?? pick('Build gói: niêm phong và chạy Kiểm tra', 'Build package: seal and run Check')}
               onClick={actions.onCheck}
             >
               Build

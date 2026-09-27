@@ -1155,16 +1155,17 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await expect(page.getByText('Control_Main')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('05-design-execution.png'), fullPage: true })
 
-    // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
+    // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-05 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
     // Kiểm tra GÓI là lệnh chung ở header — từ `c77e0064` tên là `Build`.
     await expect(page.getByRole('button', { name: 'Build', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'Build', exact: true }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
-    await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
-    await page.getByRole('button', { name: 'Kiểm tra' }).click()
+    // Chủ sở hữu 2026-09-27: bấm Build là Check CHẠY LUÔN ở PGM-05 — không còn
+    // dừng ở "Chưa có Kiểm tra nào." chờ bấm lần hai.
     await expect(page.getByText('PASSED')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Chưa có Kiểm tra nào.')).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('06-commission.png'), fullPage: true })
 
     // UJ-PROG-06 — Đưa vào vận hành

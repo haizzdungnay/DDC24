@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-11 (thêm mục BACnet/IP Rev A `SYS-REQ-BAC-001..023`, nguồn `PROD-BACNET-001`). Trước đó: 2026-08-04 (thêm `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
+**Cập nhật:** 2026-09-27 (đồng bộ Programming theo ADR-061/profile v2.2). Trước đó: 2026-09-11 (BACnet/IP Rev A)
 
 `Phải` là bắt buộc cho Rev A. Mỗi yêu cầu cần Verification Requirement trong
 [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại
@@ -17,12 +17,12 @@ vụ đồng bộ này. Source/test hiện tại chỉ là As-Built và không t
 
 Nguồn Product Requirement:
 [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md).
-Phạm vi Programming chỉ gồm Local Physical I/O, Virtual Point, Modbus RTU
-Point, ST, FBD và cycle time 1 s/5 s/30 s.
+Phạm vi Programming và chu kỳ mới lấy từ `PROD-PROG-001`/ADR-061/profile v2.2;
+không dùng nhãn Rev A cũ để giảm phạm vi Product.
 
 | ID | Layer | Yêu cầu / tiêu chí chấp nhận |
 |---|---|---|
-| SYS-REQ-PROG-001 | System | Hệ thống phải cung cấp đúng phạm vi Programming Rev A: Project/Program với ST và FBD, ba loại Point được phép và ba cycle time được phép; phải từ chối LD, SFC, Modbus TCP Point, BACnet/IP Point, motion và safety PLC. |
+| SYS-REQ-PROG-001 | System | Hệ thống phải cung cấp Product Programming thống nhất: Project, nhiều PROGRAM, FUNCTION/FUNCTION_BLOCK với ST/FBD, ba loại Point LOCAL/VP/MB_RTU và chu kỳ mới theo ADR-061; phải từ chối LD, SFC, Modbus TCP Point, BACnet/IP Point, motion và safety PLC. |
 | SYS-REQ-PROG-002 | System | Hệ thống phải duy trì trạng thái có thẩm quyền, phân biệt Revision, Deployment, Activation, Revision active và Rollback; một trạng thái không được suy diễn thành trạng thái kế tiếp. |
 | SYS-REQ-PROG-003 | System | Program active phải tiếp tục control local khi Web/engineering client mất kết nối, trong giới hạn fault policy đã được phê duyệt. |
 | SWR-REQ-PROG-001 | Software | Layer Programming phải bảo toàn identity và quan hệ Project → Program → Revision, đồng thời giữ Revision dùng cho Deployment bất biến. |
@@ -30,7 +30,7 @@ Point, ST, FBD và cycle time 1 s/5 s/30 s.
 | SWR-REQ-PROG-003 | Software | Layer Programming phải xác thực và thực thi Program FBD theo semantic đã được phê duyệt; lỗi block/connection/type phải chặn Deployment. |
 | SWR-REQ-PROG-004 | Software | Layer Programming chỉ được expose Local Physical I/O, Virtual Point và Modbus RTU Point cho I/O Mapping; mọi loại Point ngoài allowlist phải bị từ chối. |
 | SWR-REQ-PROG-005 | Software | Layer Programming phải phân biệt Point/Variable và xác thực I/O Mapping về identity, direction, type, quyền đọc/ghi, quality và compatibility trước khi tạo Revision deployable. |
-| SWR-REQ-PROG-006 | Software | Scheduler Programming chỉ được nhận cycle time 1 s, 5 s hoặc 30 s; phải chạy deterministic theo rule đã phê duyệt và quan sát được cycle/overrun/fault. |
+| SWR-REQ-PROG-006 | Software | Check mới chỉ nhận chu kỳ 10/50/100/500/1000/5000/10000/50000 ms; runtime base step 10 ms và release từng Program deterministic, quan sát C1–C4. Reader gói cũ 30 s chỉ phục vụ di trú. |
 | SWR-REQ-PROG-007 | Software | Tạo/sửa Project hoặc Program phải sinh Revision mới; không được thay đổi nội dung Revision đã dùng cho Deployment. |
 | SWR-REQ-PROG-008 | Software | Deployment phải validate trước khi runtime chấp nhận; Activation chỉ xảy ra tại ranh giới cyclic kiểm soát; lỗi phải giữ Revision active trước đó và Rollback phải trả kết quả có thẩm quyền. |
 | SWR-REQ-PROG-009 | Software | Layer persistence phải lưu/phục hồi Variable RETAIN theo policy đã phê duyệt và ngăn dùng dữ liệu RETAIN không tương thích với Revision/type hiện tại. |
@@ -40,7 +40,7 @@ Point, ST, FBD và cycle time 1 s/5 s/30 s.
 | IF-REQ-PROG-001 | Interface | Contract I/O Mapping phải biểu diễn rõ Point identity/category, Variable identity, direction, type, unit/range khi áp dụng, quality và access; Modbus RTU Point phải không thể bị nhầm với Modbus TCP Point. |
 | IF-REQ-PROG-002 | Interface | Contract lifecycle/monitor phải trả trạng thái Revision/Deployment/Activation/Rollback và dữ liệu Online Monitor từ authority sở hữu trạng thái, có correlation và error result ổn định. |
 | NFR-REQ-PROG-001 | Non-functional | Presentation/client restart hoặc disconnect không được tự làm dừng Program active; reconnect không được blind replay mutation. |
-| NFR-REQ-PROG-002 | Non-functional | Runtime phải đáp ứng budget được phê duyệt cho cycle 1 s/5 s/30 s trên production target và phải phát hiện/báo overrun; budget cụ thể thuộc OD-PROG-012. |
+| NFR-REQ-PROG-002 | Non-functional | Trên đúng production target, C1 base step 10 ms, C2 overrun=0, C3 missed release=0 và C4 mọi wake jitter ≤100 µs trong 24 giờ theo ADR-061; phải đo sensor→actuator/fieldbus riêng, không suy từ lịch scan. |
 
 Các ID lịch sử `SYS-REQ-IEC-001`, `SWR-REQ-IEC-001..009`,
 `IF-REQ-IEC-001`, `SAFE-REQ-IEC-001` và `NFR-REQ-IEC-001` được supersede bởi

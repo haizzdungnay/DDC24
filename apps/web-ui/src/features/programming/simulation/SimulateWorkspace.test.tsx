@@ -83,6 +83,7 @@ function renderWorkspace(overrides: {
   onAction?: (action: never, speed?: number) => void
   onSetInput?: () => void
   onStop?: () => void
+  onRequestCheck?: () => void
 } = {}) {
   const props = {
     capability: overrides.capability === undefined ? capability() : overrides.capability,
@@ -96,6 +97,7 @@ function renderWorkspace(overrides: {
     onAction: (overrides.onAction ?? vi.fn()) as never,
     onSetInput: overrides.onSetInput ?? vi.fn(),
     onStop: overrides.onStop ?? vi.fn(),
+    onRequestCheck: overrides.onRequestCheck,
   }
   return render(
     <I18nProvider>
@@ -142,6 +144,20 @@ describe('SIMULATE — bản nháp bẩn không bao giờ được mô phỏng',
   it('chưa có Revision nào Kiểm tra đạt ⇒ nút mở phiên bị khoá', () => {
     renderWorkspace({ draftRevisionId: null })
     expect(screen.getByRole('button', { name: /Mở phiên mô phỏng/ })).toBeDisabled()
+    // Không có đường chạy Kiểm tra (không quyền / bản nháp bẩn) ⇒ không bày nút.
+    expect(screen.queryByRole('button', { name: 'Kiểm tra ngay' })).toBeNull()
+  })
+
+  it('chưa có Check PASSED ⇒ đưa đường chạy Kiểm tra ngay tại chỗ, không bắt tự đi tìm', () => {
+    const onRequestCheck = vi.fn()
+    renderWorkspace({ draftRevisionId: null, onRequestCheck })
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra ngay' }))
+    expect(onRequestCheck).toHaveBeenCalledTimes(1)
+  })
+
+  it('đã có Check PASSED ⇒ không còn nút Kiểm tra ngay', () => {
+    renderWorkspace({ onRequestCheck: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Kiểm tra ngay' })).toBeNull()
   })
 })
 
