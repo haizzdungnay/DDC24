@@ -1206,7 +1206,7 @@ const inspectorToggleButton = (
                 variant="secondary"
                 icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
                 disabled={Boolean(checkDisabledReason)}
-                title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+                title={checkDisabledReason ?? pick('Kiểm tra gói: niêm phong và chạy Kiểm tra (PGM-05)', 'Check the package: seal and run Check (PGM-05)')}
                 onClick={onRunCheck}
               >
                 {pick('Kiểm tra', 'Check')}
