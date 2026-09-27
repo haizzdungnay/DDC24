@@ -7,8 +7,8 @@
 # và CHỈ sau khi đã sao lưu toàn bộ bo về máy khác (wipe không hoàn tác được).
 # Gói cài (install.sh + build/release/...) phải nằm sẵn ở $STAGE.
 #
-# Lỗi đã biết khi chạy trên main@05182713: install.sh sinh JWT_SECRET chỉ vài ký tự,
-# web lặp restart với "cursor secret >=16 byte". Xem hồ sơ, mục F-FR-04.
+# Gói cài phải từ bản có bản sửa F-FR-04 trở đi: install.sh cũ (tới main@3f415c13) sinh
+# JWT_SECRET chỉ vài ký tự và web lặp restart với "cursor secret >=16 byte".
 #
 # GIỮ: cấu hình thiết bị Modbus (fieldbus.conf/.lkg.json/.journal, profiles/*.json);
 # mạng (/etc/mkddc/netcfg.conf, journal netcfg); SSH + khoá; ba unit bảo mật sau sự cố
