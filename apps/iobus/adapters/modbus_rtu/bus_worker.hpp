@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "coil_write_batch.hpp"
 #include "device_profile.hpp"
 #include "ext_cache.hpp"
 #include "fieldbus_config.hpp"
@@ -234,6 +235,12 @@ public:
     /* Trả false nếu hàng đợi đã đầy (MBR-B107) — caller phải báo rejected.
      * Thành công ⇒ đánh thức worker (G7): lệnh không chờ trần ngủ. */
     bool enqueue_write(const PendingWrite& w);
+    /* U-07 — xếp NHIỀU lệnh vào hàng đợi trong MỘT vùng khoá rồi mới đánh thức
+     * worker. `drain_ext_writes` dùng đường này cho các lệnh của cùng một lượt
+     * quét Core: nếu xếp từng lệnh một, worker có thể thức sau lệnh đầu và phát
+     * nó một mình, nên 8 coil đổi cùng lúc thành 2–3 giao dịch thay vì một FC15.
+     * Trả cờ nhận/từ chối theo đúng thứ tự đầu vào (từ chối = hàng đợi đầy). */
+    std::vector<bool> enqueue_writes(const std::vector<PendingWrite>& writes);
     void set_write_result_sink(WriteResultSink sink) { result_sink_ = std::move(sink); }
 
     /* Commissioning ad-hoc (MBR-B108). Chạy trên chính thread worker qua hàng
@@ -289,14 +296,29 @@ private:
     /* `ISS-PIO-22` — hạ STALE cho block quá ngưỡng của chính nó. */
     void sweep_stale_blocks(uint64_t now_ms, ExtCache& cache);
     void read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics);
-    /* Phát tối đa `max_items` lệnh ghi đang chờ của slave `i`, theo thứ tự hàng
-     * đợi. Trả số mục đã xử lý (kể cả mục bị bỏ vì quá hạn/không encode được).
-     * Mục vượt trần giữ nguyên trong hàng đợi cho lượt sau. */
+    /* Phát tối đa `max_items` GIAO DỊCH ghi cho các lệnh đang chờ của slave `i`,
+     * theo thứ tự hàng đợi. Trả số giao dịch đã dùng (mục bị bỏ vì quá hạn/không
+     * encode được tính là một). Mục vượt trần giữ nguyên trong hàng đợi.
+     *
+     * U-07: khi profile bật `max_coils_per_write > 1`, các lệnh ghi coil liền kề
+     * gom thành MỘT FC15 và chỉ tốn MỘT giao dịch của trần — xem
+     * `plan_write_transactions`. Tắt thì mỗi mục một giao dịch như trước. */
     size_t flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics, size_t max_items);
+    /* Phát MỘT mục (đường cũ: FC05/06/15/16 một điểm, TTL, encode, readback). */
+    void write_single(BusSlaveBinding& binding, PendingWrite& w, uint64_t now_ms,
+                      FieldbusMetrics& metrics);
+    /* U-07 — phát một FC15 cho nhóm coil liền kề `tx.items` (chỉ số vào `batch`).
+     * Bookkeeping vẫn theo TỪNG mục: `attempts`, bỏ sau `kMaxWriteAttempts`,
+     * kết quả cho từng `request_id`, slot bị bỏ, metric lỗi/bỏ theo điểm. */
+    void write_coil_group(BusSlaveBinding& binding, std::vector<PendingWrite>& batch,
+                          const WritePlanTx& tx, uint64_t now_ms, FieldbusMetrics& metrics);
+    /* Thân `enqueue_write` — gọi khi ĐANG giữ `queue_mu_`. */
+    bool enqueue_locked(const PendingWrite& w);
     /* G7(c) — phục vụ hàng đợi ghi trong trần `budget` giao dịch, slave có lệnh
      * chờ CŨ NHẤT trước. Mỗi slave tối đa một lượt `flush_pending` trong một lần
      * gọi, nên một lệnh vừa phát lỗi không bị thử lại dồn dập ngay tại chỗ. Trả
-     * số mục đã xử lý; bằng `budget` nghĩa là trần đã chạm. */
+     * số giao dịch đã dùng (U-07: một FC15 gom nhiều coil là MỘT); bằng `budget`
+     * nghĩa là trần đã chạm. */
     size_t service_writes(uint64_t now_ms, FieldbusMetrics& metrics, size_t budget);
     /* Index slave có lệnh ghi CHƯA phát cũ nhất (seq nhỏ nhất) mà `visited`
      * chưa đánh dấu; `slaves_.size()` nếu không còn. */
@@ -306,9 +328,12 @@ private:
     void note_dropped_write_slot(uint16_t ext_idx);
     void mark_bus_down(ExtCache& cache, FieldbusMetrics& metrics);
     /* `MBA-FW-06` — ghi một giao dịch GHI vào vòng nhớ khung, cùng hình dạng
-     * với giao dịch đọc, để Frame Monitor thấy được lệnh ghi. */
-    void record_write_frame(const PendingWrite& w, uint8_t slave, int rc, int saved_errno,
-                            uint32_t elapsed_us, FieldbusMetrics& metrics);
+     * với giao dịch đọc, để Frame Monitor thấy được lệnh ghi. U-18: kèm giá trị
+     * đã phát trên dây (`values`, `value_count` phần tử). */
+    void record_write_frame(uint8_t fc, uint16_t addr, uint16_t count, uint8_t attempt,
+                            const uint16_t* values, uint8_t value_count, uint8_t slave,
+                            int rc, int saved_errno, uint32_t elapsed_us,
+                            FieldbusMetrics& metrics);
     void emit_result(const std::string& request_id, const char* status,
                      const char* reason, uint8_t exception_code);
     /* Cổng chết ⇒ PORT_ERROR + backoff. Trả true nếu errno chỉ ra lỗi CỔNG chứ

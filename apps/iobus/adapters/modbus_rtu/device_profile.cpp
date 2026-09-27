@@ -3,6 +3,7 @@
  * @brief MOD-003: device profile JSON parser + validator.
  */
 #include "device_profile.hpp"
+#include "coil_write_batch.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -348,6 +349,23 @@ bool load_device_profile(const std::string& path, DeviceProfile* out)
     double v = 0.0;
     if (jget_num(json, "default_baud", &v) && v > 0)
         out->default_baud = static_cast<uint32_t>(v);
+
+    /* U-07 — gom coil thành FC15, khai theo THIẾT BỊ. Khoá vắng ⇒ 1 (tắt).
+     * Giá trị ngoài dải phải NÓI RA: im lặng coi `0` hay `-3` là "tắt" thì
+     * đúng chiều an toàn, nhưng người viết profile tay sẽ tin mình đã bật. */
+    out->max_coils_per_write = 1;
+    if (jget_num(json, "max_coils_per_write", &v)) {
+        if (!std::isfinite(v) || v < 1) {
+            std::fprintf(stderr, "WARN  device_profile.max_coils_per_write_invalid path=%s value=%g"
+                         " — giữ 1 (tắt gom FC15)\n", path.c_str(), v);
+        } else if (v > kMaxCoilsPerWrite) {
+            std::fprintf(stderr, "WARN  device_profile.max_coils_per_write_clamped path=%s value=%g"
+                         " → %u\n", path.c_str(), v, static_cast<unsigned>(kMaxCoilsPerWrite));
+            out->max_coils_per_write = kMaxCoilsPerWrite;
+        } else {
+            out->max_coils_per_write = static_cast<uint16_t>(v);
+        }
+    }
 
     /* parse points array */
     const std::string pat_pts = "\"points\"";

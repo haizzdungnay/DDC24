@@ -308,7 +308,23 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     size_t enqueue_rejected = 0;
     ext_command_scans_.fetch_add(1, std::memory_order_relaxed);
 
+    /* U-07: lệnh của MỘT worker trong lượt này được gom lại rồi xếp vào hàng đợi
+     * trong MỘT vùng khoá (`enqueue_writes`). Xếp từng lệnh một thì worker —
+     * đã được đánh thức ngay ở lệnh đầu (G7) — có thể chụp hàng đợi khi mới có
+     * một hai lệnh, và 8 coil Core đổi trong cùng một chu kỳ lên dây thành vài
+     * giao dịch lẻ thay vì một FC15. */
+    struct StagedWrite {
+        PendingWrite       w;
+        uint16_t           ext_idx;
+        uint32_t           cmd_seq;
+        bool               release;
+        const SlaveConfig* slave;
+        const ProfilePoint* point;
+    };
+    std::vector<StagedWrite> staged;
+    std::vector<PendingWrite> staged_writes;
     for (auto& worker : workers_) {
+        staged.clear();
         for (size_t si = 0; si < worker->slave_count(); si++) {
             const BusSlaveBinding& binding = worker->slave(si);
             if (binding.config_error) continue;
@@ -395,17 +411,8 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                             w.scale       = pt.scale;
                             w.offset      = pt.offset;
                             w.enqueued_ms = now_ms;
-                            if (worker->enqueue_write(w)) {
-                                last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
-                                if (release)
-                                    std::fprintf(stderr, "INFO  modbus_master.ext_release_safe slave=%s"
-                                                 " point=%s safe_value=%g\n",
-                                                 sc.name.c_str(), pt.name.c_str(), pt.safe_value);
-                            } else {
-                                /* Hàng đợi đầy: sequence CHƯA được tiêu, lượt
-                                 * sau phải chụp lại dù `ext_cmd_seq` không đổi. */
-                                enqueue_rejected++;
-                            }
+                            staged.push_back({w, ext_idx, snapshot.ext_cmd_seq[ext_idx], release,
+                                              &sc, &pt});
                         }
                     }
 
@@ -413,6 +420,25 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                     logical++;
                     if (is32) k++;   /* 32-bit tiêu 2 register cho một điểm */
                 }
+            }
+        }
+        if (staged.empty()) continue;
+        staged_writes.clear();
+        for (const auto& st : staged) staged_writes.push_back(st.w);
+        const std::vector<bool> accepted = worker->enqueue_writes(staged_writes);
+        for (size_t k = 0; k < staged.size(); k++) {
+            const StagedWrite& st = staged[k];
+            if (accepted[k]) {
+                last_command_seq_[st.ext_idx] = st.cmd_seq;
+                if (st.release)
+                    std::fprintf(stderr, "INFO  modbus_master.ext_release_safe slave=%s"
+                                 " point=%s safe_value=%g\n",
+                                 st.slave->name.c_str(), st.point->name.c_str(),
+                                 st.point->safe_value);
+            } else {
+                /* Hàng đợi đầy: sequence CHƯA được tiêu, lượt sau phải chụp lại
+                 * dù `ext_cmd_seq` không đổi. */
+                enqueue_rejected++;
             }
         }
     }
