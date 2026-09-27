@@ -12,10 +12,13 @@
 #include <nlohmann/json.hpp>
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+
+#include "runtime/thread_policy.hpp"
 
 namespace core {
 
@@ -212,6 +215,8 @@ bool WebIpc::open(const std::string& sock_path)
 
 void WebIpc::close()
 {
+    /* Luồng `web-ipc` chạm socket và cache: dừng nó TRƯỚC khi đóng fd. */
+    stop_service_thread();
     for (auto& c : clients_) ::close(c.fd);
     clients_.clear();
     if (fd_ >= 0) {
@@ -617,6 +622,12 @@ void WebIpc::handle_line(Client& client, const std::string& line,
     }
     if (op == "schedule_state") {
         cmd.kind = WebCommandKind::ScheduleState;
+        /* Lệnh truy vấn cũng chiếm một slot của kênh trao đổi: hết slot thì trả
+         * lời NGAY thay vì xếp một lệnh không có chỗ chờ. */
+        if (!has_command_capacity(out->size())) {
+            reject("busy");
+            return;
+        }
         out->push_back(cmd);
         return;
     }
@@ -658,7 +669,7 @@ void WebIpc::handle_line(Client& client, const std::string& line,
                 return;
             }
         }
-        if (out->size() >= 64) {
+        if (!has_command_capacity(out->size())) {
             reject("busy");
             return;
         }
@@ -724,7 +735,10 @@ void WebIpc::handle_line(Client& client, const std::string& line,
         }
         cmd.ttl_s = static_cast<uint32_t>(ttl);
     }
-    if (out->size() >= 64) {        /* queue đầy → rejected busy (07 §8) */
+    /* Hết slot của kênh trao đổi (≤ 64 lệnh đang chờ luồng quét) → rejected busy
+     * (07 §8). Trả lời NGAY và KHÔNG ghi vào cache chống lặp: client gửi lại cùng
+     * id sau đó phải được xử lý, không nhận lại "busy" đã cache. */
+    if (!has_command_capacity(out->size())) {
         reject("busy");
         return;
     }
@@ -827,6 +841,9 @@ std::vector<WebCommand> WebIpc::drain()
                (pos = c.input.find('\n')) != std::string::npos) {
             const std::string line = c.input.substr(0, pos);
             const bool snapshot_request = is_snapshot_request(line);
+            /* X19: serialize bản snapshot mới nhất của luồng quét NGAY LÚC có
+             * người hỏi, trên luồng IPC — không serialize mỗi scan cho không ai. */
+            if (snapshot_request) refresh_snapshot_cache();
             if (snapshot_request) {
                 const std::size_t reserve = snapshot_accepted ||
                                                      snapshot_state_ != SnapshotCacheState::READY
@@ -861,6 +878,194 @@ std::vector<WebCommand> WebIpc::drain()
         }
     }
     return out;
+}
+
+/* ---------------- X19: kênh trao đổi với luồng quét ---------------- */
+
+bool WebIpc::submit(WebCommand&& command)
+{
+    if (free_count_ == 0) {
+        /* `drain()` đã chặn bằng `has_command_capacity`, nên đường này chỉ tới
+         * được khi có lỗi logic. Vẫn trả lời rõ ràng thay vì làm mất lệnh. */
+        respond_rejected(command, "busy");
+        return false;
+    }
+    const uint8_t index = free_[--free_count_];
+    slots_[index].cmd = std::move(command);
+    if (!submit_queue_.try_push(index)) {
+        /* Không thể xảy ra: mỗi chỉ số ở đúng một nơi và hàng đợi chứa đủ mọi
+         * slot. Giữ nhánh này để lỗi logic lộ ra thành `busy`, không thành lệnh
+         * treo. */
+        free_[free_count_++] = index;
+        respond_rejected(slots_[index].cmd, "busy");
+        return false;
+    }
+    return true;
+}
+
+void WebIpc::service_intake()
+{
+    std::vector<WebCommand> commands = drain();
+    for (WebCommand& command : commands) (void)submit(std::move(command));
+}
+
+void WebIpc::respond_result(const WebCommandSlot& slot)
+{
+    const WebCommand& cmd = slot.cmd;
+    const WebCommandResult& result = slot.result;
+    switch (result.kind) {
+    case WebResultKind::Rejected:
+        respond_rejected(cmd, result.text);
+        return;
+    case WebResultKind::Accepted:
+        respond_accepted(cmd, result.applied_value, result.text, result.remaining_ttl_s);
+        return;
+    case WebResultKind::Overridden:
+        respond_overridden(cmd, result.applied_value, result.text, result.remaining_ttl_s);
+        return;
+    case WebResultKind::AlarmList:
+        respond_alarm_list(cmd, slot.alarms);
+        return;
+    case WebResultKind::ScheduleState:
+        respond_schedule_state(cmd, slot.schedules);
+        return;
+    case WebResultKind::AlarmAckAccepted:
+        respond_alarm_ack_accepted(cmd);
+        return;
+    case WebResultKind::AlarmSuppressAccepted:
+        respond_alarm_suppress_accepted(cmd);
+        return;
+    case WebResultKind::AlarmReturnAccepted:
+        respond_alarm_return_accepted(cmd);
+        return;
+    }
+    respond_rejected(cmd, "bad_request");
+}
+
+void WebIpc::service_output(bool refresh_snapshot)
+{
+    uint8_t index = 0;
+    while (complete_queue_.try_pop(&index)) {
+        respond_result(slots_[index]);
+        free_[free_count_++] = index;
+    }
+    if (refresh_snapshot) refresh_snapshot_cache();
+}
+
+void WebIpc::refresh_snapshot_cache()
+{
+    if (!snapshot_exchange_.acquire_latest()) return;
+    publish_point_snapshot(snapshot_exchange_.read_slot());
+}
+
+WebCommandSlot* WebIpc::rt_next_command()
+{
+    uint8_t index = 0;
+    if (!submit_queue_.try_pop(&index)) return nullptr;
+    return &slots_[index];
+}
+
+void WebIpc::rt_complete(WebCommandSlot* slot)
+{
+    if (slot == nullptr) return;
+    const std::size_t index = static_cast<std::size_t>(slot - slots_.data());
+    /* Hàng đợi hoàn tất chứa đủ mọi slot nên không thể đầy. */
+    (void)complete_queue_.try_push(static_cast<uint8_t>(index));
+}
+
+void WebIpc::rt_publish_snapshot(const RuntimePointSnapshot& snapshot)
+{
+#ifdef CORE_BUILD_TESTS
+    if (rt_publish_observer_) rt_publish_observer_(rt_publish_observer_context_);
+#endif
+    snapshot_exchange_.publish(snapshot);
+}
+
+void WebIpc::wait_for_io(int timeout_ms)
+{
+    pollfds_.clear();
+    if (fd_ >= 0) pollfds_.push_back({fd_, POLLIN, 0});
+    for (const Client& client : clients_) {
+        /* Client đã đóng chiều đọc: POLLIN/POLLHUP của nó báo liên tục, đưa vào
+         * poll là quay vòng rỗng. Nó chỉ còn chờ trả lời — việc đó do timeout
+         * ngắn lúc có lệnh đang chờ lo. */
+        if (client.read_closed || client.close_after_flush || client.hard_close) continue;
+        short events = POLLIN;
+        if (!client.output.empty()) events = static_cast<short>(events | POLLOUT);
+        pollfds_.push_back({client.fd, events, 0});
+    }
+    if (pollfds_.empty()) {
+        struct timespec pause {0, static_cast<long>(timeout_ms) * 1000000L};
+        ::nanosleep(&pause, nullptr);
+        return;
+    }
+    (void)::poll(pollfds_.data(), static_cast<nfds_t>(pollfds_.size()), timeout_ms);
+}
+
+void WebIpc::service_loop()
+{
+    (void)demote_to_normal_sched(service_name_);
+    pollfds_.reserve(8);
+    while (!service_stop_.load(std::memory_order_acquire)) {
+        /* Có lệnh đang chờ luồng quét hoặc còn byte chưa gửi: thức mỗi 1 ms để
+         * trả lời ngay khi scan xong. Rảnh: chỉ thức khi socket có việc (hoặc
+         * mỗi 50 ms để xét yêu cầu dừng). */
+        bool busy = free_count_ < kWebCommandSlots;
+        for (const Client& client : clients_)
+            busy = busy || !client.output.empty();
+        wait_for_io(busy ? 1 : 50);
+        service_intake();
+        service_output(false);
+    }
+}
+
+void* WebIpc::service_thread_entry(void* self)
+{
+    static_cast<WebIpc*>(self)->service_loop();
+    return nullptr;
+}
+
+/* Stack 1 MiB: parser JSON (nlohmann 3.11) và phần huỷ của nó không đệ quy theo
+ * độ sâu input, dòng vào bị chặn 64 KiB, và mọi bộ đệm lớn nằm trên heap. */
+constexpr std::size_t kServiceThreadStackBytes = 1024u * 1024u;
+
+bool WebIpc::start_service_thread(const char* thread_name)
+{
+    if (service_thread_running_) return true;
+    std::snprintf(service_name_, sizeof(service_name_), "%s",
+                  thread_name && thread_name[0] ? thread_name : "web-ipc");
+    service_stop_.store(false, std::memory_order_release);
+    /* Bật cờ TRƯỚC khi luồng chạy: không có khoảnh khắc nào cả luồng quét lẫn
+     * luồng `web-ipc` cùng phục vụ socket. */
+    offloaded_.store(true, std::memory_order_release);
+    pthread_attr_t attr;
+    int rc = ::pthread_attr_init(&attr);
+    if (rc == 0) {
+        (void)::pthread_attr_setstacksize(&attr, kServiceThreadStackBytes);
+        rc = ::pthread_create(&service_thread_, &attr, &WebIpc::service_thread_entry, this);
+        ::pthread_attr_destroy(&attr);
+    }
+    if (rc != 0) {
+        offloaded_.store(false, std::memory_order_release);
+        std::fprintf(stderr,
+                     "ERROR web_ipc.service_thread_fail errno=%d — IPC web chay trong luong"
+                     " quet nhu truoc (ADR-061 4.10 buoc 2 khong co hieu luc)\n",
+                     rc);
+        return false;
+    }
+    service_thread_running_ = true;
+    std::fprintf(stderr, "INFO  web_ipc.offloaded thread=%s slots=%zu stack_kib=%zu\n",
+                 service_name_, kWebCommandSlots, kServiceThreadStackBytes / 1024u);
+    return true;
+}
+
+void WebIpc::stop_service_thread()
+{
+    if (!service_thread_running_) return;
+    service_stop_.store(true, std::memory_order_release);
+    (void)::pthread_join(service_thread_, nullptr);
+    service_thread_running_ = false;
+    offloaded_.store(false, std::memory_order_release);
 }
 
 } // namespace core

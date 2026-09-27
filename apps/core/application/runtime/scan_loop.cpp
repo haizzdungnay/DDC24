@@ -32,6 +32,17 @@ const char* scan_phase_name(ScanPhase phase)
     return "?";
 }
 
+/* Trần độ dài `user` sau sanitize của `WebIpc` (07 §8). */
+constexpr std::size_t kAuditUserCapacity = 48;
+
+ScanLoop::ScanLoop(ScanDeps deps) : d_(deps)
+{
+    /* X19: chuỗi user của override có TTL được gán trên luồng quét. Đặt sẵn
+     * capacity ở đây thì phép gán sau này chỉ chép byte, không cấp phát. */
+    for (std::string& user : manual_ao_user_) user.reserve(kAuditUserCapacity);
+    for (std::string& user : manual_do_user_) user.reserve(kAuditUserCapacity);
+}
+
 uint64_t ScanLoop::monotonic_now() const
 {
     return time_.monotonic_ns != nullptr ? time_.monotonic_ns(time_.ctx) : now_ns();
@@ -63,6 +74,132 @@ static const char* point_source_name(PointSource source)
     case PointSource::DEFAULT: return "default";
     }
     return "unknown";
+}
+
+/* Bước 4 cho MỘT lệnh point: áp vào trọng tài/bảng điểm NGAY tại ranh giới scan,
+ * như trước X19 (COR-008). source=manual → PRIO_LOCAL_MANUAL (mức 2);
+ * source=bacnet → PRIO_BACNET (mức 3). `result.kind` tạm ghi đúng/sai; kết quả
+ * thật điền ở `complete_commands` SAU resolve + safe-state. */
+void ScanLoop::apply_point_command(WebCommandSlot* slot, uint64_t command_now)
+{
+    const WebCommand& cmd = slot->cmd;
+    slot->result = WebCommandResult{};
+    const int prio = cmd.prio;   /* 2=manual, 3=bacnet */
+    bool ok = true;
+    if (cmd.is_query) {
+        /* truy vấn không đổi priority array */
+    } else if (cmd.point.kind == PointKind::AO) {
+        if (cmd.is_write) ok = d_.resolver->set_ao(prio, cmd.point.idx, cmd.value);
+        else              ok = d_.resolver->release_ao(prio, cmd.point.idx);
+        if (ok && prio == PRIO_LOCAL_MANUAL) {
+            manual_ao_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
+                ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
+            manual_ao_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
+            if (cmd.ttl_s > 0) manual_ao_user_[cmd.point.idx].assign(cmd.user);
+            else               manual_ao_user_[cmd.point.idx].clear();
+        }
+    } else if (cmd.point.kind == PointKind::BO) {
+        if (cmd.is_write) ok = d_.resolver->set_do(prio, cmd.point.idx, cmd.value != 0.0f);
+        else              ok = d_.resolver->release_do(prio, cmd.point.idx);
+        if (ok && prio == PRIO_LOCAL_MANUAL) {
+            manual_do_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
+                ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
+            manual_do_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
+            if (cmd.ttl_s > 0) manual_do_user_[cmd.point.idx].assign(cmd.user);
+            else               manual_do_user_[cmd.point.idx].clear();
+        }
+    } else {
+        /* AV/BV/MSV/EXT: qua đường ghi dùng chung (P1-02). EXT được
+         * PointWriter đặt luôn setpoint + dirty, nên ở đây không còn bước
+         * riêng nào cho Modbus — trước kia bước đó chỉ có ở nhánh này và
+         * ScheduleRuntime thiếu nó.
+         * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value. */
+        PointWriter writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        if (cmd.is_write) ok = writer.write(cmd.point, cmd.value, PointSource::WEB);
+        else              ok = writer.release(cmd.point);
+    }
+    slot->result.kind = ok ? WebResultKind::Accepted : WebResultKind::Rejected;
+}
+
+/* Bước 7b: điền kết quả THẬT cho mọi lệnh của scan này rồi trả slot về luồng
+ * IPC. Không dựng chuỗi, không gửi socket, không in AUDIT ở đây — việc đó của
+ * luồng IPC (X19); nội dung trả lời và AUDIT giữ nguyên như trước. Thứ tự trả
+ * giữ như cũ: lệnh alarm/schedule trước, lệnh point sau. */
+void ScanLoop::complete_commands(const OutputCmd& out)
+{
+    for (std::size_t i = 0; i < inflight_count_; ++i) {
+        WebCommandSlot* slot = inflight_[i];
+        const WebCommand& cmd = slot->cmd;
+        if (cmd.kind == WebCommandKind::Point) continue;
+        slot->result = WebCommandResult{};
+        if (cmd.kind == WebCommandKind::ScheduleState) {
+            /* Trạng thái runtime là sự thật của controller. Không có
+             * ScheduleRuntime thì trả danh sách rỗng, KHÔNG bịa. */
+            if (d_.schedules) slot->schedules = d_.schedules->states();
+            else              slot->schedules.clear();
+            slot->result.kind = WebResultKind::ScheduleState;
+        } else if (cmd.kind == WebCommandKind::AlarmList) {
+            if (d_.alarms) slot->alarms = d_.alarms->active_states();
+            else           slot->alarms.clear();
+            slot->result.kind = WebResultKind::AlarmList;
+        } else if (cmd.kind == WebCommandKind::AlarmAck) {
+            if (d_.alarms && d_.alarms->ack(cmd.alarm_id, cmd.duration_s, cmd.permanent))
+                slot->result.kind = WebResultKind::AlarmAckAccepted;
+            else
+                slot->result.text = "unknown_alarm";
+        } else if (cmd.kind == WebCommandKind::AlarmSuppress) {
+            if (d_.alarms && d_.alarms->suppress(cmd.alarm_id, cmd.duration_s, cmd.permanent))
+                slot->result.kind = WebResultKind::AlarmSuppressAccepted;
+            else
+                slot->result.text = "unknown_alarm";
+        } else if (cmd.kind == WebCommandKind::AlarmReturn) {
+            if (d_.alarms && d_.alarms->return_to_active(cmd.alarm_id))
+                slot->result.kind = WebResultKind::AlarmReturnAccepted;
+            else
+                slot->result.text = "unknown_alarm";
+        }
+        d_.web->rt_complete(slot);
+    }
+
+    /* Respond web/BACnet command theo output THẬT.
+     * Overridden khi: safe-state active OR nguồn cao hơn cmd.prio đang thắng (07 §8). */
+    const uint64_t response_now = now_ns();
+    for (std::size_t i = 0; i < inflight_count_; ++i) {
+        WebCommandSlot* slot = inflight_[i];
+        const WebCommand& cmd = slot->cmd;
+        if (cmd.kind != WebCommandKind::Point) continue;
+        WebCommandResult& result = slot->result;
+        if (result.kind == WebResultKind::Rejected) {
+            result.text = "bad_request";
+        } else if (cmd.point.kind == PointKind::AO || cmd.point.kind == PointKind::BO) {
+            const bool is_ao = cmd.point.kind == PointKind::AO;
+            result.applied_value = is_ao ? out.ao[cmd.point.idx]
+                                         : static_cast<float>(out.dout[cmd.point.idx]);
+            const uint64_t expiry = is_ao ? manual_ao_expiry_ns_[cmd.point.idx]
+                                          : manual_do_expiry_ns_[cmd.point.idx];
+            result.remaining_ttl_s = expiry > response_now
+                ? static_cast<uint32_t>((expiry - response_now + 999999999ull) / 1000000000ull) : 0;
+            if (d_.safe->active()) {
+                result.kind = cmd.is_write ? WebResultKind::Overridden : WebResultKind::Accepted;
+                result.text = "safety";
+            } else {
+                const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
+                                     : d_.resolver->winning_do_level(cmd.point.idx);
+                result.kind = cmd.is_write && lv != cmd.prio ? WebResultKind::Overridden
+                                                            : WebResultKind::Accepted;
+                result.text = prio_source_name(lv);
+            }
+        } else {
+            /* virtual point: không có nguồn vật lý tranh chấp */
+            result.kind = WebResultKind::Accepted;
+            result.text = cmd.is_query ? point_source_name(d_.table->get(cmd.point).source)
+                                       : prio_source_name(cmd.prio);
+            result.applied_value = d_.table->get(cmd.point).value;
+            result.remaining_ttl_s = 0;
+        }
+        d_.web->rt_complete(slot);
+    }
+    inflight_count_ = 0;
 }
 
 void ScanLoop::step()
@@ -127,9 +264,14 @@ void ScanLoop::step()
     /* 4. Read web/BACnet command queue.
      * source=manual → PRIO_LOCAL_MANUAL (mức 2); source=bacnet → PRIO_BACNET (mức 3).
      * Response trả SAU resolve + safe-state (bước 7b): applied_value/active_source
-     * là giá trị THẬT sau khi mọi nguồn tranh chấp xong (07 §8, BAC-CONFLICT-001). */
-    pending_.clear();
-    pending_alarm_.clear();
+     * là giá trị THẬT sau khi mọi nguồn tranh chấp xong (07 §8, BAC-CONFLICT-001).
+     *
+     * ADR-061 4.10 bước 2 (X19): socket/parse/validate chạy ở luồng `web-ipc`;
+     * luồng quét chỉ lấy lệnh ĐÃ validate khỏi hàng đợi SPSC. Không có luồng đó
+     * (test, hoặc tạo thread hỏng) thì phục vụ ngay tại đây như trước. */
+    const bool inline_web = !d_.web->offloaded();
+    if (inline_web) d_.web->service_intake();
+    inflight_count_ = 0;
     const uint64_t command_now = now_ns();
     for (int ch = 0; ch < KX_N_AO; ch++) {
         if (manual_ao_expiry_ns_[ch] != 0 && command_now >= manual_ao_expiry_ns_[ch]) {
@@ -138,7 +280,8 @@ void ScanLoop::step()
             std::fprintf(stderr, "AUDIT hmi_override_expired id=%llu user=%s point=AO%d\n",
                          static_cast<unsigned long long>(manual_ao_request_id_[ch]),
                          manual_ao_user_[ch].empty() ? "-" : manual_ao_user_[ch].c_str(), ch + 1);
-            manual_ao_request_id_[ch] = 0; manual_ao_user_[ch].clear();
+            manual_ao_request_id_[ch] = 0;
+            manual_ao_user_[ch].clear();   /* clear() giữ capacity */
         }
     }
     for (int ch = 0; ch < KX_N_DO; ch++) {
@@ -148,48 +291,18 @@ void ScanLoop::step()
             std::fprintf(stderr, "AUDIT hmi_override_expired id=%llu user=%s point=DO%d\n",
                          static_cast<unsigned long long>(manual_do_request_id_[ch]),
                          manual_do_user_[ch].empty() ? "-" : manual_do_user_[ch].c_str(), ch + 1);
-            manual_do_request_id_[ch] = 0; manual_do_user_[ch].clear();
+            manual_do_request_id_[ch] = 0;
+            manual_do_user_[ch].clear();   /* clear() giữ capacity */
         }
     }
-    for (const WebCommand& cmd : d_.web->drain()) {
-        if (cmd.kind != WebCommandKind::Point) {
-            pending_alarm_.push_back(cmd);
-            continue;
-        }
-        const int prio = cmd.prio;   /* 2=manual, 3=bacnet */
-        bool ok = true;
-        if (cmd.is_query) {
-            pending_.push_back({cmd, true});
-            continue;
-        } else if (cmd.point.kind == PointKind::AO) {
-            if (cmd.is_write) ok = d_.resolver->set_ao(prio, cmd.point.idx, cmd.value);
-            else              ok = d_.resolver->release_ao(prio, cmd.point.idx);
-            if (ok && prio == PRIO_LOCAL_MANUAL) {
-                manual_ao_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
-                    ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
-                manual_ao_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
-                manual_ao_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
-            }
-        } else if (cmd.point.kind == PointKind::BO) {
-            if (cmd.is_write) ok = d_.resolver->set_do(prio, cmd.point.idx, cmd.value != 0.0f);
-            else              ok = d_.resolver->release_do(prio, cmd.point.idx);
-            if (ok && prio == PRIO_LOCAL_MANUAL) {
-                manual_do_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
-                    ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
-                manual_do_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
-                manual_do_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
-            }
-        } else {
-            /* AV/BV/MSV/EXT: qua đường ghi dùng chung (P1-02). EXT được
-             * PointWriter đặt luôn setpoint + dirty, nên ở đây không còn bước
-             * riêng nào cho Modbus — trước kia bước đó chỉ có ở nhánh này và
-             * ScheduleRuntime thiếu nó.
-             * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value. */
-            PointWriter writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
-            if (cmd.is_write) ok = writer.write(cmd.point, cmd.value, PointSource::WEB);
-            else              ok = writer.release(cmd.point);
-        }
-        pending_.push_back({cmd, ok});
+    /* Lấy hết lệnh đang chờ (≤ kWebCommandSlots). Lệnh tới SAU điểm này thuộc
+     * scan kế: một lệnh không bao giờ được áp nửa chừng giữa hai bước của step. */
+    while (inflight_count_ < inflight_.size()) {
+        WebCommandSlot* slot = d_.web->rt_next_command();
+        if (slot == nullptr) break;
+        inflight_[inflight_count_++] = slot;
+        /* Lệnh alarm/schedule xử lý SAU AlarmRuntime::evaluate (bước 7b). */
+        if (slot->cmd.kind == WebCommandKind::Point) apply_point_command(slot, command_now);
     }
     record_phase(ScanPhase::IPC_DRAIN, &phase_mark);
 
@@ -316,74 +429,12 @@ void ScanLoop::step()
         runtime_snapshot.task.jitter_violation_count = timing.jitter_violation_count;
         runtime_snapshot.task.missed_base_step_count = timing.missed_base_step_count;
     }
-    d_.web->publish_point_snapshot(runtime_snapshot);
+    /* X19: chỉ chép struct cố định vào bộ đệm ba ô; serialize JSON ở luồng IPC. */
+    d_.web->rt_publish_snapshot(runtime_snapshot);
 
-    for (const WebCommand& cmd : pending_alarm_) {
-        if (cmd.kind == WebCommandKind::ScheduleState) {
-            /* Trạng thái runtime là sự thật của controller. Không có
-             * ScheduleRuntime thì trả danh sách rỗng, KHÔNG bịa. */
-            const std::vector<ScheduleState> states =
-                d_.schedules ? d_.schedules->states() : std::vector<ScheduleState>{};
-            d_.web->respond_schedule_state(cmd, states);
-        } else if (cmd.kind == WebCommandKind::AlarmList) {
-            const std::vector<AlarmState> states =
-                d_.alarms ? d_.alarms->active_states() : std::vector<AlarmState>{};
-            d_.web->respond_alarm_list(cmd, states);
-        } else if (cmd.kind == WebCommandKind::AlarmAck) {
-            if (d_.alarms && d_.alarms->ack(cmd.alarm_id, cmd.duration_s, cmd.permanent))
-                d_.web->respond_alarm_ack_accepted(cmd);
-            else
-                d_.web->respond_rejected(cmd, "unknown_alarm");
-        } else if (cmd.kind == WebCommandKind::AlarmSuppress) {
-            if (d_.alarms && d_.alarms->suppress(cmd.alarm_id, cmd.duration_s, cmd.permanent))
-                d_.web->respond_alarm_suppress_accepted(cmd);
-            else
-                d_.web->respond_rejected(cmd, "unknown_alarm");
-        } else if (cmd.kind == WebCommandKind::AlarmReturn) {
-            if (d_.alarms && d_.alarms->return_to_active(cmd.alarm_id))
-                d_.web->respond_alarm_return_accepted(cmd);
-            else
-                d_.web->respond_rejected(cmd, "unknown_alarm");
-        }
-    }
-
-    /* 7b. Respond web/BACnet command theo output THẬT.
-     * Overridden khi: safe-state active OR nguồn cao hơn cmd.prio đang thắng (07 §8). */
-    const uint64_t response_now = now_ns();
-    for (const PendingResp& p : pending_) {
-        if (!p.ok) {
-            d_.web->respond_rejected(p.cmd, "bad_request");
-            continue;
-        }
-        const WebCommand& cmd = p.cmd;
-        if (cmd.point.kind == PointKind::AO || cmd.point.kind == PointKind::BO) {
-            const bool is_ao = cmd.point.kind == PointKind::AO;
-            const float applied = is_ao ? out.ao[cmd.point.idx]
-                                        : static_cast<float>(out.dout[cmd.point.idx]);
-            const uint64_t expiry = is_ao ? manual_ao_expiry_ns_[cmd.point.idx]
-                                          : manual_do_expiry_ns_[cmd.point.idx];
-            const uint32_t remaining_ttl_s = expiry > response_now
-                ? static_cast<uint32_t>((expiry - response_now + 999999999ull) / 1000000000ull) : 0;
-            if (d_.safe->active()) {
-                if (cmd.is_write)
-                    d_.web->respond_overridden(cmd, applied, "safety", remaining_ttl_s);
-                else
-                    d_.web->respond_accepted(cmd, applied, "safety", remaining_ttl_s);
-            } else {
-                const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
-                                     : d_.resolver->winning_do_level(cmd.point.idx);
-                if (cmd.is_write && lv != cmd.prio)
-                    d_.web->respond_overridden(cmd, applied, prio_source_name(lv), remaining_ttl_s);
-                else
-                    d_.web->respond_accepted(cmd, applied, prio_source_name(lv), remaining_ttl_s);
-            }
-        } else {
-            /* virtual point: không có nguồn vật lý tranh chấp */
-            const char* vsrc = cmd.is_query ? point_source_name(d_.table->get(cmd.point).source)
-                                            : prio_source_name(cmd.prio);
-            d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value, vsrc);
-        }
-    }
+    /* 7b. Kết quả lệnh theo output THẬT của scan này. */
+    complete_commands(out);
+    if (inline_web) d_.web->service_output(true);
 
     /* 9. Publish BACnet object table — value/quality/reliability (BAC-004) */
     d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun(),

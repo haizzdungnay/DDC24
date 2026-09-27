@@ -4,12 +4,29 @@
  *        web là client. 1 message = 1 dòng JSON. Đủ 3 result: accepted / rejected /
  *        overridden (nguồn cao hơn hoặc safe-state đang thắng — COR-007).
  *        Mỗi lệnh in 1 dòng AUDIT chuẩn {id,user,point,op,value,result,active_source}.
+ *
+ * ADR-061 4.10 bước 2 (X19) — hai phía, một ranh giới:
+ *   - PHÍA IPC (không RT): accept/đọc/parse/validate/cache chống lặp, dựng JSON
+ *     trả lời, AUDIT, gửi socket, serialize `point_snapshot`. Chạy trên luồng
+ *     `web-ipc` (SCHED_OTHER, ngoài CPU của vòng quét) khi đã
+ *     `start_service_thread()`; nếu không (test, hoặc tạo thread hỏng) thì
+ *     `ScanLoop` gọi `service_intake()` / `service_output()` ngay trong step như
+ *     trước — cùng một đường mã, chỉ khác luồng chạy.
+ *   - PHÍA LUỒNG QUÉT (RT): CHỈ `rt_next_command()` / `rt_complete()` /
+ *     `rt_publish_snapshot()`. Không khoá, không cấp phát, không syscall.
+ *
+ * Lệnh đi qua `kWebCommandSlots` slot cấp phát sẵn. Chỉ số slot đi qua hai
+ * hàng đợi SPSC (IPC→quét: lệnh đã validate; quét→IPC: lệnh đã có kết quả); ở
+ * mỗi thời điểm một slot thuộc đúng MỘT bên, nên chuỗi trong `WebCommand` không
+ * bao giờ bị chép hay giải phóng trên luồng quét. Hết slot ⇒ lệnh mới bị trả
+ * `rejected busy` NGAY (không xếp hàng vô hạn, không rơi âm thầm).
  */
 #ifndef CORE_WEB_IPC_HPP
 #define CORE_WEB_IPC_HPP
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -18,9 +35,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include <poll.h>
+#include <pthread.h>
+
 #include "alarm/alarm_runtime.hpp"
 #include "graph/point_table.hpp"
 #include "graph/runtime_point_snapshot.hpp"
+#include "runtime/latest_value_buffer.hpp"
+#include "runtime/spsc_ring.hpp"
 #include "schedule/schedule_runtime.hpp"
 
 namespace core {
@@ -53,6 +75,43 @@ struct WebCommand {
 };
 
 enum class SnapshotCacheState : uint8_t { UNAVAILABLE, READY, TOO_LARGE, ERROR };
+
+/* 07 §8: tối đa 64 lệnh/scan, quá thì `rejected busy`. Nay là số slot của kênh
+ * trao đổi: luồng quét xử lý hết mọi lệnh đang chờ ở mỗi scan, nên 64 slot
+ * đang bận cũng chính là 64 lệnh trong một scan. */
+constexpr std::size_t kWebCommandSlots = 64;
+static_assert(kWebCommandSlots <= 256, "chi so slot di qua hang doi bang uint8_t");
+
+/* Kết quả luồng quét điền cho một lệnh. `text` CHỈ trỏ chuỗi tĩnh (mã lỗi hoặc
+ * tên nguồn thắng) — không chuỗi động nào được dựng trên luồng quét. */
+enum class WebResultKind : uint8_t {
+    Rejected,
+    Accepted,
+    Overridden,
+    AlarmList,
+    ScheduleState,
+    AlarmAckAccepted,
+    AlarmSuppressAccepted,
+    AlarmReturnAccepted,
+};
+
+struct WebCommandResult {
+    WebResultKind kind = WebResultKind::Rejected;
+    const char*   text = "bad_request";
+    float         applied_value = 0.0f;
+    uint32_t      remaining_ttl_s = 0;
+};
+
+/* Một lệnh đang đi qua ranh giới. Luồng IPC ghi `cmd` rồi mới nộp; luồng quét
+ * chỉ ĐỌC `cmd` và ghi `result` (+ `alarms`/`schedules` cho lệnh truy vấn);
+ * luồng IPC chỉ đọc lại sau khi nhận slot về. Hai vector giữ capacity giữa các
+ * lần dùng. */
+struct WebCommandSlot {
+    WebCommand                 cmd;
+    WebCommandResult           result;
+    std::vector<AlarmState>    alarms;
+    std::vector<ScheduleState> schedules;
+};
 
 #ifdef CORE_BUILD_TESTS
 struct WebIpcBudgetCounters {
@@ -94,7 +153,36 @@ public:
     /* SCHD-152: trả trạng thái runtime CỦA CONTROLLER cho backend. Đây là
      * "sự thật"; cấu hình mà backend giữ chỉ là "ý định". */
     void respond_schedule_state(const WebCommand& cmd, const std::vector<ScheduleState>& states);
+    /* Serialize snapshot vào cache trả lời `point_snapshot` (PHÍA IPC). Luồng
+     * quét KHÔNG gọi hàm này nữa — nó gọi `rt_publish_snapshot()`. */
     void publish_point_snapshot(const RuntimePointSnapshot& snapshot);
+
+    /* ---------------- PHÍA LUỒNG QUÉT (RT) ----------------
+     * Không khoá, không cấp phát, không syscall. */
+
+    /* Lệnh kế tiếp đã được luồng IPC validate, theo thứ tự nộp; nullptr khi hết.
+     * Slot thuộc luồng quét tới khi `rt_complete()`. */
+    WebCommandSlot* rt_next_command();
+    /* Trả slot đã điền `result` về luồng IPC để trả lời client. */
+    void rt_complete(WebCommandSlot* slot);
+    /* Công bố snapshot của scan vừa xong (bản mới nhất thay bản chưa ai đọc). */
+    void rt_publish_snapshot(const RuntimePointSnapshot& snapshot);
+    /* true khi luồng `web-ipc` đang phục vụ: luồng quét KHÔNG được gọi
+     * `service_*` (hai luồng sẽ cùng chạm socket và cache). */
+    bool offloaded() const { return offloaded_.load(std::memory_order_acquire); }
+
+    /* ---------------- PHÍA IPC (không RT) ---------------- */
+
+    /* Một lượt nhận: `drain()` rồi nộp mọi lệnh hợp lệ vào kênh trao đổi. */
+    void service_intake();
+    /* Trả lời mọi lệnh luồng quét đã xử lý xong (AUDIT giữ nguyên nội dung).
+     * `refresh_snapshot` = serialize ngay bản snapshot mới nhất vào cache (đường
+     * inline làm mỗi scan như trước; luồng `web-ipc` chỉ làm khi có yêu cầu). */
+    void service_output(bool refresh_snapshot);
+    /* Tạo luồng `web-ipc`: SCHED_OTHER, ngoài CPU của vòng quét. false = không
+     * tạo được; IPC tiếp tục chạy inline trong luồng quét như trước. */
+    bool start_service_thread(const char* thread_name = "web-ipc");
+    void stop_service_thread();
 
 #ifdef CORE_BUILD_TESTS
     SnapshotCacheState snapshot_cache_state_for_test() const { return snapshot_state_; }
@@ -137,6 +225,17 @@ public:
         publish_observer_ = observer;
         publish_observer_context_ = context;
     }
+    /* Gọi trong `rt_publish_snapshot()` — tức trên luồng quét, ở bước PUBLISH. */
+    void set_rt_publish_observer_for_test(void (*observer)(void*), void* context)
+    {
+        rt_publish_observer_ = observer;
+        rt_publish_observer_context_ = context;
+    }
+    /* Nộp thẳng một lệnh vào kênh như `service_intake()` làm (phía IPC). */
+    bool submit_for_test(const WebCommand& command) { return submit(WebCommand(command)); }
+    std::size_t free_slots_for_test() const { return free_count_; }
+    std::size_t queued_commands_for_test() const { return submit_queue_.size_approx(); }
+    std::size_t completed_commands_for_test() const { return complete_queue_.size_approx(); }
 #endif
 
 private:
@@ -164,6 +263,17 @@ private:
     void remember_pending(uint64_t id, const std::string& request);
     void audit(const WebCommand& cmd, const char* result, const char* active_source,
                 float applied_value);
+    bool submit(WebCommand&& command);
+    void respond_result(const WebCommandSlot& slot);
+    void refresh_snapshot_cache();
+    void wait_for_io(int timeout_ms);
+    void service_loop();
+    /* Còn chỗ cho thêm lệnh trong lượt `drain()` hiện tại (đã tính các lệnh vừa
+     * gom trong chính lượt đó). */
+    bool has_command_capacity(std::size_t collected) const
+    {
+        return collected < kWebCommandSlots && collected < free_count_;
+    }
 
     int fd_ = -1;
     std::string path_;
@@ -184,7 +294,35 @@ private:
     std::size_t outbound_budget_remaining_ = KX_POINT_SNAPSHOT_MAX_PAYLOAD;
     std::size_t round_robin_cursor_ = 0;
     uint64_t next_client_id_ = 1;
+
+    /* Kênh trao đổi với luồng quét (X19). `free_` là của phía IPC. */
+    std::array<WebCommandSlot, kWebCommandSlots> slots_{};
+    std::array<uint8_t, kWebCommandSlots> free_ = make_free_list();
+    std::size_t free_count_ = kWebCommandSlots;
+    SpscRing<uint8_t, kWebCommandSlots> submit_queue_;    /* IPC → quét */
+    SpscRing<uint8_t, kWebCommandSlots> complete_queue_;  /* quét → IPC */
+    LatestValueBuffer<RuntimePointSnapshot> snapshot_exchange_;
+    std::atomic<bool> offloaded_{false};
+    std::atomic<bool> service_stop_{false};
+    /* pthread chứ không std::thread: cần đặt kích thước stack. Unit core bật
+     * `mlockall(MCL_FUTURE)`, nên stack mặc định 8 MiB của mỗi thread mới bị
+     * khoá TRỌN vào RAM; luồng này chỉ cần một phần nhỏ. */
+    pthread_t service_thread_{};
+    bool service_thread_running_ = false;
+    static void* service_thread_entry(void* self);
+    char service_name_[16] = "web-ipc";
+    std::vector<struct pollfd> pollfds_;
+
+    static std::array<uint8_t, kWebCommandSlots> make_free_list()
+    {
+        std::array<uint8_t, kWebCommandSlots> list{};
+        for (std::size_t i = 0; i < kWebCommandSlots; ++i)
+            list[i] = static_cast<uint8_t>(kWebCommandSlots - 1 - i);
+        return list;
+    }
 #ifdef CORE_BUILD_TESTS
+    void (*rt_publish_observer_)(void*) = nullptr;
+    void* rt_publish_observer_context_ = nullptr;
     WebIpcSendAdapter send_adapter_ = nullptr;
     void* send_adapter_context_ = nullptr;
     WebIpcBudgetCounters budget_counters_;
