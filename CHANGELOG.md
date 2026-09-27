@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Deploy — Nâng cấp bo lab Foxlinx lên `main@3cb08fbc`, đóng F-FR-01 trên target (2026-09-27)
+
+- **Phạm vi:**
+  - bo lab Foxlinx: nâng cấp bằng `install.sh --with-fake-mcu` (dữ liệu giữ nguyên), gỡ drop-in `pidfile.conf` của iobus;
+  - tài liệu: hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`, `DEPLOY_FOXLINX.md`, header `tools/deploy/foxlinx_factory_reset.sh`.
+- **Bản cài:**
+  - Cross-build toàn bộ từ `main@3cb08fbc` (PR #783), target `all` HMI ON, 0 warning, khoá `RELEASE 2fb77aa42e7fe446`; `checksums.sha256` 7/7 trên bo.
+  - `install.sh` giữ khoá thiết bị và chụp bản trước vào `/var/backups/mkddc/0.1.0-20260927-051741`.
+  - Project "CHUONG CONTROLLER" mà chủ sở hữu tạo sau lần cài sạch vẫn còn nguyên.
+- **F-FR-01 trên target, PASS:** sau khi gỡ drop-in, iobus log `INFO iobus.pidfile path=/run/mkddc/iobus.pid pid=124336`, file trùng MainPID, unit không còn `ExecStartPost`, health `iobus` ok.
+- **Kiểm chứng:** mọi unit khớp `runtime-checksums`, `NRestarts=0`; RT ok; health 6/6; Programming `READY`; Modbus `rs485-1` 4/4 online, 48 điểm `GOOD`; `port.conf` (cổng 8082) còn.
+
 ### Deploy — Cài sạch bo lab Foxlinx như mới xuất xưởng từ `main@05182713`, giữ thiết bị Modbus (2026-09-27)
 
 - **Phạm vi:**
