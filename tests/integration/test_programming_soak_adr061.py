@@ -96,11 +96,12 @@ class ProfileAndPlanTests(unittest.TestCase):
         self.assertFalse(soak.budget_plan([10] * 33)["checks"]["programsWithinTotal"])
 
     def test_vs_prog_009_thresholds(self) -> None:
-        expected = {10: 10000, 50: 10000, 100: 10000, 500: 10000, 1000: 10000, 5000: 10000,
-                    10000: 8640, 50000: 1728}
-        self.assertEqual({period: soak.required_cycles(period) for period in soak.PERIODS_MS}, expected)
-        self.assertEqual(soak.required_seconds(5000), 50000.0)
-        self.assertEqual(soak.required_seconds(50000), 86400.0)
+        # VVP-PROG-001 v2.4: 10 chu kỳ mỗi lớp, như nhau.
+        self.assertEqual({period: soak.required_cycles(period) for period in soak.PERIODS_MS},
+                         {period: 10 for period in soak.PERIODS_MS})
+        self.assertEqual(soak.required_seconds(5000), 50.0)
+        self.assertEqual(soak.required_seconds(50000), 500.0)
+        self.assertEqual(soak.required_window_seconds(), 500.0)
 
     def test_program_source_counts_without_output(self) -> None:
         for period in soak.PERIODS_MS:
@@ -159,18 +160,26 @@ class EvaluateWindowTests(unittest.TestCase):
         return soak.evaluate_window(baseline or snapshot(START, run_count=1000), current, program_specs(),
                                     SOAK_REVISION)
 
-    def test_one_hour_clean_window_is_running(self) -> None:
-        result = self.evaluate(snapshot(at(3600), run_count=1000 + 360000))
+    def test_short_clean_window_is_running(self) -> None:
+        result = self.evaluate(snapshot(at(300), run_count=1000 + 30000))
         self.assertEqual({key: item["verdict"] for key, item in result["criteria"].items()},
                          {"C1": "PASS", "C2": "PASS", "C3": "PASS", "C4": "PASS"})
         self.assertEqual(result["overall"], "ĐANG CHẠY")
         rows = {row["periodMs"]: row for row in result["programs"]}
-        self.assertEqual(rows[10]["cycles"], 360000)
+        self.assertEqual(rows[10]["cycles"], 30000)
         self.assertEqual(rows[10]["status"], "ĐẠT")
-        self.assertEqual(rows[500]["status"], "CHƯA ĐỦ")      # 7 200 < 10 000
-        self.assertAlmostEqual(rows[500]["remainingSeconds"], (10000 - 7200) * 0.5)
-        self.assertEqual(rows[50000]["cycles"], 72)
-        self.assertEqual(result["expectedBaseSteps"], 360000)
+        self.assertEqual(rows[50000]["status"], "CHƯA ĐỦ")    # 6 < 10
+        self.assertAlmostEqual(rows[50000]["remainingSeconds"], (10 - 6) * 50.0)
+        self.assertEqual(result["expectedBaseSteps"], 30000)
+
+    def test_ten_cycles_per_class_passes(self) -> None:
+        # Soak lần 3 trên bo: 608 s, lớp 50 s đạt 12 chu kỳ.
+        result = self.evaluate(snapshot(at(608), run_count=1000 + 60800))
+        self.assertTrue(result["soakComplete"])
+        rows = {row["periodMs"]: row for row in result["programs"]}
+        self.assertEqual(rows[50000]["cycles"], 12)
+        self.assertEqual({row["status"] for row in result["programs"]}, {"ĐẠT"})
+        self.assertEqual(result["overall"], "ĐẠT")
 
     def test_full_day_clean_window_passes(self) -> None:
         result = self.evaluate(snapshot(at(86400), run_count=1000 + 8640000))
@@ -193,7 +202,9 @@ class EvaluateWindowTests(unittest.TestCase):
         self.assertEqual(result["criteria"]["C3"]["verdict"], "FAIL")
         statuses = {row["periodMs"]: row["status"] for row in result["programs"]}
         self.assertEqual(statuses[100], "FAIL")
-        self.assertEqual(statuses[10], "CHƯA ĐỦ")
+        # Lỡ release ở một lớp chỉ làm hỏng lớp đó: 10 ms đã đủ 10 chu kỳ, 50 s thì chưa.
+        self.assertEqual(statuses[10], "ĐẠT")
+        self.assertEqual(statuses[50000], "CHƯA ĐỦ")
 
     def test_missed_base_step_fails_c3(self) -> None:
         result = self.evaluate(snapshot(at(60), run_count=1000 + 5999, missed_step=1))
