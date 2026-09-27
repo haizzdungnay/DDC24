@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 2.3 |
+| Phiên bản | 2.4 |
 | Trạng thái | **Kế hoạch Active: 32 legacy + 12 unified + 3 PGM-02; 47 total, U13–U15 `NOT_RUN`, 0/47 PASS** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Verification Lead |
@@ -69,7 +69,7 @@ theo `VS-PROG-U01..U15`.
 | `VS-PROG-006` | Parser/FBD limits, invalid topology/type/source location, no crash/OOM | L1 fuzz | CORE-101 | fuzz corpus/result |
 | `VS-PROG-007` | PROGRAM/FUNCTION/User FB lifecycle/state độc lập, no recursion/native | L1/L4 | SYS-101 | unit/integration |
 | `VS-PROG-008` | Functional tag/view chỉ metadata, không tạo lifecycle/authority mới | L2/L5 | FE-102 | API/UI inspection |
-| `VS-PROG-009` | Một Task base step 10 ms; chu kỳ Program thuộc {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061), deterministic order; ngoài tập reject (`ST-SCHED-001`) | L1/L6 | CORE-102; FE-106 | Chu kỳ ≤ 5 000 ms: 10 000 chu kỳ mỗi chu kỳ; 10 000 và 50 000 ms: chạy trọn soak 24 h (8 640 và 1 728 chu kỳ); missed release = 0 (chủ sở hữu chốt 2026-09-27, ADR-061 X20) + UI test |
+| `VS-PROG-009` | Một Task base step 10 ms; chu kỳ Program thuộc {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061), deterministic order; ngoài tập reject (`ST-SCHED-001`) | L1/L6 | CORE-102; FE-106 | Trên target, cả 8 chu kỳ chạy đồng thời, mỗi chu kỳ ≥ 10 chu kỳ; C1–C4 của ADR-061 PASS trên cả cửa sổ; missed release = 0 (chủ sở hữu chốt lại 2026-09-27, thay ngưỡng X20 10 000 chu kỳ/soak 24 h). Độ bền dài hạn của C1–C4 là soak riêng, không thuộc ngưỡng này + UI test |
 | `VS-PROG-010` | Priority mức 5, program/actual/winner, PID saturation và override/release | L1/L6 HIL | CORE-104/105 | waveform + runtime snapshot |
 | `VS-PROG-011` | Atomic Commission/Restore; invalid/corrupt/crash giữ LKG; hợp đồng acknowledgement theo `status` impact | L3/L6 | SYS-103; BE-106; FE-113 | fault at each step + contract negative |
 | `VS-PROG-012` | RT path no allocation/filesystem/DB/HTTP/DNS/blocking/dynamic load | L0/L2/L6 | CORE-103 | symbol/static + instrumentation |
@@ -541,6 +541,7 @@ thuộc mặc định profile mới là tiếng Việt.
 | 1.8 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full host gate, deploy/read-back/rollback rehearsal/tái deploy Foxlinx, Chrome desktop/mobile và axe 8/8 scan PASS. Đóng blocker SSH/tool scan; giữ source chưa merge, positive Monitor/Trace có binding, reviewer/usability/HIL/Test Result độc lập. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 1.9 | 2026-08-13 | Bổ sung audit live HTTP cho `EV-PROG-P5-510` rev 1.1: UUID/SHA fallback không cần secure context, deep-link qua auth, ST save rồi phục hồi byte gốc, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile nav/no-overflow và axe 6/6 scan sạch. Ghim hash artifact/index/rollback; ghi rõ một deploy trung gian thiếu build flag đã bị thay. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 2.0 | 2026-08-20 | ADR-050: giữ 32 scenario migration và thêm `VS-PROG-U01..U12` cho POU/library/multi-Program/signal/enable/package/output/soak/PID; 44 scenario total, 12 unified đều NOT_RUN. |
+| 2.4 | 2026-09-27 | `VS-PROG-009`: chủ sở hữu chốt lại ngưỡng sau soak lần 3 trên Foxlinx — mỗi chu kỳ trong tập ADR-061 chạy ≥ 10 chu kỳ đồng thời, với C1–C4 PASS và missed release = 0. Ngưỡng 10 000 chu kỳ / soak 24 h của v2.3 bỏ. Bằng chứng hỗ trợ: soak lần 3 (`EV-PROG-FBD-ST-MB-20260925`, 10 ph 08 s, lớp 50 s đạt 12 chu kỳ, lệch nhịp tối đa theo phút 52,34 µs); độ bền C1–C4 dài hạn là soak lần 2 (15 h 53 ph, 0 vi phạm). Không đổi trạng thái PASS nào: vẫn cần Test Result độc lập. |
 | 2.3 | 2026-09-27 | `VS-PROG-009` theo ADR-061: tập chu kỳ {10…50000} ms thay cho 1/5/30 s, mã từ chối `ST-SCHED-001`; ngưỡng 10 000 chu kỳ giữ cho chu kỳ ≤ 5 s, còn 10 s và 50 s đo trong soak 24 h (8 640 / 1 728 chu kỳ) vì 10 000 chu kỳ 50 s mất 5,8 ngày — chủ sở hữu chốt 2026-09-27 (X20, `EV-PROG-FBD-ST-MB-20260925`). Không đổi trạng thái PASS nào. |
 | 2.2 | 2026-08-26 | `VS-PROG-U13` chuyển **PASS ở phạm vi R1/HOST-LOCAL** kèm record `EV-PGM02-R1-CLOSEOUT-001` tại commit `d32e560`; ghi rõ PASS này không tuyên bố target/HIL/release và không nâng `I/T/P/R`. `U14`/`U15` giữ `NOT_RUN`. |
 | 2.1-candidate | 2026-08-24 | Thêm `VS-PROG-U13..U15` cho PGM-02 R1 EDIT/R2 LIVE/R3 SIMULATE và ánh xạ closeout `T59-809/813/817`; tổng 47 scenario, ba scenario mới NOT_RUN; Architect exact pin và mọi card code/release giữ PENDING/NO-GO. |
