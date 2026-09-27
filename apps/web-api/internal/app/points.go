@@ -630,10 +630,24 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	if release {
 		return PointDTO{}, fmt.Errorf("virtual point release unsupported")
 	}
+	/* U-19 (REC-DDC-FIELD-USE-20260927): trên bo, một lệnh ghi VP mất ~4 s trong
+	 * khi hàng chục lệnh cùng loại chỉ ~0,1 s, và không có gì để biết thời gian
+	 * nằm ở đâu. Đo từng pha; lệnh chậm quá ngưỡng thì log một dòng WARN kèm
+	 * phân rã, để lần sau có dữ liệu thay vì đoán. */
+	timing := vpWriteTiming{start: time.Now()}
+	defer func() {
+		// `a.logger` là *log.Logger: truyền con trỏ nil vào interface sẽ thành một
+		// interface khác nil và Printf panic, nên kiểm ở đây.
+		if a.logger != nil {
+			timing.report(a.logger, id)
+		}
+	}()
 	a.pointConfigMu.Lock()
 	defer a.pointConfigMu.Unlock()
+	timing.mark(&timing.lock)
 
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	timing.mark(&timing.read)
 	if err != nil {
 		return PointDTO{}, err
 	}
@@ -676,12 +690,49 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	item.Value = nextValue
 	item.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	cfg.Items[index] = item
+	timing.mark(nil)
 	if err := a.writeVirtualPointsConfig(r, cfg, "write"); err != nil {
 		return PointDTO{}, err
 	}
+	timing.mark(&timing.persist)
 	a.virtualPointRuntime.Update(RuntimePoint{ID: item.ID, Kind: "VP", Value: item.Value, Quality: "GOOD", Source: "web", Role: "runtime_value", Unit: item.Unit, SignalType: item.SignalType, Generation: item.Generation})
 	a.syncVirtualPointToCore(r.Context(), item)
+	timing.mark(&timing.core)
 	return virtualPointDTO(item), nil
+}
+
+// vpWriteSlowThreshold — lệnh ghi VP bình thường ~0,1 s trên bo; 1 s là đủ xa
+// để không log ồn ào mà vẫn bắt được ca ~4 s của U-19.
+const vpWriteSlowThreshold = time.Second
+
+// vpWriteTiming đo bốn pha của một lệnh ghi VP: chờ khoá cấu hình điểm, đọc cấu
+// hình, ghi cấu hình (tệp + fsync), đẩy xuống Core. Phần kiểm hợp lệ ở giữa
+// không được tính vào pha nào.
+type vpWriteTiming struct {
+	start, last               time.Time
+	lock, read, persist, core time.Duration
+}
+
+func (t *vpWriteTiming) mark(phase *time.Duration) {
+	now := time.Now()
+	if t.last.IsZero() {
+		t.last = t.start
+	}
+	if phase != nil {
+		*phase += now.Sub(t.last)
+	}
+	t.last = now
+}
+
+func (t *vpWriteTiming) slow() bool { return time.Since(t.start) >= vpWriteSlowThreshold }
+
+func (t *vpWriteTiming) report(logger interface{ Printf(string, ...any) }, id string) {
+	if !t.slow() {
+		return
+	}
+	logger.Printf("WARN points.vp_write_slow id=%s total_ms=%d lock_ms=%d read_ms=%d persist_ms=%d core_ms=%d",
+		id, time.Since(t.start).Milliseconds(), t.lock.Milliseconds(), t.read.Milliseconds(),
+		t.persist.Milliseconds(), t.core.Milliseconds())
 }
 
 func validPointCommandValue(value any) bool {
