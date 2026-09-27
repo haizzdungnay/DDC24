@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Fixed — Graph không phải producer vẫn chi phối safe-state và ghi EXT dưới PROGRAM_ONLY (F21, F22, 2026-09-27)
+
+- Phạm vi: `apps/core/application/runtime/{scan_loop.cpp,test_scan_loop.cpp}`, hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
+- F21: `SafeState::apply` được gọi thiếu `graph_is_active_producer`. Tham số này có ở `d594c023` và mất trong merge `0a98a907`. Vì vậy một `graph.json` đã nạp (giữ để rollback) dưới PROGRAM_ONLY vẫn bị coi là đang điều khiển: T7 `no_ctrl` không bao giờ bật, và T6 xét input của graph không chạy. Đã truyền lại `active_mode != CutoverMode::PROGRAM_ONLY`.
+- F22: dưới PROGRAM_ONLY, `graph->apply_ext_writes()` vẫn chạy mỗi scan, nên `_setpoint` cũ của graph ghi đè slot EXT mà Program giữ, `ext_cmd_seq` tăng hai lần mỗi scan và graph thắng. Nay hàm này chỉ chạy khi graph là producer, cùng luật với `graph->execute()`.
+- Kiểm chứng:
+  - 2 test mới đỏ trên mã cũ, xanh trên mã sửa.
+  - `cmake --fresh` (3 option) + build exit 0, 0 warning; ctest 1615/1615.
+  - Foxlinx không có `graph.json`, nên hành vi bo hiện tại không đổi.
+
 ### Added — Công cụ soak 24 h lần 3 cho ADR-061/`VS-PROG-009`: revision thử 8 chu kỳ thay Active rồi trả về (2026-09-27)
 
 - Phạm vi: `scripts/programming_soak_adr061.py` (mới), `tests/integration/test_programming_soak_adr061.py` (mới), mục "Soak lần 3" và hai finding F20/F21 trong hồ sơ `EV-PROG-FBD-ST-MB-20260925`. Không đổi mã sản phẩm, không chạm bo.
