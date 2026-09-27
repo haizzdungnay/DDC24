@@ -60,3 +60,55 @@ Invoke-RestMethod 'http://localhost:5173/api/v1/programming/capabilities' -Heade
 ```
 
 Phải thấy `targetState=READY`, `edit=true`, `live=true`, `simulation=true`.
+
+## 5. Kiểm lỗi và chạy thử Program trên host, không cần web
+
+Hai công cụ này dành cho người viết chương trình và CI của dự án ứng dụng
+(`REC-DDC-FIELD-USE-20260927` U-16). Chúng chỉ chạy trên máy phát triển và
+không được cài lên bo.
+
+**Kiểm lỗi, không cần khoá ký.** `--check-only` biên dịch để báo lỗi, không sinh
+artifact. Kết quả có `usage` cho biết Program còn dư bao nhiêu so với trần profile
+(lệnh, slot ghi, slot, hằng, instance FB, binding):
+
+```bash
+B=build/release/cpp/core
+$B/mkddc-st-compile --source PRG_MAIN.st --source-id PRG_MAIN \
+  --pou-manifest pou-manifest.json --check-only
+```
+
+**Chạy thử theo kịch bản.** `mkddc-st-sim` nạp package đã đóng gói bằng đúng
+engine của chế độ SIMULATE, áp các lần ghi input theo thời gian ảo, và ghi CSV
+một dòng mỗi lần Program release. Package phải ký bằng khoá phát triển, rồi truyền
+khoá công khai tương ứng (64 ký tự hex) bằng `--trusted-key`:
+
+```bash
+$B/mkddc-st-compile --source PRG_MAIN.st --source-id PRG_MAIN \
+  --pou-manifest pou-manifest.json --key dev.key --out prg.mkir
+$B/mkddc-st-package --out package.bin --program PRG_MAIN=prg.mkir --period PRG_MAIN=100
+$B/mkddc-st-sim --package package.bin --trusted-key dev.pub \
+  --scenario scenario.json --out run.csv
+```
+
+`scenario.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "durationMs": 60000,
+  "events": [
+    {"atMs": 0, "input": "PRG_MAIN.InPermit", "value": true},
+    {"atMs": 5000, "input": "PRG_MAIN.CmdMode", "value": 4}
+  ],
+  "observe": ["PRG_MAIN.StsMode", "PRG_MAIN.DO01"]
+}
+```
+
+- `input`/`observe` là `<Program>.<Biến>`, chỉ gồm `VAR_INPUT`/`VAR_OUTPUT`.
+  Thiếu `observe` thì ghi mọi ô. BOOL nhận `true`/`false` hoặc `0`/`1`, TIME
+  tính bằng ms, số nguyên không nhận phần thập phân.
+- stdout là một dòng JSON tóm tắt (`ok`, `steps`, `rows`, `programs`, `inputs`).
+  Exit `0` khi chạy hết kịch bản; `1` khi Program fault (kèm `faultAtMs`) hoặc
+  kịch bản nhắc tới input/observation không có; `2` khi sai tham số, IO hay nạp
+  package.
+- Tên input sai được báo trước khi chạy tick đầu, không phải sau nhiều phút ảo.

@@ -209,6 +209,18 @@ add_executable(mkddc-programming-sim-worker
 target_link_libraries(mkddc-programming-sim-worker PRIVATE core_sim_engine core_st_sandbox)
 mkddc_apply_provenance(mkddc-programming-sim-worker)
 
+# U-16 (REC-DDC-FIELD-USE-20260927): chạy kịch bản trên CHÍNH `SimSession`. Tách
+# thành thư viện riêng để `core_tests` (đã có ST qua `core_lib`) test được mà không
+# nạp `core_st_sandbox` lần hai. Không nằm trong danh sách TU của worker.
+add_library(core_sim_scenario STATIC
+    application/programming/simulation/sim_scenario.cpp)
+target_link_libraries(core_sim_scenario PUBLIC core_sim_engine)
+
+# `mkddc-st-sim` — công cụ phát triển trên HOST (chạy thử Program theo kịch bản,
+# xuất CSV). KHÔNG cài lên bo: `install.sh` và gói phát hành không liệt kê nó.
+add_executable(mkddc-st-sim application/programming/programming_st_sim_main.cpp)
+target_link_libraries(mkddc-st-sim PRIVATE core_sim_scenario core_sim_engine core_st_sandbox)
+
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).
 add_executable(mkddc-st-validate application/st/st_validate_main.cpp)
@@ -367,6 +379,7 @@ if(CORE_BUILD_TESTS)
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp
       application/programming/tests/test_programming_sim_session.cpp
+      application/programming/tests/test_programming_sim_scenario.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
       domain/graph/tests/test_graph_protocol.cpp
       adapters/config/test_safe_state_config.cpp
@@ -414,7 +427,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_journal.cpp
       tests/allocation_probe.cpp
       tests/plc_shm_isolation.cpp)
-  target_link_libraries(core_tests PRIVATE st_compiler_lib core_sim_engine)
+  target_link_libraries(core_tests PRIVATE st_compiler_lib core_sim_scenario core_sim_engine)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).
@@ -422,11 +435,12 @@ if(CORE_BUILD_TESTS)
       ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>"
       ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
       ST_PACKAGE_CLI_PATH="$<TARGET_FILE:mkddc-st-package>"
+      ST_SIM_CLI_PATH="$<TARGET_FILE:mkddc-st-sim>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
       PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
       CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package)
+  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package mkddc-st-sim)
   # ADR-061 4.10 bước 2 — đo WCET từng bước của ScanLoop dưới tải IPC web giống
   # web-api, để so trước/sau trên CÙNG một máy. Không vào ctest: số đo thời gian
   # trên máy dev là để so sánh, không phải cổng pass/fail.
