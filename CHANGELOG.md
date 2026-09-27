@@ -28,7 +28,7 @@ Lộ ra khi chạy `scripts/verify-project.sh --wave W7` để tổng hợp rele
   - e2e mock: 10 spec, **195 passed / 0 failed** / 30 skipped (trước: 190 / 6 failed).
   - vitest 3466/3466; `npm run lint` và `npm run build` exit 0; `test_release_packaging_guard.py` 13/13.
   - `verify-project.sh --component release` exit 0 (build native `--fresh` + diễn tập cài mới/nâng cấp/rollback).
-  - e2e-real: gate369 đã ra khỏi lane. Còn T59-505 đỏ (xem Issue về hợp đồng thư viện). ISS-PGM03-08 đỏ 1 lần khi tải cao nhưng đạt 2/2 khi chạy riêng.
+  - e2e-real: gate369 đã ra khỏi lane. Còn T59-505 đỏ — Issue #786 (hợp đồng thư viện `4a2e7ead` so với kỳ vọng test). ISS-PGM03-08 đỏ 1 lần khi tải cao nhưng đạt 2/2 khi chạy riêng.
   - Hai ca vitest/e2e chập chờn khi tải cao (`LibraryPage` lọc server, ISS-PGM03-05) đạt khi chạy riêng (3/3, 2/2).
 
 ### Security — F-FR-04: `install.sh` sinh `JWT_SECRET` đủ 32 byte; web từ chối secret ngắn (2026-09-27)
