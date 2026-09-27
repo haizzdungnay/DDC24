@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Deploy — Core `main@01fd8708` lên Foxlinx, F20 PASS trên target, bắt đầu soak lần 3 (2026-09-27)
+
+- Phạm vi:
+  - bo lab Foxlinx (`OK1126B-buildroot`): chỉ thay `/usr/sbin/mkddc-core`; web `6471a34d`, FE và iobus `e4953080` giữ nguyên;
+  - hồ sơ `EV-PROG-FBD-ST-MB-20260925`: nhật ký lượt 4, hàng F06/F20, mục "F20 — kết quả trên target", mục "Soak lần 3 — lượt chạy trên bo", ma trận kiểm chứng;
+  - fixture mới `docs/07_records/test-evidence/programming/fixtures/2026-09-27-f20-target-journal.txt`.
+- **Deploy 04:02:19Z:**
+  - Core cross-build từ `main@01fd8708` (PR #778 F21/F22 và PR #779 F20): sha256 `296e077e…`, GLIBCXX_3.4.29.
+  - Sao lưu `/usr/sbin/mkddc-core.prev-20260927T040219Z`. `/proc/MainPID/exe` khớp sha.
+  - Log `rt.ok FIFO 80 mlock=1`, `rt.cpufreq_ok governor=performance`, `rt.cpu_idle_ok`, `rt.thread_off_scan_cpu` ×3. Safe-state lúc khởi động kéo dài khoảng 1 s như bình thường.
+- **F20 trên target, PASS.** Mốc 0 là dòng `programming.package_swap_withdraw` của Core.
+  - Đổi gói sang revision không có output, không tắt intent trước: `released_do=2 released_ext=8 handed_over=0`, và cùng scan có `safe_state.enter no_ctrl=1`.
+  - iobus: `ext_release_safe` cho 8 điểm ở +1 ms, DO cục bộ hở ở +2 ms. FC05 đầu tiên sau khi nhả ở +2,4 ms, đủ 8 coil ở +364 ms. API đọc lại coil = 0 ở +879 ms (đích ≤ 1,2 s).
+  - Ca điểm chung: lần Commission #68 → #69 cùng 10 binding cho `handed_over=10`, không nhả, không có `safe_state.enter`.
+- **Soak lần 3** (`scripts/programming_soak_adr061.py`):
+  - Revision thử `097e8a26…` (Project `SOAK-ADR061`, 8 Program, 1992 µs), `start --outputs hold` lúc 2026-09-27T04:04:39.923Z.
+  - Report sau 3 phút: C1–C4 PASS, tối đa theo phút 48,72 µs, base step 17 106/17 106.
+  - Active trước soak là #69 (`a9885879…`), do một phiên giao diện web trên máy dev Commission lúc 04:03:28, nên `stop` sẽ trả về #69.
+  - Job tách rời trên máy dev lấy report, journal và chạy `stop` lúc 2026-09-28 04:06Z.
+
 ### Fixed — F20: đổi gói rút claim mức 5 và lệnh EXT của instance gói cũ mà gói mới không nắm (2026-09-27)
 
 - Phạm vi:
@@ -36,7 +56,7 @@
   - `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok, 3 không có test).
   - Cross-build ARM `mkddc-core` exit 0: GLIBCXX_3.4.29, GLIBC_2.38.
   - `scripts/verify-project.sh --component layout` exit 0; `python3 scripts/docs_iso_harness.py --expect` PASS.
-- **Chưa làm:** deploy Core và đo target theo mục "F20 — cách đo trên target" của hồ sơ.
+- **Target:** đã deploy (Core `main@01fd8708`) và PASS ngày 2026-09-27, xem entry "Deploy Core `main@01fd8708`…" phía trên.
 
 ### Fixed — Graph không phải producer vẫn chi phối safe-state và ghi EXT dưới PROGRAM_ONLY (F21, F22, 2026-09-27)
 
