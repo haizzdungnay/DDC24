@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Check, ClipboardCheck, Copy, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardCheck, Copy, FlaskConical, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
@@ -66,6 +66,10 @@ const REVISION_LIFECYCLE: RevisionLifecycleState[] = [
 interface NavState {
   revisionId?: string
   checkId?: string
+  /** Đến từ nút "Kiểm tra" của workspace Chương trình/Mô phỏng: tự chạy Check
+   * một lần, không bắt người dùng bấm lần hai (chủ sở hữu 2026-09-27). Chỉ
+   * đi qua `location.state`, không lên URL: tải lại trang không chạy lại. */
+  autoCheck?: boolean
 }
 
 /**
@@ -116,12 +120,30 @@ export function CheckCommissionPage() {
   const overrides = useProgrammingOverrides()
   const commission = useCommissionWorkflow()
 
+  /* Tự chạy Check khi đến từ nút "Kiểm tra" (xem `NavState.autoCheck`). Chờ
+   * đúng điều kiện mà nút "Kiểm tra" của trang này đòi (Project đã về, có
+   * quyền, chưa có Check trong URL, workflow đang rảnh), chạy ĐÚNG MỘT lần, và
+   * xoá cờ khỏi history ngay để Back/tải lại không niêm phong thêm Revision. */
+  const autoCheckRequested = locationState?.autoCheck === true
+  const autoCheckStarted = useRef(false)
+  useEffect(() => {
+    if (!autoCheckRequested || autoCheckStarted.current) return
+    if (!canCheck || navState.checkId || workspace.status !== 'ready' || !workspace.project) return
+    if (checkWorkflow.state.phase !== 'idle') return
+    autoCheckStarted.current = true
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    void checkWorkflow.runCheck(workspace.project, workspace.syncAfterSeal)
+  }, [autoCheckRequested, canCheck, navState.checkId, workspace.status, workspace.project, workspace.syncAfterSeal, checkWorkflow, navigate, location.pathname, location.search])
+
   useEffect(() => {
     if (checkWorkflow.state.phase !== 'done' || !projectId) return
     const { revisionId, checkId } = checkWorkflow.state.check
     if (navState.revisionId === revisionId && navState.checkId === checkId) return
     navigate(`/eng/programming/projects/${projectId}/commission?revisionId=${encodeURIComponent(revisionId)}&checkId=${encodeURIComponent(checkId)}`, { replace: true })
-  }, [checkWorkflow.state, projectId, navState.revisionId, navState.checkId, navigate])
+    /* `latestCheck` của Project quyết định nút sang Mô phỏng (xem dưới) và bản
+     * mà Mô phỏng sẽ chạy — đọc lại để nó là Check vừa xong, không phải lần cũ. */
+    workspace.reload()
+  }, [checkWorkflow.state, projectId, navState.revisionId, navState.checkId, navigate, workspace.reload])
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [acknowledged, setAcknowledged] = useState<Set<ProgrammingImpactKey>>(new Set())
@@ -139,6 +161,7 @@ export function CheckCommissionPage() {
     [impact]
   )
   const checkPassed = check.data?.state === 'PASSED'
+  const isLatestCheck = Boolean(navState.checkId && workspace.project?.latestCheck?.checkId === navState.checkId)
   /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
    * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
    * điều khiển output), Commission đúng là hành động giải quyết nó, không
@@ -348,6 +371,25 @@ export function CheckCommissionPage() {
               />
             )}
             {!checkPassed && <p className="text-sm text-[var(--c-warn-fg)]">{pick('Chỉ Kiểm tra PASSED mới mở được Đưa vào vận hành.', 'Only a PASSED check unlocks Commission.')}</p>}
+            {/* Chủ sở hữu 2026-09-27: Kiểm tra PASSED xong là sang Mô phỏng được.
+              Mô phỏng luôn chạy bản Check PASSED MỚI NHẤT của Project, nên chỉ
+              đưa nút khi Check đang xem CHÍNH LÀ bản đó — deep-link vào một
+              Check cũ mà vẫn hiện nút sẽ đưa người dùng sang mô phỏng bản khác. */}
+            {checkPassed && projectId && isLatestCheck && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="primary"
+                  icon={<FlaskConical className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => navigate(programsWorkspacePath(projectId, { mode: 'SIMULATE' }))}
+                >
+                  {pick('Sang Mô phỏng', 'Go to Simulate')}
+                </Button>
+                <span className="text-xs text-[var(--c-text-dim)]">
+                  {pick('Chạy bản vừa Kiểm tra trong worker cách ly, không ghi đầu ra thật.',
+                        'Runs the revision just checked in an isolated worker; no real output.')}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </Panel>
