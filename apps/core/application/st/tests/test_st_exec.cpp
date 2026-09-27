@@ -902,6 +902,58 @@ END_PROGRAM
     }
 }
 
+/* U-11 (REC-DDC-FIELD-USE-20260927) — dải rộng hợp lệ theo IEC. Bản cũ bung
+ * `16..32767` thành 32 752 giá trị rồi từ chối "CASE label set is too large",
+ * buộc người viết chuyển sang IF. Dải chỉ nở thành hai phép so biên. */
+TEST(StExecCase, WideRangeLabelCompilesAndRunsAtBothBounds)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    CASE sel OF
+      0..15: out := 1;
+      16..32767: out := 2;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    for (const auto& item : {std::pair<int32_t, int32_t>{-1, 0}, {0, 1}, {15, 1}, {16, 2}, {1000, 2}, {32767, 2}}) {
+        rt.set_variable("out", StValue::make_int(0));
+        rt.set_variable("sel", StValue::make_int(static_cast<int16_t>(item.first)));
+        ASSERT_TRUE(rt.execute(0).ok);
+        EXPECT_EQ(get_int(rt, "out"), item.second) << "sel=" << item.first;
+    }
+}
+
+/* Lưu nhãn dạng khoảng không được làm mất phép kiểm trùng: nhãn chồng một dải
+ * đã có (kể cả chỉ chạm biên) vẫn bị từ chối, vì nhánh sau không bao giờ chạy
+ * tới được ở phần chồng. */
+TEST(StExecCase, OverlappingRangeLabelsAreRejected)
+{
+    for (const char* labels : {"10..20: out := 1; 20..30: out := 2;",
+                               "10..20: out := 1; 15: out := 2;",
+                               "5: out := 1; 0..100: out := 2;",
+                               "0..100: out := 1; 7, 200: out := 2;"}) {
+        const std::string source = std::string("PROGRAM t\nVAR_INPUT sel : INT; END_VAR\n"
+                                               "VAR_OUTPUT out : INT; END_VAR\nCASE sel OF\n") +
+                                   labels + "\nEND_CASE;\nEND_PROGRAM\n";
+        StIrModule module;
+        StDiagnostic diag;
+        StCompileOptions options;
+        options.enforce_review_gate = false;
+        EXPECT_FALSE(compile_st_source(source, &module, &diag, options)) << labels;
+        EXPECT_NE(diag.message.find("duplicate CASE label"), std::string::npos)
+            << labels << " → " << diag.message;
+    }
+    StProgramRuntime adjacent;
+    EXPECT_TRUE(make_runtime("PROGRAM t\nVAR_INPUT sel : INT; END_VAR\nVAR_OUTPUT out : INT; END_VAR\n"
+                             "CASE sel OF\n10..19: out := 1; 20..30: out := 2;\nEND_CASE;\nEND_PROGRAM\n",
+                             &adjacent))
+        << "hai dải liền kề không chồng nhau phải được nhận";
+}
+
 TEST(StExecCase, NegativeLabelsWork)
 {
     StProgramRuntime rt;
