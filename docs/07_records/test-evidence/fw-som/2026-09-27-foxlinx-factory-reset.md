@@ -19,7 +19,7 @@
 | Thiết bị Modbus | `/data/config/fieldbus.conf`, `fieldbus.lkg.json`, `fieldbus.journal`, `profiles/*.json` (CK508-04, CK508-05, CK509-06, CK509-07, mtr-1) | Chủ sở hữu yêu cầu |
 | Mạng | `/etc/mkddc/netcfg.conf`, `/data/mkddc/netcfg-transaction.json` (trạng thái `confirmed`), cấu hình mạng của hệ điều hành | Mất là mất đường vào bo từ xa |
 | SSH và bảo mật | Khoá SSH, `sshd_config` chỉ nhận khoá; unit `mkddc-ssh-guard`, `mkddc-incident-ipblock`, `mkddc-port-redirect` (sự cố `SEC-INC-20260926-FOXLINX`) | Không mở lại đường xâm nhập |
-| Cấu hình bo lab | `mkddc-fakemcu`, `mkddc-pty`; drop-in iobus `nomcu.conf` (bật Modbus RTU master trên RS-485 #1 qua fake MCU) và `pidfile.conf` (F-FR-01) | Bo lab không có MCU thật |
+| Cấu hình bo lab | `mkddc-fakemcu`, `mkddc-pty`; drop-in iobus `nomcu.conf` (bật Modbus RTU master trên RS-485 #1 qua fake MCU) và `pidfile.conf` (F-FR-01, gỡ lúc 05:18 sau khi iobus tự ghi pidfile) | Bo lab không có MCU thật |
 | Ảnh hệ điều hành | `/opt/unixbench` và mọi thứ của image Forlinx (ngày 2025-11-21) | Là trạng thái xuất xưởng |
 
 ### Xoá, rồi cài mới từ `main`
@@ -69,6 +69,10 @@ Cả ba qua `gzip -t`; danh sách mục nằm trong `01-state.list` và `02-bulk
 | 05:04 | Web không vào được từ ngoài (8082 bị từ chối) | F-FR-05; thêm drop-in `port.conf` `PORT=8082` | PASS |
 | 05:05 | Kiểm API | Mục 5 | PASS |
 | 05:06 | Xoá bộ cài tạm trên bo | `/var/tmp` sạch | Xong |
+| 05:12 | Chủ sở hữu merge PR #783 (`main@3cb08fbc`) | — | — |
+| 05:14–05:18 | Nâng cấp bằng `install.sh --with-fake-mcu` từ `main@3cb08fbc` (build lại toàn bộ, khoá `RELEASE`) | Checksum 7/7 trên bo. Khoá thiết bị giữ nguyên. Bản trước chụp vào `/var/backups/mkddc/0.1.0-20260927-051741`. Dữ liệu giữ nguyên, kể cả Project "CHUONG CONTROLLER" chủ sở hữu vừa tạo qua giao diện | PASS |
+| 05:18 | Gỡ drop-in `pidfile.conf` của iobus (sao lưu ở `/var/backups/mkddc/dropin-20260927/`), restart iobus | `INFO iobus.pidfile path=/run/mkddc/iobus.pid pid=124336`, file trùng MainPID, unit không còn `ExecStartPost` | **PASS F-FR-01** |
+| 05:19 | Kiểm lại toàn bộ | Mọi unit khớp `runtime-checksums` của `3cb08fbc`, `NRestarts=0`, `RELEASE`, RT ok, health 6/6, Modbus 4/4 online và 48 điểm `GOOD`, `port.conf` còn | PASS |
 
 ## 5. Kiểm chứng sau cài
 
@@ -89,7 +93,7 @@ Cả ba qua `gzip -t`; danh sách mục nằm trong `01-state.list` và `02-bulk
 
 | ID | Mức | Mô tả | Xử lý |
 |---|---|---|---|
-| F-FR-01 | P2 | Web đọc `/run/mkddc/iobus.pid` cho health và SIGHUP reload, nhưng trong gói phát hành cả binary lẫn unit iobus đều không ghi file này. Bo lab chạy được chỉ nhờ drop-in vá tay `pidfile.conf` (2026-08-04) | Đã sửa trong PR #783 (iobus tự ghi, như Core ở F16), chờ merge. Tạm giữ drop-in trên bo; gỡ khi deploy iobus từ PR #783 |
+| F-FR-01 | P2 | Web đọc `/run/mkddc/iobus.pid` cho health và SIGHUP reload, nhưng trong gói phát hành cả binary lẫn unit iobus đều không ghi file này. Bo lab chạy được chỉ nhờ drop-in vá tay `pidfile.conf` (2026-08-04) | **Đóng.** Sửa ở PR #783 (iobus tự ghi, như Core ở F16); deploy `main@3cb08fbc` 05:18, drop-in đã gỡ, health `iobus` ok |
 | F-FR-02 | P3 | Cross-build target `all` với HMI ON đứt, vì `gtest_discover_tests` chạy binary aarch64 trên x86 | Đã sửa trong PR #783 |
 | F-FR-03 | P1 bảo mật | Lệnh cross-build Core trong `DEPLOY_FOXLINX.md` thiếu `-DMKDDC_ST_PUBLIC_KEY_HEX`, nên Core deploy tay nhúng **khoá TEST** của repo (`99354613db15918a`), trong khi bản cài chính thức 2026-09-10 là `RELEASE` | Runbook sửa trong PR #783. Bo nay chạy `RELEASE` |
 | F-FR-04 | **P1 bảo mật** | `install.sh` sinh `JWT_SECRET` bằng `head -c 32 /dev/urandom \| tr -dc 'a-f0-9' \| head -c 64`. Lệnh chỉ giữ những byte ngẫu nhiên tình cờ là ký tự hex, nên ra 0–5 ký tự (đo trên bo: 2; 5 lần thử: 3, 2, 2, 5, 2). Nhánh dự phòng `mkddc-secret-$(date +%s)` cũng đoán trước được. Hệ quả: (a) web lặp restart vì cursor secret Programming < 16 byte; (b) nếu Programming tắt, web chạy với JWT ký bằng secret vài ký tự, ai cũng giả được token | Trên bo: đã sinh lại secret 64 hex. **Sửa mã `install.sh` (và kiểm tra độ dài tối thiểu phía web) chưa làm:** hệ thống tự duyệt chặn thao tác thuộc nhóm ghi secret trong phiên này; cần chủ sở hữu cho phép. `rotate-web-jwt-secret.sh` sinh đúng 64 hex và có test riêng |

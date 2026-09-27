@@ -13,7 +13,7 @@
 # GIỮ: cấu hình thiết bị Modbus (fieldbus.conf/.lkg.json/.journal, profiles/*.json);
 # mạng (/etc/mkddc/netcfg.conf, journal netcfg); SSH + khoá; ba unit bảo mật sau sự cố
 # (ssh-guard, incident-ipblock, port-redirect); cấu hình lab không MCU (fake MCU, drop-in
-# nomcu.conf và pidfile.conf của iobus — pidfile.conf gỡ khi PR #783 lên bo).
+# nomcu.conf của iobus; pidfile.conf không còn cần từ main@3cb08fbc).
 # XOÁ: mọi binary/unit/dữ liệu ứng dụng còn lại, sao lưu cũ, rác thử nghiệm, journal.
 set -euo pipefail
 STAGE=/var/tmp/mkddc-release

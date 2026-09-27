@@ -241,7 +241,7 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
    - mạng (`/etc/mkddc/netcfg.conf`, journal netcfg);
    - SSH chỉ nhận khoá;
    - ba unit bảo mật sau sự cố;
-   - drop-in iobus `nomcu.conf`, và `pidfile.conf` cho tới khi iobus tự ghi pidfile (PR #783).
+   - drop-in iobus `nomcu.conf`. (`pidfile.conf` không còn cần từ `main@3cb08fbc`: iobus tự ghi pidfile.)
 6. **Kiểm sau cài:**
    - `/proc/MainPID/exe` khớp `runtime-checksums.sha256`;
    - `mkddc-core --st-key-info` ra `RELEASE`;
