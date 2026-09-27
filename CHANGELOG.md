@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Deploy — web `main@d7022923` lên Foxlinx, F23 PASS trên target (2026-09-27)
+
+- Phạm vi: bo lab Foxlinx, chỉ thay `/opt/mkddc-web/mkddc-web`; Core `01fd8708`, iobus `e4953080` và FE `6471a34d` giữ nguyên. Hồ sơ `EV-PROG-FBD-ST-MB-20260925` (nhật ký lượt 4, hàng F23).
+- **Deploy 04:27:27Z:**
+  - Cross-build `GOOS=linux GOARCH=arm64 CGO_ENABLED=0`, `buildGitCommit=d7022923…`, sha256 `77145e8e…`. Sao lưu `/opt/mkddc-web/mkddc-web.bak-20260927T042727Z`.
+  - `mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper` đều restart và chạy đúng sha qua `/proc/MainPID/exe`, `NRestarts=0`.
+  - Tool ST cùng profile `1cb61fec…`, log `programming.toolchain ok`. Health 6/6 `ok`, `targetState=READY`, tập chu kỳ ADR-061, Active #69 `HEALTHY`.
+- **F23 trên target, PASS:** trang Program của `SOAK-ADR061` không còn Program của AHU; trang AHU vẫn hiện `5619efde…` `RUNNING CORE_LIVE`.
+- **Ghi chú:** web khởi động lại đánh dấu mọi trạng thái bền vững là `UNKNOWN` (`MarkAllProgramRuntimeStatesUnknown`, thiết kế sẵn có), nên Program ngoài Active hiện `UNKNOWN UNAVAILABLE` thay vì `LAST_KNOWN`.
+
 ### Fixed — F23: trang Program của một Project hiện Program của Project đang chạy (2026-09-27)
 
 - Phạm vi: `apps/web-api/internal/programming/application/programs.go` (`ListPrograms`, hàm mới `liveOwnerProjectID`), test mới `programs_owner_f23_test.go` và một test trong `programs_test.go`; hàng F23 của `EV-PROG-FBD-ST-MB-20260925`.
@@ -21,7 +31,7 @@
 - **Kiểm chứng (host):**
   - 3 test mới: chủ vs Project khác; chủ không xác định (3 ca); không gọi STATUS khi không cần. Trên `programs.go` của `main@360ec81c`, 2 test đầu đỏ.
   - `gofmt` sạch; `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok, 3 không có test).
-- **Target:** deploy web sau khi merge, ghi ở entry deploy riêng.
+- **Target:** deploy và PASS ngày 2026-09-27, xem entry "Deploy — web `main@d7022923`…" phía trên.
 
 ### Changed — `VS-PROG-009`: ngưỡng ≥ 10 chu kỳ mỗi lớp (`VVP-PROG-001` v2.4, `DDD-CTRL-PROG-001` v1.4, 2026-09-27)
 
