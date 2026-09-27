@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-11 (đăng ký `docs/CHUONG_YEU_CAU/` vào register và đưa hai brief đầu vào `d.md`/`Yeucau_FE.md` từ thư mục gốc vào đó; không đổi nội dung nghiệp vụ, không đổi trạng thái hồ sơ nào. Trạng thái kỹ thuật giữ nguyên từ 2026-08-25: PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
+**Cập nhật:** 2026-09-26 (đăng ký hai record rà soát kiến trúc/so sánh/finding; các trạng thái task Programming bên dưới là snapshot hồ sơ theo mốc 2026-08-25, không phải kết quả kiểm lại trong phiên này; `RELEASE_READY` vẫn `NO-GO` theo Verification)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -24,6 +24,8 @@
 | [Development & operations](06_operations/DEVELOPMENT_AND_OPERATIONS.md) | build, test, deploy, vận hành và phục hồi |
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
+| [Rà soát kiến trúc và đề xuất cạnh tranh DDC-24](07_records/reviews/DDC24_ARCHITECTURE_SOLUTION_COMPARATIVE_REVIEW_2026-09-26.md) | record 26–27/09: cấu trúc Program/Function/FB, topology, so sánh hãng và §9 gồm chín đề xuất tính năng để Product review; chưa đổi Product authority |
+| [Finding và đề xuất kiến trúc DDC-24](07_records/reviews/DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md) | record riêng 7 finding, giải pháp đề xuất, bằng chứng và điều kiện đóng; không thay Design authority |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner + Architect approved (`AUTH-PROG-2026-08-24-05`), `ADR-053` Accepted và `F-P59-GHOST-POU-001` `CLOSED` (quyết định + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
