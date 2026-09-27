@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Fixed — Phản hồi ghi Virtual Point mang ETag mới; lần ghi thứ hai trong cùng phiên không còn 412 (ISS-PIO-37, 2026-09-27)
+
+- **Phạm vi:** `apps/web-api/internal/app/virtualpoint.go` (tạo, sửa, xoá), `apps/web-api/internal/app/configapi.go` (ghi cả cấu hình VP), test mới `virtualpoint_write_etag_test.go`.
+- **Triệu chứng:** trên bo Foxlinx (RC `main@910bea95`, 2026-09-27), xoá hai Virtual Point liên tiếp trên trang Virtual Points thì VP thứ hai không xoá được, và không có thông báo nào. Chỉ tải lại trang mới xoá tiếp được.
+- **Nguyên nhân gốc:** `If-Match` bắt buộc cho sửa/xoá/ghi-cả-cấu-hình (ISS-PIO-37), nhưng `setVirtualPointETag` chỉ được gọi ở phản hồi đọc. FE (`rememberVirtualPointETag`) đọc ETag từ mọi phản hồi, nên sau một lần ghi nó giữ ETag cũ và lần ghi kế tiếp bị 412.
+- **Cách sửa:** bốn phản hồi ghi thành công gắn ETag của revision mới. FE không đổi.
+- **Kiểm chứng:** `TestVirtualPointWriteResponsesCarryNextETag` (tạo rồi xoá hai lần liên tiếp, mỗi lần dùng ETag của phản hồi ghi trước) đỏ trên mã cũ (POST trả ETag rỗng), xanh sau khi sửa.
+- **Liên quan:** lỗi mất nhãn khi tạo VP phát hiện cùng lúc, chưa sửa, xem Issue #789.
+
 ### Changed — Đồng bộ ADR-061/062 vào Product Spec v3.3 và SRS v1.3; manifest authority v1.65 (2026-09-27)
 
 - **Phạm vi:**

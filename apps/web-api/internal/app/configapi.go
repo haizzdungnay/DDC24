@@ -234,6 +234,8 @@ func (a *App) handlePutConfigVirtualPoints(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// ISS-PIO-37: phản hồi ghi mang revision MỚI, để lần ghi kế tiếp của cùng client không bị 412 vì ETag cũ.
+	a.setVirtualPointETag(w)
 	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "success", Applied: true, Reload: reloadNone, Warnings: []string{}})
 }
 

@@ -334,6 +334,8 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		item.Generation = authority.Generations[item.ID]
 	}
 	a.syncVirtualPointToCore(r.Context(), item)
+	// ISS-PIO-37: phản hồi ghi mang revision MỚI, để lần ghi kế tiếp của cùng client không bị 412 vì ETag cũ.
+	a.setVirtualPointETag(w)
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -394,6 +396,8 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.syncVirtualPointToCore(r.Context(), item)
+	// ISS-PIO-37: phản hồi ghi mang revision MỚI, để lần ghi kế tiếp của cùng client không bị 412 vì ETag cũ.
+	a.setVirtualPointETag(w)
 	writeJSON(w, http.StatusOK, item)
 }
 
@@ -440,6 +444,8 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// ISS-PIO-37: phản hồi ghi mang revision MỚI, để lần ghi kế tiếp của cùng client không bị 412 vì ETag cũ.
+	a.setVirtualPointETag(w)
 	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "success", Applied: true, Reload: reloadNone, Warnings: []string{}})
 }
 
