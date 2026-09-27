@@ -138,6 +138,11 @@ export interface ModbusRTUDevice {
    *  `0`/vắng = suy từ `poll_ms` (fast = poll_ms, slow = poll_ms × 10). */
   poll_fast_ms?: number
   poll_slow_ms?: number
+  /** U-07 (REC-DDC-FIELD-USE-20260927) — số coil tối đa gom vào MỘT lệnh FC15.
+   *  `0`/`1`/vắng = TẮT (mặc định): mỗi coil một lệnh FC05 như trước. `2..16` =
+   *  các coil liền kề đổi cùng lúc lên dây thành một khung. Chỉ bật khi thiết bị
+   *  hỗ trợ FC15. */
+  coil_write_batch_max?: number
 }
 
 /** `ISS-PIO-21` — hai cách đánh số địa chỉ Modbus.
@@ -1297,6 +1302,10 @@ export interface ModbusFrame {
   reason: string
   elapsedUs: number
   attempt: number
+  /** U-18 — CHỈ có ở khung GHI: giá trị đã phát trên dây. Coil là 0/1 từng bit
+   *  (phần tử đầu ứng với `addr`), thanh ghi là word 16-bit. Khung đọc và iobus
+   *  bản cũ không có trường này. */
+  values?: number[]
 }
 
 export interface ModbusFramesResponse {

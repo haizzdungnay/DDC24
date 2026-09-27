@@ -94,6 +94,29 @@ describe('FrameMonitor', () => {
     await waitFor(() => expect(api.getModbusFrames).toHaveBeenCalledTimes(2))
   })
 
+  /* U-18 (REC-DDC-FIELD-USE-20260927): trước bản này người vận hành chỉ thấy
+   * "FC05 coil 3 OK" và phải đoán lệnh vừa rồi là đóng hay mở từ lượt đọc lại
+   * một giây sau. */
+  it('khung ghi hiện giá trị đã phát, khung đọc hiện dấu gạch', async () => {
+    api.getModbusFrames.mockResolvedValue({
+      ...reply,
+      frames: [
+        { at: 1755600000003, bus: 1, slave: 4, fc: 15, addr: 0, count: 8, ok: true, reason: 'ok', elapsedUs: 30000, attempt: 1, values: [1, 0, 1, 1, 0, 0, 1, 0] },
+        { at: 1755600000002, bus: 1, slave: 5, fc: 6, addr: 40, count: 1, ok: true, reason: 'ok', elapsedUs: 20000, attempt: 1, values: [1234] },
+        { at: 1755600000001, bus: 1, slave: 4, fc: 1, addr: 0, count: 8, ok: true, reason: 'ok', elapsedUs: 29000, attempt: 1 }
+      ]
+    })
+    renderPanel()
+
+    await waitFor(() => expect(screen.getAllByTestId('frame-values')).toHaveLength(3))
+    const cells = screen.getAllByTestId('frame-values')
+    expect(screen.getByRole('columnheader', { name: 'Giá trị ghi' })).toBeInTheDocument()
+    expect(cells[0]).toHaveTextContent('1 0 1 1 0 0 1 0')
+    expect(cells[0]).toHaveAttribute('title', 'Phần tử đầu ứng với địa chỉ 0')
+    expect(cells[1]).toHaveTextContent('1234')
+    expect(cells[2]).toHaveTextContent('—')
+  })
+
   it('không tự bật theo dõi liên tục — mặc định là một lượt đọc', async () => {
     vi.useFakeTimers()
     try {

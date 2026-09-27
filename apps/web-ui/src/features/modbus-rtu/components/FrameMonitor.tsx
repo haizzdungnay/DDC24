@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
 import type { ModbusFramesResponse } from '../../../shared/types'
-import { buttonClass } from '../shared'
+import { buttonClass, frameValueText } from '../shared'
 
 /**
  * Xem khung truyền Modbus RTU — `T57-3.9` (`ADR-046` bản sửa 2026-08-19).
@@ -103,7 +103,7 @@ export function FrameMonitor({ bus = 0 }: { bus?: number }) {
             )
             : (
               <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--c-border)]">
-                <table className="w-full min-w-[720px] border-collapse text-xs">
+                <table className="w-full min-w-[840px] border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-[var(--c-border)] bg-[var(--c-surface-2)] text-left uppercase text-[var(--c-text-dim)]">
                       <th className="px-2 py-1">{pick('Thời điểm', 'Time')}</th>
@@ -112,6 +112,7 @@ export function FrameMonitor({ bus = 0 }: { bus?: number }) {
                       <th className="px-2 py-1">FC</th>
                       <th className="px-2 py-1">{pick('Địa chỉ', 'Address')}</th>
                       <th className="px-2 py-1">{pick('Số lượng', 'Count')}</th>
+                      <th className="px-2 py-1">{pick('Giá trị ghi', 'Written value')}</th>
                       <th className="px-2 py-1">{pick('Kết quả', 'Result')}</th>
                       <th className="px-2 py-1">{pick('Thời lượng', 'Elapsed')}</th>
                       <th className="px-2 py-1">{pick('Lần phát', 'Attempt')}</th>
@@ -126,6 +127,17 @@ export function FrameMonitor({ bus = 0 }: { bus?: number }) {
                         <td className="px-2 py-1 font-mono">{frame.fc}</td>
                         <td className="px-2 py-1 font-mono">{frame.addr}</td>
                         <td className="px-2 py-1 font-mono">{frame.count}</td>
+                        {/* U-18: trước đây muốn biết lệnh là ĐÓNG hay MỞ phải
+                            suy từ lượt đọc lại một giây sau. */}
+                        <td
+                          className="px-2 py-1 font-mono"
+                          data-testid="frame-values"
+                          title={frame.values && frame.values.length > 1
+                            ? pick(`Phần tử đầu ứng với địa chỉ ${frame.addr}`, `First element is address ${frame.addr}`)
+                            : undefined}
+                        >
+                          {frameValueText(frame)}
+                        </td>
                         <td
                           className="px-2 py-1 font-semibold"
                           style={{ color: frame.ok ? 'var(--c-good-fg)' : 'var(--c-fault-fg)' }}

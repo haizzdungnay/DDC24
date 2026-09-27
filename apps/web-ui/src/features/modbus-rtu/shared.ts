@@ -1,5 +1,5 @@
 import { ApiError } from '../../shared/types'
-import type { ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../shared/types'
+import type { ModbusFrame, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../shared/types'
 
 /* Phần dùng chung của 4 page Modbus RTU sau khi tách `ModbusRtuPage` monolith
  * theo MBR-B301. Trước đây mỗi mảnh giao diện tự khai báo lại `inputClass`,
@@ -14,7 +14,38 @@ export const emptyDevice: ModbusRTUDevice = {
   parity: 'N', stop_bits: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2,
   offline_after_errors: 2, offline_probe_ms: 10000,
   // `ISS-PIO-22` — 0 = suy từ `poll_ms`; thiết bị mới không tự ép một nhịp nào.
-  poll_fast_ms: 0, poll_slow_ms: 0
+  poll_fast_ms: 0, poll_slow_ms: 0,
+  // U-07 — TẮT: không phải thiết bị nào cũng hỗ trợ FC15, người dùng tự bật.
+  coil_write_batch_max: 0
+}
+
+/** U-07 — số coil mỗi lệnh FC15 khi người dùng vừa BẬT gom: 8 khớp module relay
+ *  8 kênh phổ biến (CK-508). Giá trị lớn hơn không có lợi khi thiết bị chỉ có 8
+ *  coil, và vài thiết bị giới hạn số coil mỗi khung. */
+export const DEFAULT_COIL_WRITE_BATCH = 8
+export const MAX_COIL_WRITE_BATCH = 16
+
+/** U-07 — gom FC15 đang bật cho thiết bị ĐÃ LƯU không (`0`/`1`/vắng = tắt). */
+export function coilBatchEnabled(device: Pick<ModbusRTUDevice, 'coil_write_batch_max'>): boolean {
+  return (device.coil_write_batch_max ?? 0) > 1
+}
+
+/** U-07 — trạng thái ô bật FC15 TRONG FORM: bật khi giá trị khác 0.
+ *
+ *  Khác `coilBatchEnabled` có chủ ý. Người dùng gõ "16" thì ô đi qua giá trị 1,
+ *  và xoá trắng ô thì giá trị là `NaN`; coi hai trạng thái trung gian đó là
+ *  "tắt" thì ô số biến mất ngay dưới con trỏ và phím gõ tiếp rơi vào khoảng
+ *  không. Ô `required min=2` chặn lưu cho tới khi số hợp lệ. Thiết bị nạp vào
+ *  form phải qua `formDevice` để giá trị 1 (cũng là "tắt") về 0. */
+export function coilBatchToggleOn(device: Pick<ModbusRTUDevice, 'coil_write_batch_max'>): boolean {
+  const value = device.coil_write_batch_max
+  return value !== undefined && value !== 0
+}
+
+/** Chuẩn hoá thiết bị trước khi nạp vào form sửa: `coil_write_batch_max` = 1
+ *  (tắt, theo hợp đồng) về 0 để ô bật FC15 hiện đúng trạng thái tắt. */
+export function formDevice(device: ModbusRTUDevice): ModbusRTUDevice {
+  return coilBatchEnabled(device) ? device : { ...device, coil_write_batch_max: 0 }
 }
 
 export const emptyPoint: ModbusRTUPoint = {
@@ -92,4 +123,14 @@ export function deviceLinkLabel(row?: ModbusRTUDiagnostics, lang: 'vi' | 'en' = 
   if (row.total_polls === 0) return lang === 'en' ? 'Never communicated' : 'Chưa liên lạc lần nào'
   if (row.consecutive_errors > 0) return lang === 'en' ? 'Communication lost' : 'Mất liên lạc'
   return NO_DATA
+}
+
+/** U-18 (REC-DDC-FIELD-USE-20260927) — giá trị đã phát của khung GHI.
+ *
+ *  Coil (FC05/FC15) hiện từng bit cách nhau một dấu cách, bit đầu là `addr` —
+ *  "1 0 1 1" đọc được ngay là coil nào đóng. Thanh ghi hiện word 16-bit thập
+ *  phân như trên dây. Khung đọc không có giá trị (đã có ở bảng điểm). */
+export function frameValueText(frame: Pick<ModbusFrame, 'fc' | 'values'>): string {
+  if (!frame.values || frame.values.length === 0) return NO_DATA
+  return frame.fc === 5 || frame.fc === 15 ? frame.values.join(' ') : frame.values.join(', ')
 }
