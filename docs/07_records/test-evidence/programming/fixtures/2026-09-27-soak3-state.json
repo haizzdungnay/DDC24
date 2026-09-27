@@ -1,0 +1,2147 @@
+{
+ "baseUrl": "http://mekong-fac.ddns.net:8082",
+ "createdAt": "2026-09-27T04:04:00.938Z",
+ "prepare": {
+  "at": "2026-09-27T04:04:03.442Z",
+  "budget": {
+   "baseStepMs": 10,
+   "checks": {
+    "distinctPeriods": true,
+    "periodClassesWithinMaxTasks": true,
+    "periodsInSet": true,
+    "programsWithinEnabled": true,
+    "programsWithinTotal": true,
+    "worstCaseBelowStepBudget": true
+   },
+   "limits": {
+    "maxProgramsEnabled": 16,
+    "maxProgramsTotal": 32,
+    "maxTasks": 8
+   },
+   "ok": true,
+   "programBudgetUs": 249,
+   "programCount": 8,
+   "stepBudgetUs": 2000,
+   "worstCaseStepUs": 1992
+  },
+  "checkId": "fe81fea3-8aab-4fa7-9ace-c8df12126168",
+  "checkState": "PASSED",
+  "contentHash": "2eb48e229d8495171e9dc376c0faf2a81f8f9a0e6aef0b8c97993dbe9644dd89",
+  "revisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+  "sequence": 1
+ },
+ "programs": [
+  {
+   "name": "SOAK_P00010",
+   "objectId": "56a80054-b0d3-49f7-b493-bbfe4c71ddb4",
+   "periodMs": 10,
+   "programId": "56a80054-b0d3-49f7-b493-bbfe4c71ddb4"
+  },
+  {
+   "name": "SOAK_P00050",
+   "objectId": "1e94290b-7fec-432f-aa77-9b6eaeb3422a",
+   "periodMs": 50,
+   "programId": "1e94290b-7fec-432f-aa77-9b6eaeb3422a"
+  },
+  {
+   "name": "SOAK_P00100",
+   "objectId": "ad78e960-68c1-4fb5-a886-478f54ad4954",
+   "periodMs": 100,
+   "programId": "ad78e960-68c1-4fb5-a886-478f54ad4954"
+  },
+  {
+   "name": "SOAK_P00500",
+   "objectId": "1b4314ae-3e69-4501-bd3d-6444379efe64",
+   "periodMs": 500,
+   "programId": "1b4314ae-3e69-4501-bd3d-6444379efe64"
+  },
+  {
+   "name": "SOAK_P01000",
+   "objectId": "cbdb488c-2cda-4c10-be10-e9d86023ce6c",
+   "periodMs": 1000,
+   "programId": "cbdb488c-2cda-4c10-be10-e9d86023ce6c"
+  },
+  {
+   "name": "SOAK_P05000",
+   "objectId": "a7abb966-cb07-4509-b46d-5a5916e97b4f",
+   "periodMs": 5000,
+   "programId": "a7abb966-cb07-4509-b46d-5a5916e97b4f"
+  },
+  {
+   "name": "SOAK_P10000",
+   "objectId": "904373a0-0f35-41d7-8883-6553657de18d",
+   "periodMs": 10000,
+   "programId": "904373a0-0f35-41d7-8883-6553657de18d"
+  },
+  {
+   "name": "SOAK_P50000",
+   "objectId": "156ec646-06ae-4e49-9ed5-e3a3f67cbe91",
+   "periodMs": 50000,
+   "programId": "156ec646-06ae-4e49-9ed5-e3a3f67cbe91"
+  }
+ ],
+ "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777",
+ "projectName": "SOAK-ADR061",
+ "schema": "mkddc.programming-soak-adr061/1",
+ "start": {
+  "acknowledgements": [
+   "controlLibrary",
+   "programSet",
+   "enableIntent"
+  ],
+  "activeBefore": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+  "at": "2026-09-27T04:04:38.771Z",
+  "baseline": {
+   "activeRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "capturedAt": "2026-09-27T04:04:39.961Z",
+   "lkgRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "observedAt": "2026-09-27T04:04:39.923Z",
+   "outputs": {
+    "AO-01": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-02": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-03": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-04": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "CK50804-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50805-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "DO-01": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-02": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-03": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-04": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    }
+   },
+   "producerState": "READY",
+   "programs": {
+    "156ec646-06ae-4e49-9ed5-e3a3f67cbe91": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 599,
+     "maxExecNs": 5833,
+     "missedReleaseCount": 0,
+     "periodMs": 50000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "1b4314ae-3e69-4501-bd3d-6444379efe64": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 99,
+     "maxExecNs": 4667,
+     "missedReleaseCount": 0,
+     "periodMs": 500,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "1e94290b-7fec-432f-aa77-9b6eaeb3422a": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 0,
+     "maxExecNs": 6126,
+     "missedReleaseCount": 0,
+     "periodMs": 50,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "56a80054-b0d3-49f7-b493-bbfe4c71ddb4": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 0,
+     "maxExecNs": 7001,
+     "missedReleaseCount": 0,
+     "periodMs": 10,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "904373a0-0f35-41d7-8883-6553657de18d": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 599,
+     "maxExecNs": 2042,
+     "missedReleaseCount": 0,
+     "periodMs": 10000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "a7abb966-cb07-4509-b46d-5a5916e97b4f": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 599,
+     "maxExecNs": 1750,
+     "missedReleaseCount": 0,
+     "periodMs": 5000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "ad78e960-68c1-4fb5-a886-478f54ad4954": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 0,
+     "maxExecNs": 2333,
+     "missedReleaseCount": 0,
+     "periodMs": 100,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "cbdb488c-2cda-4c10-be10-e9d86023ce6c": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 599,
+     "maxExecNs": 1750,
+     "missedReleaseCount": 0,
+     "periodMs": 1000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    }
+   },
+   "safeState": true,
+   "safeStateNoControllerOnly": true,
+   "task": {
+    "baseStepUs": 10000,
+    "budgetUs": 1999,
+    "consecutiveOverruns": 0,
+    "health": "HEALTHY",
+    "healthReasons": null,
+    "jitterMaxUs": 42,
+    "jitterViolationCount": 0,
+    "lastExecNs": 11667,
+    "maxExecNs": 33835,
+    "missedBaseStepCount": 0,
+    "missedReleaseCount": 0,
+    "overrunCount": 0,
+    "periodMs": 10,
+    "runCount": 13756,
+    "state": "RUNNING",
+    "taskId": "main"
+   },
+   "taskPeriodsMs": [
+    10,
+    50,
+    100,
+    500,
+    1000,
+    5000,
+    10000,
+    50000
+   ],
+   "taskState": "RUNNING"
+  },
+  "impact": {
+   "activeOverrides": "NONE",
+   "controlLibrary": "PRESENT",
+   "cutover": "NONE",
+   "enableIntent": "PRESENT",
+   "modbusMappingChanges": "NONE",
+   "outputMappingChanges": "NONE",
+   "physicalMappingChanges": "NONE",
+   "programSet": "PRESENT",
+   "publishedSignals": "NONE",
+   "retain": "NONE",
+   "virtualPointChanges": "NONE",
+   "writableOutputsAffected": "NONE"
+  },
+  "impactFrom": "none",
+  "lkgBefore": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+  "operation": {
+   "actualActiveRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "keepsRunningRevision": true,
+   "kind": "COMMISSION",
+   "operationId": "db0ffa79-947d-499c-b6d4-62363b2f7fa0",
+   "previousActiveRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+   "requestedRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "startedAt": "2026-09-27T04:04:39.285Z",
+   "state": "SUCCEEDED",
+   "step": "COMMITTED",
+   "updatedAt": "2026-09-27T04:04:39.395Z"
+  },
+  "outputsMode": "hold",
+  "ownerIntentsBefore": {
+   "05041ab2-0e4c-46a9-9f8d-b5b8c0a7aca0": {
+    "desiredEnabled": false,
+    "generation": 18,
+    "runtimeState": "DISABLED",
+    "runtimeStateSource": "LAST_KNOWN"
+   },
+   "136d8ab2-0d8d-4382-9df5-3d8709260f4d": {
+    "desiredEnabled": true,
+    "generation": 2,
+    "runtimeState": "UNKNOWN",
+    "runtimeStateSource": "UNAVAILABLE"
+   },
+   "5619efde-f419-44cc-b4aa-981e19425481": {
+    "desiredEnabled": true,
+    "generation": 4,
+    "runtimeState": "RUNNING",
+    "runtimeStateSource": "CORE_LIVE"
+   },
+   "5c8d53a7-5cd7-4e0b-a9d6-5aca6232bee4": {
+    "desiredEnabled": false,
+    "generation": 18,
+    "runtimeState": "DISABLED",
+    "runtimeStateSource": "LAST_KNOWN"
+   },
+   "9f1887fe-9fe1-47b2-8801-baf5248a75be": {
+    "desiredEnabled": true,
+    "generation": 3,
+    "runtimeState": "UNKNOWN",
+    "runtimeStateSource": "UNAVAILABLE"
+   }
+  },
+  "ownerProjectId": "e96357dc-b00c-4116-a4a0-1dd71ea116db",
+  "ownerProjectName": "AHU-MASTER-SEQUENCE",
+  "released": [],
+  "snapshotBefore": {
+   "activeRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+   "capturedAt": "2026-09-27T04:04:38.614Z",
+   "lkgRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+   "observedAt": "2026-09-27T04:04:38.563Z",
+   "outputs": {
+    "AO-01": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-02": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-03": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 4
+    },
+    "AO-04": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "CK50804-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50804-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 1
+    },
+    "CK50805-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "DO-01": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": true
+    },
+    "DO-02": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": true
+    },
+    "DO-03": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": true
+    },
+    "DO-04": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    }
+   },
+   "producerState": "READY",
+   "programs": {
+    "5619efde-f419-44cc-b4aa-981e19425481": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": null,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 30,
+     "maxExecNs": 29168,
+     "missedReleaseCount": 0,
+     "periodMs": 50,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    }
+   },
+   "safeState": false,
+   "safeStateNoControllerOnly": false,
+   "task": {
+    "baseStepUs": 10000,
+    "budgetUs": 1999,
+    "consecutiveOverruns": 0,
+    "health": "HEALTHY",
+    "healthReasons": null,
+    "jitterMaxUs": 42,
+    "jitterViolationCount": 0,
+    "lastExecNs": 3791,
+    "maxExecNs": 33835,
+    "missedBaseStepCount": 0,
+    "missedReleaseCount": 0,
+    "overrunCount": 0,
+    "periodMs": 10,
+    "runCount": 13620,
+    "state": "RUNNING",
+    "taskId": "main"
+   },
+   "taskPeriodsMs": [
+    10,
+    50,
+    100,
+    500,
+    1000,
+    5000,
+    10000,
+    50000
+   ],
+   "taskState": "RUNNING"
+  },
+  "soakIntents": [
+   {
+    "at": "2026-09-27T04:04:38.817Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "56a80054-b0d3-49f7-b493-bbfe4c71ddb4",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:38.867Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "1e94290b-7fec-432f-aa77-9b6eaeb3422a",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:38.917Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "ad78e960-68c1-4fb5-a886-478f54ad4954",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:38.970Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "1b4314ae-3e69-4501-bd3d-6444379efe64",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:39.030Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "cbdb488c-2cda-4c10-be10-e9d86023ce6c",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:39.082Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "a7abb966-cb07-4509-b46d-5a5916e97b4f",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:39.130Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "904373a0-0f35-41d7-8883-6553657de18d",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   },
+   {
+    "at": "2026-09-27T04:04:39.186Z",
+    "desiredEnabled": true,
+    "generation": 1,
+    "programId": "156ec646-06ae-4e49-9ed5-e3a3f67cbe91",
+    "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+   }
+  ],
+  "soakIntentsBefore": {
+   "5619efde-f419-44cc-b4aa-981e19425481": null
+  },
+  "startedAt": "2026-09-27T04:04:39.923Z"
+ },
+ "stop": {
+  "at": "2026-09-27T04:15:48.638Z",
+  "attempts": [
+   {
+    "activeNow": "097e8a26-4592-4acd-9754-4d44db8ab682",
+    "at": "2026-09-27T04:15:45.793Z",
+    "intentsOnly": false,
+    "operation": {
+     "actualActiveRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+     "keepsRunningRevision": true,
+     "kind": "RESTORE",
+     "operationId": "3fca24f4-f857-4eba-8014-9ca0b5a555a6",
+     "previousActiveRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+     "requestedRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+     "startedAt": "2026-09-27T04:15:47.513Z",
+     "state": "SUCCEEDED",
+     "step": "COMMITTED",
+     "updatedAt": "2026-09-27T04:15:47.62Z"
+    },
+    "ownerRunning": true,
+    "result": "RESTORED",
+    "snapshotAfter": {
+     "activeRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+     "capturedAt": "2026-09-27T04:15:48.166Z",
+     "lkgRevisionId": "a9885879-0303-4567-a1ac-2bb04b1ccc49",
+     "observedAt": "2026-09-27T04:15:48.123Z",
+     "outputs": {
+      "AO-01": {
+       "forced": null,
+       "kind": "AO",
+       "priority": null,
+       "quality": "good",
+       "value": 0
+      },
+      "AO-02": {
+       "forced": null,
+       "kind": "AO",
+       "priority": null,
+       "quality": "good",
+       "value": 0
+      },
+      "AO-03": {
+       "forced": null,
+       "kind": "AO",
+       "priority": null,
+       "quality": "good",
+       "value": 4
+      },
+      "AO-04": {
+       "forced": null,
+       "kind": "AO",
+       "priority": null,
+       "quality": "good",
+       "value": 0
+      },
+      "CK50804-DO1": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO2": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO3": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO4": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO5": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO6": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO7": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50804-DO8": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO1": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO2": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO3": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO4": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO5": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO6": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO7": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50805-DO8": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO1": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO2": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO3": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO4": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO5": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO6": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO7": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50906-DO8": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO1": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO2": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO3": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO4": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO5": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO6": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO7": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "CK50907-DO8": {
+       "forced": null,
+       "kind": "modbus_rtu",
+       "priority": null,
+       "quality": "GOOD",
+       "value": 0
+      },
+      "DO-01": {
+       "forced": null,
+       "kind": "DO",
+       "priority": null,
+       "quality": "good",
+       "value": false
+      },
+      "DO-02": {
+       "forced": null,
+       "kind": "DO",
+       "priority": null,
+       "quality": "good",
+       "value": false
+      },
+      "DO-03": {
+       "forced": null,
+       "kind": "DO",
+       "priority": null,
+       "quality": "good",
+       "value": true
+      },
+      "DO-04": {
+       "forced": null,
+       "kind": "DO",
+       "priority": null,
+       "quality": "good",
+       "value": false
+      }
+     },
+     "producerState": "READY",
+     "programs": {
+      "156ec646-06ae-4e49-9ed5-e3a3f67cbe91": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "1b4314ae-3e69-4501-bd3d-6444379efe64": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "1e94290b-7fec-432f-aa77-9b6eaeb3422a": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "5619efde-f419-44cc-b4aa-981e19425481": {
+       "consecutiveMissedRelease": 0,
+       "coreState": "RUNNING",
+       "desiredEnabled": null,
+       "enabled": true,
+       "faultCount": 0,
+       "health": "HEALTHY",
+       "lastFaultCode": "",
+       "lastRunAgeMs": 40,
+       "maxExecNs": 8750,
+       "missedReleaseCount": 0,
+       "periodMs": 50,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "CORE_LIVE"
+      },
+      "56a80054-b0d3-49f7-b493-bbfe4c71ddb4": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "904373a0-0f35-41d7-8883-6553657de18d": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "a7abb966-cb07-4509-b46d-5a5916e97b4f": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "ad78e960-68c1-4fb5-a886-478f54ad4954": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      },
+      "cbdb488c-2cda-4c10-be10-e9d86023ce6c": {
+       "consecutiveMissedRelease": null,
+       "coreState": null,
+       "desiredEnabled": true,
+       "enabled": null,
+       "faultCount": null,
+       "health": "UNKNOWN",
+       "lastFaultCode": null,
+       "lastRunAgeMs": null,
+       "maxExecNs": null,
+       "missedReleaseCount": null,
+       "periodMs": null,
+       "runtimeState": "RUNNING",
+       "runtimeStateSource": "LAST_KNOWN"
+      }
+     },
+     "safeState": false,
+     "safeStateNoControllerOnly": false,
+     "task": {
+      "baseStepUs": 10000,
+      "budgetUs": 1999,
+      "consecutiveOverruns": 0,
+      "health": "HEALTHY",
+      "healthReasons": null,
+      "jitterMaxUs": 47,
+      "jitterViolationCount": 0,
+      "lastExecNs": 3792,
+      "maxExecNs": 36169,
+      "missedBaseStepCount": 0,
+      "missedReleaseCount": 0,
+      "overrunCount": 0,
+      "periodMs": 10,
+      "runCount": 80576,
+      "state": "RUNNING",
+      "taskId": "main"
+     },
+     "taskPeriodsMs": [
+      10,
+      50,
+      100,
+      500,
+      1000,
+      5000,
+      10000,
+      50000
+     ],
+     "taskState": "RUNNING"
+    },
+    "soakIntents": [
+     {
+      "at": "2026-09-27T04:15:48.346Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "56a80054-b0d3-49f7-b493-bbfe4c71ddb4",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.389Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "1e94290b-7fec-432f-aa77-9b6eaeb3422a",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.433Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "ad78e960-68c1-4fb5-a886-478f54ad4954",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.474Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "1b4314ae-3e69-4501-bd3d-6444379efe64",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.513Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "cbdb488c-2cda-4c10-be10-e9d86023ce6c",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.552Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "a7abb966-cb07-4509-b46d-5a5916e97b4f",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.597Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "904373a0-0f35-41d7-8883-6553657de18d",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     },
+     {
+      "at": "2026-09-27T04:15:48.638Z",
+      "desiredEnabled": false,
+      "generation": 2,
+      "programId": "156ec646-06ae-4e49-9ed5-e3a3f67cbe91",
+      "projectId": "b8b12a50-2799-42d3-9fdc-d12b4c444777"
+     }
+    ]
+   }
+  ],
+  "final": {
+   "activeOk": true,
+   "baseSteps": 66740,
+   "criteria": {
+    "C1": {
+     "detail": "base step 10 ms, tập chu kỳ đúng",
+     "verdict": "PASS"
+    },
+    "C2": {
+     "detail": "overrun +0; maxExecNs Task 36169 (ngân sách 1999 µs)",
+     "verdict": "PASS"
+    },
+    "C3": {
+     "detail": "missed release Task +0, Program +0, missed base step +0",
+     "verdict": "PASS"
+    },
+    "C4": {
+     "detail": "lệch > 100 µs +0; jitterMaxUs 60 s gần nhất 47",
+     "verdict": "PASS"
+    }
+   },
+   "deltas": {
+    "jitterViolationCount": 0,
+    "missedBaseStepCount": 0,
+    "missedReleaseCount": 0,
+    "overrunCount": 0,
+    "runCount": 66740
+   },
+   "expectedBaseSteps": 66740,
+   "notes": [],
+   "overall": "ĐANG CHẠY",
+   "programs": [
+    {
+     "cycles": 66740,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 0,
+     "maxExecNs": 31502,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P00010",
+     "periodMs": 10,
+     "programId": "56a80054-b0d3-49f7-b493-bbfe4c71ddb4",
+     "remainingSeconds": null,
+     "reportedPeriodMs": 10,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "ĐẠT"
+    },
+    {
+     "cycles": 13348,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 29,
+     "maxExecNs": 26834,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P00050",
+     "periodMs": 50,
+     "programId": "1e94290b-7fec-432f-aa77-9b6eaeb3422a",
+     "remainingSeconds": null,
+     "reportedPeriodMs": 50,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "ĐẠT"
+    },
+    {
+     "cycles": 6674,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 29,
+     "maxExecNs": 6417,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P00100",
+     "periodMs": 100,
+     "programId": "ad78e960-68c1-4fb5-a886-478f54ad4954",
+     "remainingSeconds": 332.6,
+     "reportedPeriodMs": 100,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    },
+    {
+     "cycles": 1334,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 29,
+     "maxExecNs": 8459,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P00500",
+     "periodMs": 500,
+     "programId": "1b4314ae-3e69-4501-bd3d-6444379efe64",
+     "remainingSeconds": 4333.0,
+     "reportedPeriodMs": 500,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    },
+    {
+     "cycles": 667,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 29,
+     "maxExecNs": 4667,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P01000",
+     "periodMs": 1000,
+     "programId": "cbdb488c-2cda-4c10-be10-e9d86023ce6c",
+     "remainingSeconds": 9333.0,
+     "reportedPeriodMs": 1000,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    },
+    {
+     "cycles": 133,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 3029,
+     "maxExecNs": 2625,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P05000",
+     "periodMs": 5000,
+     "programId": "a7abb966-cb07-4509-b46d-5a5916e97b4f",
+     "remainingSeconds": 49335.0,
+     "reportedPeriodMs": 5000,
+     "requiredCycles": 10000,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    },
+    {
+     "cycles": 66,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 8029,
+     "maxExecNs": 2334,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P10000",
+     "periodMs": 10000,
+     "programId": "904373a0-0f35-41d7-8883-6553657de18d",
+     "remainingSeconds": 85740.0,
+     "reportedPeriodMs": 10000,
+     "requiredCycles": 8640,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    },
+    {
+     "cycles": 13,
+     "enabled": true,
+     "faultDelta": 0,
+     "lastRunAgeMs": 18029,
+     "maxExecNs": 6125,
+     "missedReleaseDelta": 0,
+     "name": "SOAK_P50000",
+     "periodMs": 50000,
+     "programId": "156ec646-06ae-4e49-9ed5-e3a3f67cbe91",
+     "remainingSeconds": 85750.0,
+     "reportedPeriodMs": 50000,
+     "requiredCycles": 1728,
+     "runtimeState": "RUNNING",
+     "status": "CHƯA ĐỦ"
+    }
+   ],
+   "restarted": false,
+   "soakComplete": false,
+   "taskPeriodMs": 10,
+   "windowSeconds": 667.4
+  },
+  "finalSnapshot": {
+   "activeRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "capturedAt": "2026-09-27T04:15:47.377Z",
+   "lkgRevisionId": "097e8a26-4592-4acd-9754-4d44db8ab682",
+   "observedAt": "2026-09-27T04:15:47.323Z",
+   "outputs": {
+    "AO-01": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-02": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-03": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "AO-04": {
+     "forced": null,
+     "kind": "AO",
+     "priority": null,
+     "quality": "good",
+     "value": 0
+    },
+    "CK50804-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50804-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50805-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50906-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO1": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO2": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO3": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO4": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO5": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO6": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO7": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "CK50907-DO8": {
+     "forced": null,
+     "kind": "modbus_rtu",
+     "priority": null,
+     "quality": "GOOD",
+     "value": 0
+    },
+    "DO-01": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-02": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-03": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    },
+    "DO-04": {
+     "forced": null,
+     "kind": "DO",
+     "priority": null,
+     "quality": "good",
+     "value": false
+    }
+   },
+   "producerState": "READY",
+   "programs": {
+    "156ec646-06ae-4e49-9ed5-e3a3f67cbe91": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 18029,
+     "maxExecNs": 6125,
+     "missedReleaseCount": 0,
+     "periodMs": 50000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "1b4314ae-3e69-4501-bd3d-6444379efe64": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 29,
+     "maxExecNs": 8459,
+     "missedReleaseCount": 0,
+     "periodMs": 500,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "1e94290b-7fec-432f-aa77-9b6eaeb3422a": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 29,
+     "maxExecNs": 26834,
+     "missedReleaseCount": 0,
+     "periodMs": 50,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "56a80054-b0d3-49f7-b493-bbfe4c71ddb4": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 0,
+     "maxExecNs": 31502,
+     "missedReleaseCount": 0,
+     "periodMs": 10,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "904373a0-0f35-41d7-8883-6553657de18d": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 8029,
+     "maxExecNs": 2334,
+     "missedReleaseCount": 0,
+     "periodMs": 10000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "a7abb966-cb07-4509-b46d-5a5916e97b4f": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 3029,
+     "maxExecNs": 2625,
+     "missedReleaseCount": 0,
+     "periodMs": 5000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "ad78e960-68c1-4fb5-a886-478f54ad4954": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 29,
+     "maxExecNs": 6417,
+     "missedReleaseCount": 0,
+     "periodMs": 100,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    },
+    "cbdb488c-2cda-4c10-be10-e9d86023ce6c": {
+     "consecutiveMissedRelease": 0,
+     "coreState": "RUNNING",
+     "desiredEnabled": true,
+     "enabled": true,
+     "faultCount": 0,
+     "health": "HEALTHY",
+     "lastFaultCode": "",
+     "lastRunAgeMs": 29,
+     "maxExecNs": 4667,
+     "missedReleaseCount": 0,
+     "periodMs": 1000,
+     "runtimeState": "RUNNING",
+     "runtimeStateSource": "CORE_LIVE"
+    }
+   },
+   "safeState": true,
+   "safeStateNoControllerOnly": true,
+   "task": {
+    "baseStepUs": 10000,
+    "budgetUs": 1999,
+    "consecutiveOverruns": 0,
+    "health": "HEALTHY",
+    "healthReasons": null,
+    "jitterMaxUs": 47,
+    "jitterViolationCount": 0,
+    "lastExecNs": 8751,
+    "maxExecNs": 36169,
+    "missedBaseStepCount": 0,
+    "missedReleaseCount": 0,
+    "overrunCount": 0,
+    "periodMs": 10,
+    "runCount": 80496,
+    "state": "RUNNING",
+    "taskId": "main"
+   },
+   "taskPeriodsMs": [
+    10,
+    50,
+    100,
+    500,
+    1000,
+    5000,
+    10000,
+    50000
+   ],
+   "taskState": "RUNNING"
+  }
+ }
+}

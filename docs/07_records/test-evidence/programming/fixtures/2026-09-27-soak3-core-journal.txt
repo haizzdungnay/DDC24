@@ -1,0 +1,44 @@
+# EV-PROG-FBD-ST-MB-20260925 — soak lần 3, journal mkddc-core từ mốc start (bỏ AUDIT web_cmd, web_ipc.conn)
+2026-09-27T04:04:39.357642+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.activate_intents operation=db0ffa79-947d-499c-b6d4-62363b2f7fa0 received=8 enabled=8 disabled=0 dropped_limit=0 ignored=0
+2026-09-27T04:04:39.363673+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.package_swap_withdraw reason=replace retired=1 released_ao=0 released_do=2 released_ext=8 handed_over=0 live_publishes=1
+2026-09-27T04:04:39.363673+0000 OK1126B-buildroot mkddc-core[121171]: ERROR safe_state.enter fault=0 stale=0 graph_bad=0 no_ctrl=1 overrun=0 (AO->safe, DO->open)
+2026-09-27T04:05:22.383358+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.74 max_us=48.72 avg_us=11.80 overruns=0 count=6001 window_max_us=49 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:05:22.383358+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=110 ipc_us=4 sched_us=188 logic_us=137 alarm_us=22 ext_us=20 out_us=29 publish_us=77 total_us=393 base_step_us=10000 scans=6001
+2026-09-27T04:06:22.383418+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.66 max_us=46.17 avg_us=11.12 overruns=0 count=6000 window_max_us=47 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:06:22.383418+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=114 ipc_us=5 sched_us=188 logic_us=68 alarm_us=23 ext_us=20 out_us=26 publish_us=74 total_us=369 base_step_us=10000 scans=6000
+2026-09-27T04:07:22.383360+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.46 max_us=48.03 avg_us=10.40 overruns=0 count=6000 window_max_us=49 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:07:22.383360+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=108 ipc_us=5 sched_us=190 logic_us=68 alarm_us=21 ext_us=21 out_us=26 publish_us=69 total_us=379 base_step_us=10000 scans=6000
+2026-09-27T04:08:22.383347+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.67 max_us=47.61 avg_us=10.42 overruns=0 count=6000 window_max_us=48 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:08:22.383347+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=98 ipc_us=5 sched_us=188 logic_us=65 alarm_us=20 ext_us=18 out_us=25 publish_us=70 total_us=359 base_step_us=10000 scans=6000
+2026-09-27T04:09:22.393357+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.64 max_us=51.10 avg_us=10.36 overruns=0 count=6001 window_max_us=52 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:09:22.393357+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=96 ipc_us=4 sched_us=183 logic_us=169 alarm_us=22 ext_us=19 out_us=25 publish_us=71 total_us=370 base_step_us=10000 scans=6001
+2026-09-27T04:10:22.393356+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.40 max_us=46.37 avg_us=10.35 overruns=0 count=6000 window_max_us=47 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:10:22.393356+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=141 ipc_us=4 sched_us=188 logic_us=61 alarm_us=22 ext_us=22 out_us=26 publish_us=78 total_us=388 base_step_us=10000 scans=6000
+2026-09-27T04:11:22.393355+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.37 max_us=47.98 avg_us=10.35 overruns=0 count=6000 window_max_us=48 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:11:22.393355+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=97 ipc_us=3 sched_us=180 logic_us=71 alarm_us=23 ext_us=19 out_us=27 publish_us=77 total_us=365 base_step_us=10000 scans=6000
+2026-09-27T04:12:22.393363+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.36 max_us=46.65 avg_us=10.35 overruns=0 count=6000 window_max_us=47 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:12:22.393363+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=98 ipc_us=5 sched_us=188 logic_us=70 alarm_us=23 ext_us=15 out_us=27 publish_us=65 total_us=371 base_step_us=10000 scans=6000
+2026-09-27T04:13:22.403361+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.39 max_us=52.34 avg_us=10.42 overruns=0 count=6001 window_max_us=53 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:13:22.403361+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=97 ipc_us=42 sched_us=199 logic_us=67 alarm_us=22 ext_us=22 out_us=27 publish_us=64 total_us=373 base_step_us=10000 scans=6001
+2026-09-27T04:14:22.413357+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.40 max_us=46.02 avg_us=10.36 overruns=0 count=6001 window_max_us=47 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:14:22.413357+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=126 ipc_us=4 sched_us=185 logic_us=66 alarm_us=23 ext_us=23 out_us=26 publish_us=66 total_us=364 base_step_us=10000 scans=6001
+
+# Sau stop (Restore về #69 lúc 04:15:47) — bước 7 của F20
+2026-09-27T04:15:47.584456+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.activate_intents operation=3fca24f4-f857-4eba-8014-9ca0b5a555a6 received=1 enabled=1 disabled=0 dropped_limit=0 ignored=0
+2026-09-27T04:15:47.593589+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.package_swap_withdraw reason=replace retired=0 released_ao=0 released_do=0 released_ext=0 handed_over=0 live_publishes=1
+2026-09-27T04:15:47.593589+0000 OK1126B-buildroot mkddc-core[121171]: INFO  safe_state.exit (trả quyền cho priority resolver)
+---IOBUS
+2026-09-27T04:15:47.595839+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x04 value=0x04 ack=ok
+2026-09-27T04:15:47.595839+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_ao raw=[0,0,26214,0] ack=ok
+2026-09-27T04:15:47.795264+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:48.045140+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:15:48.295271+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:48.544997+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:15:48.795620+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:49.044936+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:15:49.295104+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:49.545076+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:15:49.795016+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:50.045551+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:15:50.295025+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:15:50.544946+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok

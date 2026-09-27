@@ -1,0 +1,36 @@
+Revision thử 097e8a26-4592-4acd-9754-4d44db8ab682; Active trước soak a9885879-0303-4567-a1ac-2bb04b1ccc49; chế độ đầu ra hold; safeState hiện True (chỉ T7: True)
+Cửa sổ: 0 h 10 ph 08 s (chưa đủ 24 h); base step Core đã chạy 60811 / kỳ vọng theo đồng hồ 60811
+
+| Tiêu chí | Kết quả | Chi tiết |
+|---|---|---|
+| C1 | PASS | base step 10 ms, tập chu kỳ đúng |
+| C2 | PASS | overrun +0; maxExecNs Task 36169 (ngân sách 1999 µs) |
+| C3 | PASS | missed release Task +0, Program +0, missed base step +0 |
+| C4 | PASS | lệch > 100 µs +0; jitterMaxUs 60 s gần nhất 47 |
+| C4 (journal) | PASS | 10 phút; tối đa theo phút 52.34 µs; 0 phút > 100 µs; violations +0; missed_steps +0; 0 dòng base_step_missed; 0 khoảng hụt log |
+
+| Program | Chu kỳ | Trạng thái | Chu kỳ đã chạy | Ngưỡng VS-PROG-009 | Missed release | VS-PROG-009 |
+|---|---|---|---|---|---|---|
+| SOAK_P00010 | 10 ms | RUNNING | 60811 | 10000 | +0 | ĐẠT |
+| SOAK_P00050 | 50 ms | RUNNING | 12162 | 10000 | +0 | ĐẠT |
+| SOAK_P00100 | 100 ms | RUNNING | 6081 | 10000 | +0 | CHƯA ĐỦ (còn ~0 h 06 ph 31 s) |
+| SOAK_P00500 | 500 ms | RUNNING | 1216 | 10000 | +0 | CHƯA ĐỦ (còn ~1 h 13 ph 12 s) |
+| SOAK_P01000 | 1000 ms | RUNNING | 608 | 10000 | +0 | CHƯA ĐỦ (còn ~2 h 36 ph 32 s) |
+| SOAK_P05000 | 5000 ms | RUNNING | 121 | 10000 | +0 | CHƯA ĐỦ (còn ~13 h 43 ph 15 s) |
+| SOAK_P10000 | 10000 ms | RUNNING | 60 | 8640 | +0 | CHƯA ĐỦ (còn ~23 h 50 ph 00 s) |
+| SOAK_P50000 | 50000 ms | RUNNING | 12 | 1728 | +0 | CHƯA ĐỦ (còn ~23 h 50 ph 00 s) |
+
+KẾT LUẬN SOAK: ĐANG CHẠY
+Đầu ra ghi được: 40 điểm; 12 điểm khác giá trị lúc trước start
+  AO-03: trước 4 (None) → sau start 0 (None) → hiện 0 (None)
+  CK50804-DO1: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO2: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO3: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO4: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO5: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO6: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO7: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  CK50804-DO8: trước 1 (None) → sau start 1 (None) → hiện 0 (None)
+  DO-01: trước True (None) → sau start False (None) → hiện False (None)
+  DO-02: trước True (None) → sau start False (None) → hiện False (None)
+  DO-03: trước True (None) → sau start False (None) → hiện False (None)

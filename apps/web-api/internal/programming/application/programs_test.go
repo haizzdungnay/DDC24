@@ -399,12 +399,16 @@ func TestListProgramsLastKnownRejectsPhantomTransitions(t *testing.T) {
 func TestListProgramsIncludesCoreOnlyInstancesWithoutFabricatingIntent(t *testing.T) {
 	store := openProgramsTestStore(t)
 	seedProgramsProject(t, store, programsIntentSeed{programID: "prog-known", desiredEnabled: true})
-	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+	// F23: dòng "chỉ Core biết" chỉ thuộc Project sở hữu Active, nên Active ở
+	// đây phải là Revision của chính Project này.
+	sealProgramsRevision(t, store, programsActiveRevision)
+	active := programsActiveRevision
+	service := newProgramsServiceWithStatus(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 		ProgramMetricsView{InstanceID: "prog-known", State: "RUNNING", Enabled: true, PeriodMS: 1000,
 			LastRunMonoNS: 8_900_000_000},
 		ProgramMetricsView{InstanceID: "prog-orphan", State: "RUNNING", Enabled: true, PeriodMS: 5000,
 			LastRunMonoNS: 8_700_000_000},
-	)})
+	)}, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: &active})
 	page, err := service.ListPrograms(context.Background(), programsProjectID)
 	if err != nil {
 		t.Fatalf("ListPrograms: %v", err)

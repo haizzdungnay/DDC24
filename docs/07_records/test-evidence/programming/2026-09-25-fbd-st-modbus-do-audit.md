@@ -2,7 +2,7 @@
 
 **ID:** EV-PROG-FBD-ST-MB-20260925  
 **Ngày:** 2026-09-25  
-**Trạng thái:** Lượt 1, 2 và 3 đã đo trên target. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07, F08, F10, F11, F12, F13, F14, F15, F16 đã sửa, deploy và kiểm trên Foxlinx; F09 kết luận không phải lỗi. F02 đóng bằng ADR-061 (base step 10 ms, tập chu kỳ {10…50000} ms; lượt 3 đo C1–C3 PASS trên target). C4 đạt trong cửa sổ 600 s trên kernel non-RT nhờ CPU3 độc quyền (F11, F14, F15, F16); soak 24 h đang chạy tới 2026-09-27 06:47Z. PREEMPT_RT (BSP Forlinx) và `isolcpus=3 rcu_nocbs=3` (kernel hỗ trợ, cần sửa bootloader và reboot bo từ xa) là dự phòng nếu soak có vi phạm. Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng. Soak 24 h lần 3 (revision thử 8 chu kỳ thay Active) có runbook ở mục "Soak lần 3"; F20 và F21 mở khi dựng công cụ. F20 đã sửa (PR #779), deploy cùng Core `main@01fd8708` lúc 2026-09-27 04:02Z và **PASS trên target**: bàn giao 10 điểm chung lúc 04:03:28, nhả 2 DO + 8 EXT ngay tại boundary lúc 04:04:39. Soak lần 3 chạy từ 2026-09-27 04:04:39Z; job tự động lấy report và trả Active lúc 2026-09-28 04:06Z.  
+**Trạng thái:** Lượt 1, 2 và 3 đã đo trên target. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07, F08, F10, F11, F12, F13, F14, F15, F16 đã sửa, deploy và kiểm trên Foxlinx; F09 kết luận không phải lỗi. F02 đóng bằng ADR-061 (base step 10 ms, tập chu kỳ {10…50000} ms; lượt 3 đo C1–C3 PASS trên target). C4 đạt trong cửa sổ 600 s trên kernel non-RT nhờ CPU3 độc quyền (F11, F14, F15, F16); soak 24 h đang chạy tới 2026-09-27 06:47Z. PREEMPT_RT (BSP Forlinx) và `isolcpus=3 rcu_nocbs=3` (kernel hỗ trợ, cần sửa bootloader và reboot bo từ xa) là dự phòng nếu soak có vi phạm. Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng. Soak 24 h lần 3 (revision thử 8 chu kỳ thay Active) có runbook ở mục "Soak lần 3"; F20 và F21 mở khi dựng công cụ. F20 đã sửa (PR #779), deploy cùng Core `main@01fd8708` lúc 2026-09-27 04:02Z và **PASS trên target**: bàn giao 10 điểm chung lúc 04:03:28, nhả 2 DO + 8 EXT ngay tại boundary lúc 04:04:39. Soak lần 3 (8 chu kỳ) **PASS** theo ngưỡng chủ sở hữu chốt lại ngày 2026-09-27 (≥ 10 chu kỳ mỗi lớp, C1–C4 PASS, missed release 0): chạy 04:04:39Z → 04:15:47Z, lớp 50 s đạt 12 chu kỳ, lệch nhịp tối đa theo phút 52,34 µs. Bo đã trả về Active #69. F23 (trang Program của một Project hiện Program của Project đang chạy) mở ra lúc dọn soak, đã sửa và deploy web.  
 **Workspace:** bắt đầu từ `main@e8a14ff0`; binary đang chạy trên bo build từ nhánh `fix/programming-modbus-command-seq-20260925` (chưa commit): core `222dbe9e…`, iobus `2439512b…`, web `5c5861e3…`, FE `index.html` `8e86b065…`.  
 **Đích:** `OK1126B-buildroot` (Forlinx OK1126B-S, Rockchip RV1126B 4×Cortex-A53 1,296 GHz, RAM 2 GB, Linux 6.1.141 `PREEMPT_VOLUNTARY`, HZ=250), `mekong-fac.ddns.net:2223`, web `:8082`.
 
@@ -206,13 +206,14 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 - Test C++ (10 050 mẫu, ghi đè 50) và Go (600 mẫu qua 3 lô, `-race`) |
 | F19 | P3 vận hành | Core in một dòng `INFO web_ipc.client_connected fd=N` cho MỖI kết nối web, từ luồng quét. Đo trên bo lượt 4 (2026-09-26 11:54Z): ~3 dòng/s lúc bình thường, ~50 dòng/s khi có Trace 10 ms, tức hàng triệu dòng/ngày vào journald, mỗi dòng một lần ghi stderr trên luồng SCHED_FIFO | Lượt 4, 11:54Z | web-api mở kết nối Unix MỚI cho mỗi yêu cầu (`sendWebIPC`, `GetMonitor` mỗi mẫu trace), còn `WebIpc::drain()` log mọi lần `accept4`. Kết nối bị từ chối vì đủ `max_clients` thì ngược lại bị đóng im lặng | **ĐÃ SỬA (PR #775), PASS target 2026-09-27 03:04**: 0 dòng `client_connected`, 1 dòng `web_ipc.connections accepted=154 refused=0` mỗi phút. bỏ dòng mỗi kết nối; một dòng `INFO web_ipc.connections accepted=N refused=M window_s=60 clients=K` mỗi 60 s, chỉ khi cửa sổ có kết nối, in từ luồng `web-ipc` (không còn từ luồng quét); kết nối bị từ chối được đếm. Test `WebIpc.ConnectionsAreLoggedAsWindowedSummaryNotPerConnection` |
 
-Finding mở ra khi dựng soak lần 3 (2026-09-27). F20 đã sửa theo quyết định sẵn có của chủ sở hữu (ADR-061 §3, F06), deploy và PASS trên target ngày 2026-09-27. F21 và F22 (mở khi sửa F21) đã sửa ở PR #778.
+Finding mở ra khi dựng soak lần 3 (2026-09-27). F20 đã sửa theo quyết định sẵn có của chủ sở hữu (ADR-061 §3, F06), deploy và PASS trên target ngày 2026-09-27. F21 và F22 (mở khi sửa F21) đã sửa ở PR #778. F23 mở ra lúc dọn soak lần 3 và đã sửa ở web-api.
 
 | ID | Mức | Mô tả | Bằng chứng | Nguyên nhân gốc | Hướng sửa |
 |---|---|---|---|---|---|
 | F20 | **P2** | Commission/Restore sang gói không còn Program nào lái một AO/DO cục bộ thì đầu ra đó **giữ giá trị cuối của gói cũ vô thời hạn**: không bị rút tại safe boundary, không hết `holdTtl` 60 s, và T7 `no_ctrl` không bật. Trái ADR-051 ("trần tuyệt đối") và `PROGRAMMING_CONTROL_SEMANTICS` §6 | Host, test tạm qua `ScanLoop` thật (`ScanRig` của `test_programming_activate_intent.cpp`, không commit), chạy trên `main@8353fdc1` và lại trên cây đã gộp `main@3198d493` (sau X19), cùng kết quả: P_old lái DO-01, Commission gói chỉ có P_soak không output. Sau đó P_old rời scheduler, nhưng DO-01 vẫn = 1 ở mức 5 và `safe=0 no_ctrl=0`, kể cả sau 65 s. Target, lượt 4 02:41:54: kích hoạt revision thử có hai Program Disabled, không có dòng `safe_state.enter` nào | Chỉ `st_withdraw_instance_outputs` gọi `PriorityResolver::release_ao/release_do` ở mức 5, và nó chỉ chạy từ `st_withdraw_stale_outputs` trên Program của gói **đang chạy**. `swap_prepared_program_set_at_boundary` chuyển gói cũ sang slot rollback, còn coordinator chỉ xoá sổ candidate (`PACKAGE_REPLACED`), không rút mức 5 | **ĐÃ SỬA (PR #779, `main@01fd8708`), DEPLOY và PASS target 2026-09-27 04:03–04:04Z**, xem mục "F20 — kết quả trên target". Quyết định đã có (ADR-061 §3, F06): instance bị loại khỏi gói là instance bị rút. Tại đúng boundary đổi gói, `on_safe_boundary(resolver, writer)` gọi `st_withdraw_replaced_outputs()` cho topology vừa rời scheduler. Lời gọi chạy sau khi owner mode đã áp dụng và trước khi Program của gói mới chạy. Điểm gói mới cũng nắm (instance `RUNNING`, owner `PROGRAM_ONLY`) được bàn giao, không nhả: không glitch EXT, không tạo lại `no_ctrl` (F13). Điểm còn lại: AO/DO nhả mức 5, EXT đã publish về `safe_value`. Rollback chu kỳ đầu (owner về `GRAPH_ONLY`) nhả mọi claim của gói ứng viên. Host: 8 test `ProgrammingPackageSwapWithdraw.*`, 7 ca qua `ScanLoop` thật. Trên `main@fa18bfe7` và lại trên `main@0c23c143` (sau F21/F22) có 6/7 ca `ScanLoop` đỏ; sau sửa cả 8 xanh, `ctest` 1623/1623. Mutation "nhả hết điểm của gói cũ" làm đỏ 4 ca điểm chung/rollback. Cách đo target ở mục "F20 — cách đo trên target". Soak lần 3 chạy `start --outputs hold` trên Core có F20, nên chính lần đổi gói của soak là phép đo target |
 | F21 | P3 | `ScanLoop::step` gọi `SafeState::apply(last_io_, table, &out)` mà không truyền `graph_is_active_producer`. Tham số này mặc định `true` kể cả ở `PROGRAM_ONLY`. Nếu có `graph.json` được nạp thì dưới Programming T7 không bao giờ bật, còn T6 vẫn xét input của một graph không chạy | Đọc mã và lịch sử git: `d594c023` truyền `active_mode != CutoverMode::PROGRAM_ONLY` (kèm `runtime_task_state`). Merge `0a98a907` (2026-08-28) làm mất cả hai. `safe_state.hpp` vẫn mô tả tham số. **Chưa đo.** Lúc đo F13 trên bo T7 có bật, nên khi đó graph không được nạp | Mất khi gộp nhánh | **ĐÃ SỬA (nhánh `fix/core-producer-gating-f21-f22-20260927`)**: truyền lại `active_mode != CutoverMode::PROGRAM_ONLY`, đúng dạng ở `d594c023`. Test `ScanLoop.ProgramOnlyWithLoadedGraphAndNoControllerEntersSafeState` đỏ trên mã cũ (dòng 181), xanh trên mã sửa. Trên Foxlinx không có `graph.json` (`graph.none`) nên hành vi bo hiện tại không đổi |
 | F22 | P2 | Dưới PROGRAM_ONLY, `ScanLoop` vẫn gọi `graph->apply_ext_writes()`. Graph đã chạy ở GRAPH_ONLY giữ `_setpoint` cuối của node `Modbus_RTU_Write`, nên sau Commission mỗi scan nó ghi đè lại giá trị cũ lên slot EXT mà Program đang giữ: `ext_cmd_seq` tăng hai lần mỗi scan và giá trị của graph thắng Program | Đọc mã khi sửa F21 (2026-09-27); test host đỏ trên mã cũ: `setpoint` 10 → 50, seq 5 → tăng | Bước 5 đã khoá `graph->execute()` theo PROGRAM_ONLY (TASK-PROG-306), nhưng bước 5a ghi EXT của graph thì không | **ĐÃ SỬA (cùng nhánh F21)**: chỉ gọi `apply_ext_writes` khi graph là producer. Test `ScanLoop.ProgramOnlyGraphDoesNotOverwriteExtCommands` đỏ trên mã cũ, xanh trên mã sửa. Trên Foxlinx không có `graph.json` nên hành vi bo hiện tại không đổi |
+| F23 | P3 | `GET /programming/projects/{id}/programs` gộp mọi Program trong bảng sống của Core mà Project chưa ghi intent ("chỉ Core biết") vào trang của **bất kỳ** Project nào. Khi có hơn một Project, trang của Project không chạy hiện Program của Active là `RUNNING CORE_LIVE` với `desiredEnabled=null`, như thể Program đó thuộc Project này | Target 2026-09-27: lúc 04:16Z trang của `SOAK-ADR061` liệt kê `5619efde…` (Program của AHU, Active #69). Trong 11 phút soak, trang của AHU (đang mở trên giao diện) liệt kê 8 Program `SOAK_*` | `ListPrograms` coi mọi instance Core báo mà thiếu intent là Program mồ côi của Project đang hỏi. Nhưng bảng Program của Core không gắn Project: nó là tập instance của Revision đang chạy, nên chỉ Project sở hữu Revision đó được nhận các dòng này | **ĐÃ SỬA** (nhánh `fix/programming-programs-page-owner-f23-20260927`). Dòng "chỉ Core biết" chỉ được gộp khi Project hỏi là chủ của Active, tra cùng cách `ProjectService.resolveActiveRevision`: STATUS của Core, rồi header Revision trong DB Web. Không phân giải được chủ (Core im, chưa có Active, Revision lạ với DB) thì không Project nào nhận. STATUS chỉ được gọi khi thật sự có dòng như vậy, nên trang của Project đang chạy không tốn thêm IPC mỗi lần poll. Test: 3 test mới (`programs_owner_f23_test.go`); 2 test đỏ trên mã cũ. Test cũ cho Program mồ côi nay có Active thuộc chính Project đó. `go vet ./...` và `go test ./... -count=1` PASS |
 
 ## Audit lượt 2 (2026-09-25 17:08 UTC trở đi) — sau khi sửa F01
 
@@ -315,6 +316,9 @@ Bo lab bị xâm nhập qua SSH (mật khẩu root yếu) từ 2026-09-22; phát
 | 2026-09-27 04:03:18–04:03:28 | Đổi gói #68 → #69 (`a9885879…`: cùng Program `5619efde…`, cùng 10 binding WRITE), do một phiên giao diện web trên máy dev niêm phong và Commission, không phải công cụ audit | Core: `programming.package_swap_withdraw reason=replace retired=1 released_ao=0 released_do=0 released_ext=0 handed_over=10`. Không có `safe_state.enter`, không có `ext_release_safe`; iobus tiếp tục `set_do` theo nhịp của Program. Lần `set_do` đầu sau boundary (+2 ms) là lần publish đầu của instance mới, mang giá trị khởi tạo của Program chứ không phải lần nhả | **PASS F20, ca điểm chung** |
 | 2026-09-27 04:04:02–04:04:39 | Soak lần 3: `prepare`, rồi `start --outputs hold` | Xem mục "Soak lần 3 — lượt chạy trên bo" | Đang chạy |
 | 2026-09-27 04:04:39.364 | F20: đổi gói #69 → revision thử 8 chu kỳ (không output), không tắt intent trước | Core: `released_do=2 released_ext=8 handed_over=0`, cùng scan có `ERROR safe_state.enter … no_ctrl=1`. iobus: `ext_release_safe` cho `CK50804-DO1…8` ở +1 ms, `set_do value=0x00` ở +2 ms. Frame Monitor: FC05 đầu tiên sau khi nhả bắt đầu ở +2,4 ms, đủ 8 coil ở +364 ms. API đọc lại 8 coil = 0 ở +879 ms (đích F06 ≤ 1,2 s) | **PASS F20** |
+| 2026-09-27 04:14:45 | Chủ sở hữu chốt ngưỡng soak lần 3: mỗi lớp chu kỳ chạy ≥ 10 chu kỳ là đạt; `report` kèm journal | Cửa sổ 10 ph 08 s, base step 60 811/60 811 theo đồng hồ. C1–C4 PASS: overrun +0, `maxExecNs` 36 169 (ngân sách 1 999 µs), missed release Task/Program/base step +0, jitter violation +0, tối đa theo phút 52,34 µs, 0 khoảng hụt log. Số chu kỳ mỗi lớp: 60 811 / 12 162 / 6 081 / 1 216 / 608 / 121 / 60 / 12 (10 ms … 50 000 ms) | **PASS soak lần 3** |
+| 2026-09-27 04:15:47 | `stop`: Restore về Active trước soak | Operation `3fca24f4…` SUCCEEDED; Active = #69 `a9885879…`, `safeState=false`, Program `5619efde…` RUNNING `CORE_LIVE`. Core: `activate_intents received=1 enabled=1`, `package_swap_withdraw reason=replace retired=0 …` cùng µs với `safe_state.exit`, không có `safe_state.enter`; iobus trả DO3/AO-03 ở +2 ms, Program lái lại DO1/DO2 và `CK50804-DO1…4` | **PASS F20 bước 7**, PASS trả trạng thái |
+| 2026-09-27 04:16–04:40 | F23: trang Program của `SOAK-ADR061` hiện `5619efde…` (Program của AHU) là `RUNNING CORE_LIVE`; trong 11 phút soak, trang của AHU hiện 8 Program `SOAK_*` | Sửa web-api, test đỏ trên mã cũ, deploy web — xem hàng F23 | Đã sửa |
 
 ### Bản đồ gap Rev B cho bộ chu kỳ {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms
 
@@ -357,7 +361,7 @@ Rà toàn repo (chỉ đọc) cho ra các xung đột phải giải quyết tron
 | X16, X17 | Đóng | Giữ `profileId`, re-pin; mã `ST-SCHED-001` (PR #756) |
 | X18 | Đóng | Stale theo thời gian (PR #756) |
 | X19 | **Đóng, PASS target** (PR #775, deploy 2026-09-27 03:03): `ipc_us` 427–686 → 3, `publish_us` 289–531 → 54–65, WCET tổng 959–1 307 → 338–540 µs; lệch nhịp tối đa theo phút 40,9–45,5 µs | Chủ sở hữu chốt "làm ngay". IPC web (socket, parse/validate, JSON trả lời, AUDIT) và serialize `point_snapshot` chuyển sang luồng `web-ipc` ngoài CPU3 (ADR-061 mục "4.10 bước 2 — As-Built"). BACnet publish và alarm ở lại luồng quét có lý do đo được: `plc_shm` một writer; alarm 3–19 µs. Cổng target ghi ở hàng X19 bản đồ gap phía trên |
-| X20 | Đóng | `VS-PROG-009`: 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s và 50 s (chủ sở hữu chốt 2026-09-27; `VVP-PROG-001` v2.3, `DDD-CTRL-PROG-001` v1.2) |
+| X20 | Đóng | `VS-PROG-009`: 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s và 50 s (chủ sở hữu chốt 2026-09-27; **chốt lại cùng ngày sau soak lần 3: ≥ 10 chu kỳ mỗi lớp, `VVP-PROG-001` v2.4**; `VVP-PROG-001` v2.3, `DDD-CTRL-PROG-001` v1.2) |
 
 Quy mô: 43 file test ghim giá trị cũ (Core 18, Go 9, FE 13, E2E 3). Phải re-pin `g1_contract_join_v1.json`, `programming_store_v1.manifest.json`, `fbd/manifest.json`, `pgm02_workspace_v1.json` và `error_catalog_v1.manifest.json`, cùng migration store mới cho dải freshness.
 
@@ -438,9 +442,9 @@ Chạy trên Core `main@01fd8708`. Mốc 0 là dòng `package_swap_withdraw` c�
 | 4. Mức API | `DO-01`, `DO-02`, `DO-03` = false; `AO-03` 4 → 0 (T7); `safeState=true`, `safeStateNoControllerOnly=true` | **PASS** |
 | 5. Mức dây | `modbus_master.ext_release_safe … safe_value=0` cho 8 điểm ở +1 ms. Lần FC05 đầu sau khi nhả bắt đầu ở +2,4 ms, lần thứ 8 ở +364 ms (mỗi FC05 khoảng 29 ms). API đọc lại cả 8 coil = 0 ở +879 ms | **PASS** (≤ 1,2 s) |
 | 6. Điểm chung | 04:03:28.743553, #68 → #69: `handed_over=10`, `released_*=0`. Không có `ext_release_safe` hay `safe_state.enter` | **PASS** |
-| 7. Trả về | Đo lúc `stop` của soak lần 3 (Restore về #69). Job kết thúc chụp journal Core/iobus ngay sau `stop` | Chờ 2026-09-28 04:06Z |
+| 7. Trả về | 04:15:47.593589, #69 trở lại: dòng `package_swap_withdraw` (gói thử không giữ claim nào nên `retired=0`) cùng µs với `safe_state.exit`; không có `safe_state.enter` mới. iobus `set_do`/`set_ao` ở +2 ms; Program lái lại DO và coil ngay sau đó | **PASS** |
 
-Journal Core/iobus quanh hai mốc: `fixtures/2026-09-27-f20-target-journal.txt`. Mẫu `GET /points` mỗi khoảng 100 ms và Frame Monitor trong 90 s được giữ cùng file state của soak lần 3.
+Journal Core/iobus quanh hai mốc: `fixtures/2026-09-27-f20-target-journal.txt`. Mẫu `GET /points` (khoảng 100 ms, chỉ các lần đổi giá trị) và khung ghi của Frame Monitor trong ±2–3 s quanh mốc 0: `fixtures/2026-09-27-f20-target-observe.json`. Bước 7: `fixtures/2026-09-27-soak3-core-journal.txt`.
 
 ### Cách chạy
 
@@ -453,7 +457,7 @@ T="python3 scripts/programming_soak_adr061.py --state soak3-state.json --http-lo
 $T prepare            # in REVISION_ID; không đổi runtime
 $T start              # mặc định --outputs safe; in mốc startedAt
 $T report             # bất kỳ lúc nào; không ghi gì lên bo
-# sau ít nhất 24 h (lớp 50 000 ms cần trọn 86 400 s), trên bo:
+# sau ít nhất 500 s (lớp 50 000 ms cần 10 chu kỳ, VVP-PROG-001 v2.4), trên bo:
 #   journalctl -u mkddc-core --utc -o short-iso-precise --since '<startedAt>' > core-journal-soak3.txt
 $T report --journal-file core-journal-soak3.txt --json-out soak3-report.json
 $T stop
@@ -486,11 +490,7 @@ $T stop
 | C4 | `jitterViolationCount` +0. Với journal: mọi phút `core.jitter max_us` ≤ 100, `violations` không tăng so với mốc `start`, 0 dòng `core.base_step_missed` | Runtime và journal |
 | `VS-PROG-009` | Mỗi chu kỳ đạt ngưỡng và missed release +0 | Số base step Core đã chạy |
 
-Ngưỡng `VS-PROG-009`:
-
-- 10…5000 ms: 10 000 chu kỳ. Lớp 10 ms cần 100 s, lớp 5000 ms cần 13 h 53 ph.
-- 10 000 ms: 8 640 chu kỳ.
-- 50 000 ms: 1 728 chu kỳ, tức trọn 24 h.
+Ngưỡng `VS-PROG-009` (`VVP-PROG-001` v2.4, chủ sở hữu chốt lại 2026-09-27 sau lần chạy đầu trên bo): mỗi lớp **≥ 10 chu kỳ**, tức lớp 50 000 ms cần 500 s. Ngưỡng cũ của v2.3 (10 000 chu kỳ cho chu kỳ ≤ 5 s, 8 640 / 1 728 chu kỳ cho 10 s / 50 s trong soak 24 h) đã bỏ. Công cụ vẫn chạy được lâu hơn, và `report` vẫn bắt vi phạm C1–C4 trên cả cửa sổ.
 
 API không công bố bộ đếm lần chạy riêng của từng Program. Số chu kỳ vì vậy tính bằng: `runCount` của Task (một lần mỗi base step) × 10 ms ÷ chu kỳ Program. Con số này chỉ có nghĩa khi missed release của chính Program đó bằng 0, nên `report` luôn xét hai điều kiện cùng nhau.
 
@@ -498,7 +498,7 @@ Kết luận của `report`:
 
 - **`HỎNG`**: bộ đếm Core giảm (Core đã khởi động lại), hoặc Active bị đổi giữa chừng. Soak phải chạy lại từ `start`.
 - **`ĐANG CHẠY`**: chưa có vi phạm nhưng chưa đủ điều kiện `ĐẠT`.
-- **`ĐẠT`**: cửa sổ ≥ 86 400 s, C1–C4 PASS và cả 8 chu kỳ đạt ngưỡng.
+- **`ĐẠT`**: cửa sổ ≥ 500 s, C1–C4 PASS và cả 8 chu kỳ đạt ngưỡng (trước v2.4: cửa sổ ≥ 86 400 s).
 
 ### Soak lần 3 — lượt chạy trên bo (2026-09-27)
 
@@ -506,11 +506,15 @@ Kết luận của `report`:
 - **`prepare`, 04:04:02:** Project `SOAK-ADR061` (`b8b12a50…`), revision `097e8a26…`, Check `fe81fea3…` PASSED sau 0,56 s. Ngân sách 249 µs/Program, tổng 1992 µs.
 - **`start --outputs hold`, 04:04:39:** Commission `db0ffa79…` SUCCEEDED. Mốc Core `2026-09-27T04:04:39.923Z`; bộ đếm ban đầu `runCount=13756`, overrun, missed release, missed base step và jitter violation đều 0. Chọn `hold` vì Core đã có F20: đầu ra về cùng trạng thái như `safe`, còn lần đổi gói trở thành phép đo F20 (mục trên).
 - **Active trước soak là #69 (`a9885879…`), không phải #68.** Lúc 04:03:18–04:03:28, một phiên giao diện web trên chính máy dev (cùng IP công cộng `1.53.70.62`) niêm phong và Commission #69. Lúc đó Core mới vừa lên. `start` đọc Active ngay trước khi đổi, nên `stop` sẽ trả về #69, không trả về #68.
-- **Đầu ra trong 24 h:** `DO-01`/`DO-02`/`DO-03` hở, `AO-03` = 0 (T7), `CK50804-DO1…8` = 0 (`safe_value`), `safeState=true` và chỉ do T7.
+- **Đầu ra trong lúc soak:** `DO-01`/`DO-02`/`DO-03` hở, `AO-03` = 0 (T7), `CK50804-DO1…8` = 0 (`safe_value`), `safeState=true` và chỉ do T7.
 - **Report sau 2 ph 51 s:** C1–C4 PASS; base step 17 106/17 106 theo đồng hồ; tối đa theo phút 48,72 µs; 0 phút > 100 µs; lớp 10 ms đã đạt ngưỡng `VS-PROG-009`.
-- **Kết thúc:** job tách rời trên máy dev chụp `report` mỗi giờ. Lúc 2026-09-28 04:06Z, job lấy journal Core từ mốc start, chạy `report --journal-file`, rồi `stop` (Restore về #69), và chụp journal Core/iobus sau `stop` cho bước 7 của F20.
+- **Ngưỡng đạt, chủ sở hữu chốt lại lúc 04:14Z:** mỗi lớp chu kỳ chạy ≥ 10 chu kỳ với C1–C4 PASS và missed release 0 là đủ. Ngưỡng này thay ngưỡng X20 (10 000 chu kỳ, soak 24 h cho 10 s/50 s) trong `VVP-PROG-001` v2.4 và `DDD-CTRL-PROG-001` v1.4. Job 24 h tách rời bị dừng tay.
+- **Kết quả, `report --journal-file` lúc 04:14:45Z (cửa sổ 10 ph 08 s):** C1–C4 PASS. Base step 60 811/60 811 theo đồng hồ; overrun +0; `maxExecNs` 36 169; missed release Task, Program và base step đều +0; jitter violation +0; tối đa theo phút 52,34 µs; 0 dòng `base_step_missed`; 0 khoảng hụt log. Số chu kỳ: 10 ms 60 811; 50 ms 12 162; 100 ms 6 081; 500 ms 1 216; 1 000 ms 608; 5 000 ms 121; 10 000 ms 60; 50 000 ms 12. **Cả 8 lớp ≥ 10 chu kỳ: PASS.**
+- **Giới hạn của bằng chứng:** số chu kỳ mỗi Program suy từ `runCount` của Task và chỉ hợp lệ vì missed release của từng Program bằng 0. Biến `cnt` là biến cục bộ không có binding, nên Trace và Monitor không đọc trực tiếp được. Độ bền dài hạn của C1–C4 lấy từ soak lần 2 (15 h 53 ph, một lớp chu kỳ, 0 vi phạm), không phải từ lượt này.
+- **Trả về, 04:15:47Z:** `stop` Restore về #69 (`3fca24f4…` SUCCEEDED), `safeState=false`, Program `5619efde…` RUNNING. Đây cũng là bước 7 của F20.
+- **Tệp:** `fixtures/2026-09-27-soak3-state.json`, `…-soak3-http.jsonl`, `…-soak3-report.{json,txt}`, `…-soak3-core-journal.txt`. Không file nào chứa mật khẩu hay token.
 
-### Đã kiểm trên host, chưa chạy trên bo
+### Đã kiểm trên host (trước lượt chạy trên bo)
 
 Stack host thật, không chạm bo: `mkddc-programming-core-sim`, `mkddc-web` và compiler/packager production, build từ `main@8353fdc1`.
 
@@ -566,7 +570,7 @@ Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt
 | Lệnh FC05 trên RS-485 | PASS lớp truyền | 234/234 ACK, 29,0 ms |
 | Readback coil qua API | PASS | Trễ trung vị 712 ms |
 | Cạnh vật lý | NOT RUN | Không có dụng cụ đo |
-| Chu kỳ theo spec 10 ms (C1–C4) | **Soak lần 1 FAIL C4 (F17)**; soak lần 2 PASS 15 h 53 ph (dừng sớm để deploy); soak lần 3 đang chạy | Lượt 1: C1, C3, C4 FAIL. Lượt 3 (ADR-061 trên target): C1 PASS (Core, capabilities, từ chối 5/7/30000 ms), C2 PASS, C3 PASS trong 300 s; C4: sau F11 + F14 + F15 + F16, cửa sổ 600 s tính từ lúc khởi động, có tải và 2 lần restart web: **0/60 006 lần vượt**, tối đa theo phút 60–85 µs. Lượt 4: soak lần 1 có 2 lần vượt sau 3,5 h (129,6 µs) do đổi tần số CPU (F17); sau sửa, tải I/O + `daemon-reload` từng gây vượt cho +0. Soak lần 2 từ 2026-09-26 10:46:27Z tới 2026-09-27 02:39:46Z: 953 phút, 0 lần vượt, tối đa theo phút 72,94 µs. Soak lần 3 (8 chu kỳ, `VS-PROG-009`) từ 2026-09-27 04:04:39Z tới 2026-09-28 04:06Z; chưa được ghi spec |
+| Chu kỳ theo spec 10 ms (C1–C4) | **Soak lần 1 FAIL C4 (F17)**; soak lần 2 PASS 15 h 53 ph (dừng sớm để deploy); **soak lần 3 PASS** (8 lớp, ≥ 10 chu kỳ mỗi lớp) | Lượt 1: C1, C3, C4 FAIL. Lượt 3 (ADR-061 trên target): C1 PASS (Core, capabilities, từ chối 5/7/30000 ms), C2 PASS, C3 PASS trong 300 s; C4: sau F11 + F14 + F15 + F16, cửa sổ 600 s tính từ lúc khởi động, có tải và 2 lần restart web: **0/60 006 lần vượt**, tối đa theo phút 60–85 µs. Lượt 4: soak lần 1 có 2 lần vượt sau 3,5 h (129,6 µs) do đổi tần số CPU (F17); sau sửa, tải I/O + `daemon-reload` từng gây vượt cho +0. Soak lần 2 từ 2026-09-26 10:46:27Z tới 2026-09-27 02:39:46Z: 953 phút, 0 lần vượt, tối đa theo phút 72,94 µs. Soak lần 3 (8 chu kỳ, `VS-PROG-009` theo ngưỡng v2.4) 04:04:39Z → 04:15:47Z: C1–C4 PASS, lớp 50 s đạt 12 chu kỳ, tối đa theo phút 52,34 µs. Đây là bằng chứng hỗ trợ; Test Result độc lập vẫn chưa có |
 | Service logs | PASS có ghi chú | 0 restart; 1 dòng WARN io_shm lúc 16:13:46 mà `-p warning` không bắt được (F08) |
 | Hồi quy mã nguồn (phiên 15:19–15:54) | PASS host | C++ 1513/1513 (2 skipped); Go vet + toàn bộ Go test; FE Vitest 3439/3439, lint, build Foxlinx; ARM 3 binary |
 | UI Programming qua trình duyệt | PASS target | Sau 2 lượt deploy FE (15:51, 15:54): Console 0, request 200 |
@@ -579,6 +583,8 @@ Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt
 - Trace ftrace CPU3 của F17 (6 tệp, 1,5 MB) nằm trên bo tại `/data/mkddc/f17-trap/`; bẫy và script phân tích ở `/root/f17/` (`arm.sh`, `watch.sh`, `disarm.sh`). Bẫy đã tắt, ftrace đã trả về mặc định.
 - `fixtures/foxlinx-active-do-blink-fbd.json`, `fixtures/foxlinx-active-fb-do-blink.st`, `fixtures/modbus-do-probe-st.st` — FBD/FB của Active #52 và mẫu ST host.
 - `fixtures/2026-09-27-f20-target-journal.txt` — journal Core/iobus của hai lần đổi gói trên target (F20: bàn giao điểm chung 04:03:28, nhả tại boundary 04:04:39).
+- `fixtures/2026-09-27-f20-target-observe.json` — mẫu `GET /points` và khung ghi Frame Monitor quanh boundary F20.
+- `fixtures/2026-09-27-soak3-{state.json,http.jsonl,report.json,report.txt,core-journal.txt}` — file state, log HTTP, report và journal của soak lần 3 trên bo.
 - `scripts/programming_soak_adr061.py`, `tests/integration/test_programming_soak_adr061.py` — công cụ và test của soak lần 3 (mục "Soak lần 3"). File state và log HTTP của lượt chạy trên bo lưu cùng hồ sơ khi có.
 
 ## Tài liệu liên quan

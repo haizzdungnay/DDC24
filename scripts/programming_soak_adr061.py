@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Soak 24 h lần 3 cho ADR-061 (C1–C4) và `VS-PROG-009` — revision thử 8 Program.
+"""Soak lần 3 cho ADR-061 (C1–C4) và `VS-PROG-009` — revision thử 8 Program.
 
 Chủ sở hữu chốt 2026-09-27: soak lần 3 chạy một revision thử có đúng 8 Program
 ST, mỗi Program một chu kỳ của tập ADR-061 {10, 50, 100, 500, 1000, 5000, 10000,
-50000} ms, THAY Active hiện tại trong 24 h, rồi trả về. Mỗi Program chỉ đếm số
+50000} ms, THAY Active hiện tại trong thời gian soak, rồi trả về. Ngưỡng
+`VS-PROG-009` (`VVP-PROG-001` v2.4, chủ sở hữu chốt lại sau lần chạy đầu trên bo):
+mỗi lớp ≥ 10 chu kỳ, C1–C4 PASS, missed release = 0 — tức tối thiểu 500 s. Chạy
+lâu hơn vẫn được, và `report` vẫn bắt vi phạm C1–C4 trên cả cửa sổ. Mỗi Program chỉ đếm số
 lần chạy (`cnt := cnt + 1;`), không có binding nào, nên revision thử không ghi
 DO/AO cục bộ hay Modbus nào.
 
@@ -63,9 +66,7 @@ MAX_PROGRAMS_ENABLED = 16
 
 # --- Tiêu chí ----------------------------------------------------------------
 JITTER_LIMIT_US = 100                 # C4
-SOAK_SECONDS = 24 * 60 * 60           # cổng ghi spec (ADR-061 "Hệ quả")
-VS_PROG_009_CYCLES = 10_000           # chu kỳ ≤ 5000 ms (VVP-PROG-001 v2.3)
-VS_PROG_009_SHORT_MAX_MS = 5000
+VS_PROG_009_CYCLES = 10               # mọi chu kỳ (VVP-PROG-001 v2.4)
 
 PROJECT_NAME_DEFAULT = "SOAK-ADR061"
 PROGRAM_PREFIX = "SOAK_P"
@@ -158,14 +159,18 @@ def budget_plan(periods: Sequence[int]) -> dict[str, Any]:
 
 
 def required_cycles(period_ms: int) -> int:
-    """Ngưỡng `VS-PROG-009` v2.3 cho một chu kỳ.
+    """Ngưỡng `VS-PROG-009` v2.4 cho một chu kỳ: 10 chu kỳ, như nhau mọi lớp.
 
-    Chu kỳ ≤ 5 s cần 10 000 chu kỳ; 10 s và 50 s chạy trọn soak 24 h
-    (8 640 và 1 728 chu kỳ) vì 10 000 chu kỳ 50 s mất 5,8 ngày.
+    v2.3 đòi 10 000 chu kỳ cho chu kỳ ≤ 5 s và soak 24 h cho 10 s/50 s; chủ sở
+    hữu bỏ ngưỡng đó ngày 2026-09-27 sau soak lần 3 trên Foxlinx.
     """
-    if period_ms <= VS_PROG_009_SHORT_MAX_MS:
-        return VS_PROG_009_CYCLES
-    return SOAK_SECONDS * 1000 // period_ms
+    del period_ms  # ngưỡng không phụ thuộc chu kỳ; giữ tham số cho bảng report
+    return VS_PROG_009_CYCLES
+
+
+def required_window_seconds() -> float:
+    """Cửa sổ tối thiểu để lớp chu kỳ dài nhất đạt ngưỡng (50 000 ms × 10 = 500 s)."""
+    return max(required_seconds(period) for period in PERIODS_MS)
 
 
 def required_seconds(period_ms: int) -> float:
@@ -410,7 +415,7 @@ def evaluate_window(baseline: Mapping[str, Any], current: Mapping[str, Any],
                          f"jitterMaxUs 60 s gần nhất {task1.get('jitterMaxUs')}"},
     }
     verdicts = {item["verdict"] for item in criteria.values()}
-    soak_complete = window_s is not None and window_s >= SOAK_SECONDS
+    soak_complete = window_s is not None and window_s >= required_window_seconds()
     if "FAIL" in verdicts or not active_ok or restarted:
         overall = "HỎNG"
     elif verdicts != {"PASS"}:
@@ -1153,7 +1158,8 @@ def print_report(evaluation: Mapping[str, Any], journal: Mapping[str, Any] | Non
                  outputs: tuple[Any, Any, Any] | None, out=sys.stdout) -> None:
     write = lambda text="": print(text, file=out)  # noqa: E731
     write(f"Cửa sổ: {format_duration(evaluation['windowSeconds'])} "
-          f"({'đủ' if evaluation['soakComplete'] else 'chưa đủ'} 24 h); base step Core đã chạy "
+          f"({'đủ' if evaluation['soakComplete'] else 'chưa đủ'} {format_duration(required_window_seconds())} "
+          f"của ngưỡng VS-PROG-009); base step Core đã chạy "
           f"{evaluation['baseSteps']} / kỳ vọng theo đồng hồ {evaluation['expectedBaseSteps']}")
     for note in evaluation["notes"]:
         write(f"LƯU Ý: {note}")
@@ -1363,7 +1369,7 @@ def cmd_stop(client: Client, state: dict[str, Any], args: argparse.Namespace,
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Soak 24 h lần 3 ADR-061 / VS-PROG-009: revision thử 8 Program thay Active rồi trả về.",
+        description="Soak lần 3 ADR-061 / VS-PROG-009: revision thử 8 Program thay Active rồi trả về.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Credential: MKDDC_WEB_URL, MKDDC_WEB_USER, MKDDC_WEB_PASSWORD (ưu tiên hơn --password).")
     parser.add_argument("--base-url", default=os.environ.get("MKDDC_WEB_URL"),

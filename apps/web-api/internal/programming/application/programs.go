@@ -2,10 +2,13 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	programmingstore "mkddc-web/internal/programming/store"
 )
 
 // T60-013/T60-014 — `GET /api/v1/programming/projects/{projectId}/programs`.
@@ -169,9 +172,26 @@ func (s *RuntimeService) ListPrograms(ctx context.Context, projectID string) (Pr
 	for _, intent := range intents {
 		ids = append(ids, intent.ProgramID)
 	}
+	// F23 (EV-PROG-FBD-ST-MB-20260925): bảng Program của Core KHÔNG gắn Project —
+	// nó là tập instance của Revision đang chạy. Một dòng "chỉ Core biết" vì vậy
+	// chỉ thuộc về Project SỞ HỮU Revision đó. Gộp nó vào mọi Project từng làm
+	// trang của Project khác hiện Program của Active là `RUNNING CORE_LIVE`
+	// (soak lần 3 trên bo: 8 Program `SOAK_*` hiện trong Project AHU). Chỉ tra
+	// chủ khi thật sự có dòng như vậy, để trang của Project đang chạy — mọi
+	// Program đều có intent — không tốn thêm một lần STATUS mỗi lần poll.
+	var coreOnly []string
 	for _, instanceID := range live.order {
 		if _, known := intentByID[instanceID]; !known {
-			ids = append(ids, instanceID)
+			coreOnly = append(coreOnly, instanceID)
+		}
+	}
+	if len(coreOnly) > 0 {
+		owner, err := s.liveOwnerProjectID(ctx)
+		if err != nil {
+			return ProgramsPageView{}, err
+		}
+		if owner == projectID {
+			ids = append(ids, coreOnly...)
 		}
 	}
 	sort.Strings(ids)
@@ -220,6 +240,38 @@ func (s *RuntimeService) ListPrograms(ctx context.Context, projectID string) (Pr
 		page.Items = append(page.Items, item)
 	}
 	return page, nil
+}
+
+// liveOwnerProjectID trả Project sở hữu Revision mà Core đang chạy, cùng cách
+// `ProjectService.resolveActiveRevision` phân giải `activeRevisionId`: hỏi Core
+// (STATUS) rồi tra header Revision trong DB Web. Trả `""` khi không xác định
+// được — Core không trả lời, chưa có Active, hoặc DB Web không có Revision đó.
+// Khi đó không Project nào được nhận các dòng "chỉ Core biết": không đọc được
+// chủ thì không đoán chủ. Chỉ lỗi ĐỌC DB thật mới được trả lên trên.
+func (s *RuntimeService) liveOwnerProjectID(ctx context.Context) (string, error) {
+	if s.runtime == nil {
+		return "", nil
+	}
+	status, err := s.callStatus(ctx)
+	if err != nil {
+		return "", nil
+	}
+	var impact runtimeImpactPayload
+	if err := coreipcDecodeRuntimePayload(status, &impact); err != nil {
+		return "", nil
+	}
+	active := firstNonNil(impact.ActiveRevisionID, status.ActiveRevisionID)
+	if active == nil || !isUUID(*active) {
+		return "", nil
+	}
+	header, err := s.store.GetRevisionHeader(ctx, *active)
+	if errors.Is(err, programmingstore.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return header.ProjectID, nil
 }
 
 // applyProgramReadBack đổ số đo sống của một Program vào dòng hiển thị.

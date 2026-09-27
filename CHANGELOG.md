@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Fixed — F23: trang Program của một Project hiện Program của Project đang chạy (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/programs.go` (`ListPrograms`, hàm mới `liveOwnerProjectID`), test mới `programs_owner_f23_test.go` và một test trong `programs_test.go`; hàng F23 của `EV-PROG-FBD-ST-MB-20260925`.
+- **Triệu chứng:** trên Foxlinx, trong 11 phút soak lần 3, trang Program của Project AHU (đang mở trên giao diện) hiện 8 Program `SOAK_*` là `RUNNING CORE_LIVE`. Sau khi trả bo về #69, trang của `SOAK-ADR061` lại hiện `5619efde…`, Program của AHU.
+- **Nguyên nhân gốc:** `ListPrograms` gộp mọi instance Core báo mà Project chưa ghi intent vào trang của Project đang hỏi, coi đó là "Program chỉ Core biết". Nhưng bảng Program của Core không gắn Project: nó là tập instance của Revision đang chạy.
+- **Cách sửa:**
+  - Dòng "chỉ Core biết" chỉ được gộp khi Project hỏi là chủ của Active. Chủ được tra cùng cách `ProjectService.resolveActiveRevision`: STATUS của Core, rồi header Revision trong DB Web.
+  - Không phân giải được chủ (Core không trả STATUS, chưa có Active, Revision lạ với DB) thì không Project nào nhận các dòng này.
+  - STATUS chỉ được gọi khi thật sự có dòng như vậy, nên trang của Project đang chạy không tốn thêm IPC ở mỗi lần poll.
+  - Hợp đồng HTTP không đổi.
+- **Kiểm chứng (host):**
+  - 3 test mới: chủ vs Project khác; chủ không xác định (3 ca); không gọi STATUS khi không cần. Trên `programs.go` của `main@360ec81c`, 2 test đầu đỏ.
+  - `gofmt` sạch; `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok, 3 không có test).
+- **Target:** deploy web sau khi merge, ghi ở entry deploy riêng.
+
+### Changed — `VS-PROG-009`: ngưỡng ≥ 10 chu kỳ mỗi lớp (`VVP-PROG-001` v2.4, `DDD-CTRL-PROG-001` v1.4, 2026-09-27)
+
+- Phạm vi: `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md`, `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` §13/`DD-11`/`DD-13`, `scripts/programming_soak_adr061.py`, `tests/integration/test_programming_soak_adr061.py`, runbook soak lần 3 trong `EV-PROG-FBD-ST-MB-20260925`.
+- **Quyết định của chủ sở hữu** (2026-09-27, sau lần chạy đầu của soak lần 3 trên Foxlinx): mỗi chu kỳ trong tập ADR-061 chạy ≥ 10 chu kỳ đồng thời, với C1–C4 PASS và missed release = 0, là đạt. Ngưỡng này thay ngưỡng X20 của v2.3 (10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s/50 s). Độ bền C1–C4 dài hạn vẫn là soak riêng (soak lần 2: 15 h 53 ph, 0 vi phạm). Không đổi trạng thái PASS nào: vẫn cần Test Result độc lập.
+- **Công cụ soak:**
+  - `required_cycles` trả 10 cho mọi lớp; `ĐẠT` cần cửa sổ ≥ 500 s (`required_window_seconds`) thay vì 86 400 s.
+  - Test: 41/41 pass. Test "một giờ chưa đủ" được thay bằng "300 s chưa đủ" và "608 s, lớp 50 s đạt 12 chu kỳ ⇒ `ĐẠT`" (đúng số của lần chạy trên bo).
+
+### Verified — Soak lần 3 PASS trên Foxlinx, F20 bước 7, bo trả về Active #69 (2026-09-27)
+
+- Phạm vi: bo lab Foxlinx (Core `main@01fd8708`); hồ sơ `EV-PROG-FBD-ST-MB-20260925` (nhật ký lượt 4, mục soak lần 3, F20, ma trận); fixture `2026-09-27-soak3-{state.json,http.jsonl,report.json,report.txt,core-journal.txt}` và `2026-09-27-f20-target-observe.json`.
+- **Soak lần 3:**
+  - Revision `097e8a26…`, 8 Program, chạy 04:04:39Z → 04:15:47Z.
+  - `report --journal-file` lúc 04:14:45Z (10 ph 08 s): C1–C4 PASS. Base step 60 811/60 811, overrun +0, missed release Task/Program/base step +0, jitter violation +0, tối đa theo phút 52,34 µs, 0 khoảng hụt log.
+  - Số chu kỳ: 60 811 / 12 162 / 6 081 / 1 216 / 608 / 121 / 60 / 12 (10 ms … 50 s). Cả 8 lớp ≥ 10.
+  - Số chu kỳ suy từ `runCount` và chỉ hợp lệ vì missed release của từng Program bằng 0; biến `cnt` không đọc trực tiếp được vì không có binding.
+- **F20 bước 7:** `stop` Restore về #69 (`3fca24f4…` SUCCEEDED). `package_swap_withdraw retired=0` cùng µs với `safe_state.exit`, không có `safe_state.enter`; DO/AO trả ở +2 ms; `safeState=false`, Program `5619efde…` RUNNING.
+- **Dọn:** job 24 h tách rời trên máy dev dừng tay; file tạm `/tmp/mkddc-core.new` trên bo đã xoá.
+
 ### Deploy — Core `main@01fd8708` lên Foxlinx, F20 PASS trên target, bắt đầu soak lần 3 (2026-09-27)
 
 - Phạm vi:
