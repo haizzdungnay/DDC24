@@ -453,6 +453,12 @@ func BuildProfile(device Device, points []Point) ([]byte, error) {
 	sort.SliceStable(rows, func(i, j int) bool { return fmt.Sprint(rows[i]["name"]) < fmt.Sprint(rows[j]["name"]) })
 	profile := map[string]any{"profile_id": device.DeviceID, "vendor": "user",
 		"description": device.DisplayName, "default_baud": device.Baud, "points": rows}
+	/* U-07 — chỉ ghi khi BẬT (> 1), cùng lý do như các trường tuỳ chọn của điểm:
+	 * thiết bị chưa bật giữ nguyên profile cũ từng byte, nên nâng cấp web không
+	 * làm iobus đổi khung trên dây của tủ nào. */
+	if device.CoilWriteBatchMax > 1 {
+		profile["max_coils_per_write"] = device.CoilWriteBatchMax
+	}
 	data, err := json.MarshalIndent(profile, "", "  ")
 	if err != nil {
 		return nil, err

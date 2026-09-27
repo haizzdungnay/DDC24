@@ -163,3 +163,42 @@ func jsonHasEmptyFrames(body string) bool {
 	}
 	return parsed.Frames != nil && len(parsed.Frames) == 0
 }
+
+// U-18 (REC-DDC-FIELD-USE-20260927) — khung GHI mang giá trị đã phát; khung đọc
+// giữ nguyên hình dạng cũ (không có `values`).
+func TestModbusFramesChuyenNguyenGiaTriGhi(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	app.cfg.IobusControlSock = startFakeIobusControl(t,
+		`{"result":"ok","frames":[`+
+			`{"at":1755600000002,"bus":1,"slave":4,"fc":15,"addr":0,"count":8,"ok":true,"reason":"ok","elapsedUs":30000,"attempt":1,"values":[1,0,1,1,0,0,1,0]},`+
+			`{"at":1755600000001,"bus":1,"slave":4,"fc":1,"addr":0,"count":8,"ok":true,"reason":"ok","elapsedUs":29000,"attempt":1}]}`, nil)
+
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/modbus/frames", ``, token)
+	assertStatus(t, resp, http.StatusOK)
+	var body ModbusFramesResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Frames) != 2 {
+		t.Fatalf("frames=%+v", body.Frames)
+	}
+	want := []int{1, 0, 1, 1, 0, 0, 1, 0}
+	got := body.Frames[0].Values
+	if len(got) != len(want) {
+		t.Fatalf("values=%v, muốn %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("values=%v, muốn %v", got, want)
+		}
+	}
+	var raw struct {
+		Frames []map[string]any `json:"frames"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw.Frames[1]["values"]; exists {
+		t.Fatalf("khung đọc không được mang values: %v", raw.Frames[1])
+	}
+}

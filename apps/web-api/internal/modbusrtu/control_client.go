@@ -162,6 +162,10 @@ type FrameRecord struct {
 	Reason    string `json:"reason"`
 	ElapsedUS int    `json:"elapsedUs"`
 	Attempt   int    `json:"attempt"`
+	// U-18 (REC-DDC-FIELD-USE-20260927) — giá trị TRÊN DÂY của khung GHI: coil
+	// là 0/1 từng bit (FC15 đủ từng bit, phần tử đầu là `addr`), thanh ghi là
+	// word 16-bit như đã phát. Khung đọc và iobus bản cũ không có trường này.
+	Values []int `json:"values,omitempty"`
 }
 
 type FramesReply struct {
