@@ -42,6 +42,7 @@ export function SimulateWorkspace({
   draftRevisionId,
   allowMutation = true,
   program,
+  onRequestCheck,
   onStart,
   onAction,
   onSetInput,
@@ -59,6 +60,9 @@ export function SimulateWorkspace({
   /** Phán quyết capability của phiên, đã gồm thu hồi HTTP 403. */
   allowMutation?: boolean
   program?: ProgrammingProgram
+  /** Mở PGM-05 và tự chạy Check (chủ sở hữu 2026-09-27: Kiểm tra xong là sang
+   * Mô phỏng được). Vắng mặt khi không có quyền Check hoặc Draft chưa lưu. */
+  onRequestCheck?: () => void
   onStart: () => void
   onAction: (action: SimulationAction, speed?: number, baseTickMs?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
@@ -201,6 +205,15 @@ export function SimulateWorkspace({
                     'Simulation runs on compiled artifacts from the latest Check. Please resolve issues in the Problems tray and run Check in the Check & Commission workspace.'
                   )}
                 </p>
+                {onRequestCheck && (
+                  <button
+                    type="button"
+                    onClick={onRequestCheck}
+                    className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] px-3 py-1 text-xs font-medium text-[var(--c-warn-fg)]"
+                  >
+                    {pick('Kiểm tra ngay', 'Run Check now')}
+                  </button>
+                )}
               </div>
             )}
             <button
