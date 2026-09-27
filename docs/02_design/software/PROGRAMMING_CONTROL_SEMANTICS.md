@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Controls Lead + Core Lead |
@@ -487,7 +487,7 @@ quality/source/freshness, không capture gì mới ngoài đường RT.
 
 | Test ID | Scenario | PASS/evidence |
 |---|---|---|
-| `CTRL-T-001` | 1/5/30 s trong 24 h monotonic | release drift/jitter trong target limit, không burst catch-up |
+| `CTRL-T-001` | tập chu kỳ ADR-061 {10…50000} ms trên base step 10 ms, trong 24 h monotonic | C1–C4 của ADR-061: overrun 0, missed release 0, lệch đánh thức ≤ 100 µs; không burst catch-up |
 | `CTRL-T-002` | input đổi giữa cycle | current cycle dùng snapshot cũ, next cycle dùng mới |
 | `CTRL-T-003` | fault từng Program sau proposal | zero partial publish; generation giữ |
 | `CTRL-T-004` | priority higher/manual override | winner đúng; PID tracking không windup/bump |
@@ -501,7 +501,7 @@ Host evidence `EV-PROG-G3-301` đã chạy phần cấu hình/cadence của
 `CTRL-T-001`: ba period được nhận, one-over/period khác/budget 20%/Task hoặc
 Program thứ hai bị reject; Task 30 s chỉ chạy ở release thứ 30 trong khi 30 base
 step vẫn tăng sequence. Không nâng `CTRL-T-001` hoặc `VS-PROG-009` thành PASS vì
-chưa chạy 10.000 cycle/period trên Forlinx với jitter/WCET/watchdog thật.
+chưa chạy đủ ngưỡng trên Forlinx với jitter/WCET/watchdog thật. Ngưỡng từ 2026-09-27 (ADR-061, X20): chu kỳ ≤ 5 s cần 10 000 chu kỳ; 10 s và 50 s đo trong soak 24 h (8 640 / 1 728 chu kỳ); missed release = 0.
 
 Deploy feature flag theo controller, mặc định GRAPH; chạy shadow read-only không
 publish để đo WCET trước cutover. Rollback dùng Restore/cutover transaction, không
@@ -551,6 +551,7 @@ thành sự kiện tương thích artifact).
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.2 | 2026-09-27 | §13 theo ADR-061: `CTRL-T-001` dùng tập chu kỳ {10…50000} ms trên base step 10 ms với C1–C4; ngưỡng `VS-PROG-009` là 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s/50 s (X20, chủ sở hữu chốt 2026-09-27). Không đổi trạng thái kiểm chứng | Core + Controls |
 | 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last = **60 s đồng hồ** và đóng hàng blocker tương ứng ở §15. Ba đổi thay hành vi kèm theo: TTL đo bằng đồng hồ của tick (`output_commit_now_ns`) thay vì đếm base step; TTL đo tuổi của LỆNH nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable chứ không riêng `FAULTED`; mặc định `ScanDeps` là giá trị đã ký thay vì `0`. "Khoá theo Point class" đóng là KHÔNG làm, có lý do ở ADR. Evidence host/local `ctest` 1205/1205; target/HIL vẫn NOT TESTED | Core + Controls |
 | 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-404/405` tại `10d9ad6`: Programming UDS/coordinator, exclusive owner tại safe boundary, first-output commit mới nâng LKG, first-cycle fault rollback và restart checkpoint recovery. Host gates PASS; target/HIL/power/IOP vẫn NOT TESTED. | Core + Controls + QA |
 
@@ -574,7 +575,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-08` Operation flow | N/A tại file này | Không có mặt người dùng; hệ quả vận hành ở `OPS-PROG-001` §14 (cây quyết định timeout) |
 | `DD-09` Error/safety/security | PASS | §9 overrun và runtime fault — **lỗi Task chỉ làm Task đó FAULT**, safe-state toàn trạm chỉ do SafetyManager; §6 hold-last chống giật khi nhả override |
 | `DD-10` Repository mapping | PASS | §12 ScanLoop, process image, resolver và RETAIN cần sửa |
-| `DD-11` Verification | PASS | §13 gắn `VS-PROG-009/010/013/014` với ngưỡng số (10.000 chu kỳ/period; poll gap `<200 ms`, mục tiêu `≤100 ms`) |
+| `DD-11` Verification | PASS | §13 gắn `VS-PROG-009/010/013/014` với ngưỡng số (10.000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s/50 s — ADR-061 X20; poll gap `<200 ms`, mục tiêu `≤100 ms`) |
 | `DD-12` Compatibility/deploy/rollback | PASS | §13 deploy và rollback; §10 chuyển đổi GRAPH ↔ PROGRAM |
 | `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`; source 301 nối trace/risk nhưng residual không giảm. Owner target: Core/Controls/Safety/QA; gate G3/G6; mở release khi 10.000 cycle Forlinx, overrun/process-image/HIL và Test Result độc lập PASS |
 

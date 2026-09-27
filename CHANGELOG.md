@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Changed — Audit ADR-061: đóng X6/X20, trạng thái gap X1–X20, F02/F03, tiêu chí `VS-PROG-009` (2026-09-27)
+
+- Phạm vi: `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` (v2.3), `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` (v1.2), hồ sơ `EV-PROG-FBD-ST-MB-20260925`. Không đổi mã.
+- X20: `VS-PROG-009` và `CTRL-T-001` theo tập chu kỳ ADR-061. Ngưỡng 10 000 chu kỳ giữ cho chu kỳ ≤ 5 s; 10 s và 50 s đo trong soak 24 h (8 640 / 1 728 chu kỳ), missed = 0. Chủ sở hữu chốt 2026-09-27, vì 10 000 chu kỳ 50 s mất 5,8 ngày.
+- X6: đóng, không đổi hành vi. C2 (overrun = 0) là tiêu chí đo; FAULT ở overrun thứ ba là phản ứng an toàn (ADR-029). Mọi overrun đều làm health `DEGRADED` ngay.
+- X13 ghi "đã giảm" (vòng mô phỏng ≥ 20 ms, SQLite ≤ 1 lần/s). F02 đã sửa (PR #756). F03 giảm thiểu: soak lần 2 sau 937 phút 0 lần vượt, tối đa 72,9 µs; PREEMPT_RT vẫn chặn vì BSP.
+- Bảng trạng thái X1–X20 trong hồ sơ; câu chữ spec nháp theo tập chu kỳ mới.
+- Kiểm chứng: `docs_iso_harness.py --expect` PASS; `verify-project.sh --component layout` exit 0.
+
 ### Fixed — F13 về 0 ms: intent Enable đã lưu đi cùng ACTIVATE, Program chạy ngay tại safe boundary kích hoạt gói (ADR-062, 2026-09-26)
 
 - Phạm vi:
