@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -71,5 +72,67 @@ func TestTracePollMissedPeriods(t *testing.T) {
 	}
 	if got := saturatingAddUint32(math.MaxUint32-1, 5); got != math.MaxUint32 {
 		t.Fatalf("cộng bão hoà sai: %d", got)
+	}
+}
+
+// U-09 — `ON_CHANGE` giữ mẫu Core chỉ khi có ô đổi, mỗi mẫu mang `cycle`. Dãy
+// 21,5 ×3 rồi 22,0 ×2 phải còn đúng 2 mẫu ở chu kỳ 1 và 4, 0 mẫu rơi.
+func TestTraceOnChangeKeepsOnlyChangedCoreSamplesWithCycle(t *testing.T) {
+	service, _ := newMonitorTraceService(t)
+	bits := func(value float32) uint64 { return uint64(math.Float32bits(value)) }
+	samples := make([]traceReadSample, 0, 5)
+	for index, value := range []float32{21.5, 21.5, 21.5, 22.0, 22.0} {
+		samples = append(samples, traceReadSample{
+			TimestampNS: 1_000_000_000 + uint64(index)*100_000_000,
+			Values:      []traceReadCell{{Valid: true, Bits: bits(value)}},
+		})
+	}
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		samples:                 samples,
+	}
+	service.runtime = reader
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 5000, SamplePeriodMS: 100, SampleMode: traceSampleModeOnChange,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-u09-0001", "monitor-test-u09-01")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	var view TraceView
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, reads, _ := reader.counts()
+		if view, err = service.GetTrace(accepted.TraceID); err == nil && reads > 0 && len(view.Samples) >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	_ = service.StopTrace(context.Background(), accepted.TraceID, Actor{ID: "admin", Role: "admin"}, "monitor-test-u09-02")
+	if view.SampleMode != traceSampleModeOnChange {
+		t.Fatalf("sampleMode = %q", view.SampleMode)
+	}
+	if len(view.Samples) != 2 {
+		t.Fatalf("số mẫu giữ = %d, muốn 2", len(view.Samples))
+	}
+	if view.Samples[0].Cycle != 1 || view.Samples[1].Cycle != 4 {
+		t.Fatalf("cycle = %d, %d; muốn 1, 4", view.Samples[0].Cycle, view.Samples[1].Cycle)
+	}
+	if view.DroppedSamples != 0 {
+		t.Fatalf("mẫu bị bỏ vì không đổi không phải mẫu rơi: droppedSamples=%d", view.DroppedSamples)
+	}
+}
+
+func TestTraceRequestRejectsUnknownSampleMode(t *testing.T) {
+	request := TraceRequest{SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 1000, SamplePeriodMS: 100, SampleMode: "SOMETIMES"}
+	if err := validateTraceRequest(request); err == nil {
+		t.Fatal("sampleMode lạ phải bị từ chối")
+	}
+	for _, mode := range []string{"", traceSampleModeEvery, traceSampleModeOnChange} {
+		request.SampleMode = mode
+		if err := validateTraceRequest(request); err != nil {
+			t.Fatalf("sampleMode %q bị từ chối: %v", mode, err)
+		}
 	}
 }
