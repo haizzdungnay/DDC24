@@ -217,6 +217,7 @@ void WebIpc::close()
 {
     /* Luồng `web-ipc` chạm socket và cache: dừng nó TRƯỚC khi đóng fd. */
     stop_service_thread();
+    if (fd_ >= 0) log_connection_stats(true);   /* F19: đừng nuốt cửa sổ cuối */
     for (auto& c : clients_) ::close(c.fd);
     clients_.clear();
     if (fd_ >= 0) {
@@ -776,11 +777,13 @@ std::vector<WebCommand> WebIpc::drain()
         if (cfd < 0) break;
         if (clients_.size() >= max_clients) {
             ::close(cfd);
+            connections_refused_++;
             continue;
         }
         clients_.push_back({cfd, next_client_id_++, {}, {}, false, false, false, 0, 0});
-        std::fprintf(stderr, "INFO  web_ipc.client_connected fd=%d\n", cfd);
+        connections_accepted_++;
     }
+    log_connection_stats(false);
 
     constexpr std::size_t read_quantum = 16u * 1024u;
     constexpr std::size_t line_quantum = 16;
@@ -878,6 +881,35 @@ std::vector<WebCommand> WebIpc::drain()
         }
     }
     return out;
+}
+
+/* F19 (lượt 4, 2026-09-26): trước đây mỗi kết nối in một dòng
+ * `INFO web_ipc.client_connected`, TỪ LUỒNG QUÉT. web-api mở kết nối mới cho mỗi
+ * yêu cầu nên đo trên bo ~3 dòng/s lúc bình thường, ~50 dòng/s khi có Trace
+ * 10 ms — hàng triệu dòng/ngày vào journald, mỗi dòng một syscall ghi. Nay một
+ * dòng tổng hợp mỗi cửa sổ (60 s), chỉ khi cửa sổ có kết nối; kết nối bị từ
+ * chối vì đủ `max_clients` (trước đây đóng im lặng) được đếm riêng. */
+void WebIpc::log_connection_stats(bool force)
+{
+    struct timespec ts {};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    const uint64_t now = static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+                         static_cast<uint64_t>(ts.tv_nsec);
+    if (connection_window_start_ns_ == 0) connection_window_start_ns_ = now;
+    const uint64_t elapsed = now - connection_window_start_ns_;
+    if (!force && elapsed < connection_log_interval_ns_) return;
+    if (connections_accepted_ != 0 || connections_refused_ != 0) {
+        std::fprintf(stderr,
+                     "INFO  web_ipc.connections accepted=%llu refused=%llu window_s=%llu"
+                     " clients=%zu\n",
+                     static_cast<unsigned long long>(connections_accepted_),
+                     static_cast<unsigned long long>(connections_refused_),
+                     static_cast<unsigned long long>((elapsed + 500000000ull) / 1000000000ull),
+                     clients_.size());
+    }
+    connections_accepted_ = 0;
+    connections_refused_ = 0;
+    connection_window_start_ns_ = now;
 }
 
 /* ---------------- X19: kênh trao đổi với luồng quét ---------------- */

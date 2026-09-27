@@ -234,6 +234,11 @@ public:
     /* Nộp thẳng một lệnh vào kênh như `service_intake()` làm (phía IPC). */
     bool submit_for_test(const WebCommand& command) { return submit(WebCommand(command)); }
     std::size_t free_slots_for_test() const { return free_count_; }
+    /* F19: đổi cửa sổ tổng hợp log kết nối (mặc định 60 s). */
+    void set_connection_log_interval_for_test(uint64_t interval_ns)
+    {
+        connection_log_interval_ns_ = interval_ns;
+    }
     std::size_t queued_commands_for_test() const { return submit_queue_.size_approx(); }
     std::size_t completed_commands_for_test() const { return complete_queue_.size_approx(); }
 #endif
@@ -264,6 +269,7 @@ private:
     void audit(const WebCommand& cmd, const char* result, const char* active_source,
                 float applied_value);
     bool submit(WebCommand&& command);
+    void log_connection_stats(bool force);
     void respond_result(const WebCommandSlot& slot);
     void refresh_snapshot_cache();
     void wait_for_io(int timeout_ms);
@@ -294,6 +300,14 @@ private:
     std::size_t outbound_budget_remaining_ = KX_POINT_SNAPSHOT_MAX_PAYLOAD;
     std::size_t round_robin_cursor_ = 0;
     uint64_t next_client_id_ = 1;
+
+    /* F19: một dòng tổng hợp mỗi cửa sổ thay cho một dòng mỗi kết nối. web-api
+     * mở kết nối MỚI cho mỗi yêu cầu, nên log từng kết nối là ~3 dòng/s lúc rảnh
+     * và ~50 dòng/s khi có Trace 10 ms vào journald. */
+    uint64_t connection_log_interval_ns_ = 60ull * 1000000000ull;
+    uint64_t connection_window_start_ns_ = 0;
+    uint64_t connections_accepted_ = 0;
+    uint64_t connections_refused_ = 0;
 
     /* Kênh trao đổi với luồng quét (X19). `free_` là của phía IPC. */
     std::array<WebCommandSlot, kWebCommandSlots> slots_{};

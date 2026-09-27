@@ -1282,6 +1282,45 @@ TEST(WebIpcOffload, ServiceThreadAnswersWithTheScanOutputAndAuditIsUnchanged)
     EXPECT_FALSE(f.web.offloaded());
 }
 
+/* F19 — không còn một dòng log mỗi kết nối; một dòng tổng hợp mỗi cửa sổ, đếm
+ * cả kết nối bị từ chối vì đủ `max_clients` (trước đây đóng im lặng). */
+TEST(WebIpc, ConnectionsAreLoggedAsWindowedSummaryNotPerConnection)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    std::vector<std::unique_ptr<Client>> clients;
+    for (int i = 0; i < 4; ++i) {
+        clients.push_back(std::make_unique<Client>());
+        ASSERT_TRUE(clients.back()->connect(f.sock_path));
+    }
+    usleep(20000);
+
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string quiet = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(f.web.client_count_for_test(), 4u);
+    /* Kết nối thứ 5 vượt `max_clients` = 4: bị đóng, và phải được ĐẾM. */
+    clients.push_back(std::make_unique<Client>());
+    ASSERT_TRUE(clients.back()->connect(f.sock_path));
+    usleep(20000);
+    EXPECT_EQ(quiet.find("client_connected"), std::string::npos) << quiet;
+    EXPECT_EQ(quiet.find("web_ipc.connections"), std::string::npos)
+        << "chưa hết cửa sổ thì không in: " << quiet;
+
+    f.web.set_connection_log_interval_for_test(0);
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string summary = testing::internal::GetCapturedStderr();
+    EXPECT_NE(summary.find("INFO  web_ipc.connections accepted=4 refused=1"), std::string::npos)
+        << summary;
+
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string idle = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(idle.find("web_ipc.connections"), std::string::npos)
+        << "cửa sổ không có kết nối thì không in: " << idle;
+}
+
 TEST(WebIpc, ExtPointWriteCommandAccepted)
 {
     Fixture f;
