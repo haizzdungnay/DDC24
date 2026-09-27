@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadConfigUsesCanonicalAlarmSettingsPath(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	t.Setenv("CONFIG_DIR", filepath.Join(t.TempDir(), "runtime"))
 
 	cfg, err := LoadConfig()
@@ -19,7 +19,7 @@ func TestLoadConfigUsesCanonicalAlarmSettingsPath(t *testing.T) {
 }
 
 func TestLoadConfigAllowsAlarmSettingsOverride(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	want := filepath.Join(t.TempDir(), "alarm_settings.conf")
 	t.Setenv("ALARM_SETTINGS_CONF", want)
 
@@ -33,7 +33,7 @@ func TestLoadConfigAllowsAlarmSettingsOverride(t *testing.T) {
 }
 
 func TestLoadConfigUsesDedicatedNetcfgSocket(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -44,7 +44,7 @@ func TestLoadConfigUsesDedicatedNetcfgSocket(t *testing.T) {
 }
 
 func TestLoadConfigKeepsProgrammingRevAOffByDefault(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	t.Setenv("PROGRAMMING_REV_A", "")
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -56,7 +56,7 @@ func TestLoadConfigKeepsProgrammingRevAOffByDefault(t *testing.T) {
 }
 
 func TestLoadConfigEnablesProgrammingRevAExplicitly(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	t.Setenv("PROGRAMMING_REV_A", "true")
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -68,7 +68,7 @@ func TestLoadConfigEnablesProgrammingRevAExplicitly(t *testing.T) {
 }
 
 func TestLoadConfigDerivesAndOverridesProgrammingStorePaths(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
 	configDir := filepath.Join(t.TempDir(), "config")
 	t.Setenv("CONFIG_DIR", configDir)
 	t.Setenv("PROGRAMMING_DB", "")
@@ -97,5 +97,20 @@ func TestLoadConfigDerivesAndOverridesProgrammingStorePaths(t *testing.T) {
 	}
 	if cfg.ProgrammingDBPath != dbPath || cfg.ProgrammingBackupDir != backupDir {
 		t.Fatalf("Programming override=%q/%q", cfg.ProgrammingDBPath, cfg.ProgrammingBackupDir)
+	}
+}
+
+// F-FR-04: JWT_SECRET ngắn hơn 32 byte phải làm web từ chối khởi động — đúng secret
+// 2 ký tự mà install.sh cũ sinh trên bo Foxlinx 2026-09-27.
+func TestLoadConfigRejectsShortJWTSecret(t *testing.T) {
+	for _, secret := range []string{"a3", "0123456789abcdef0123456789abcde"} {
+		t.Setenv("JWT_SECRET", secret)
+		if _, err := LoadConfig(); err == nil {
+			t.Fatalf("JWT_SECRET dài %d byte phải bị từ chối", len(secret))
+		}
+	}
+	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	if _, err := LoadConfig(); err != nil {
+		t.Fatalf("JWT_SECRET đúng 32 byte phải được chấp nhận: %v", err)
 	}
 }
