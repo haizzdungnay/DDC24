@@ -32,7 +32,8 @@ export default defineConfig({
   // luôn spec đó vào cả hai project và nó đỏ với `ECONNREFUSED 127.0.0.1:8081`
   // — hai test đỏ không liên quan gì tới thay đổi của người đang chạy cổng, và
   // đó là cách nhanh nhất để một cổng bị bỏ qua vì "vốn dĩ nó đỏ sẵn".
-  testIgnore: /programming-real\.spec\.ts/,
+  // gate369: phép đo riêng của `scripts/gate369-stage-c.sh`, cần GATE369_ST_FIXTURE.
+  testIgnore: /(?:programming-real|gate369-cli-go-fe-real)\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
