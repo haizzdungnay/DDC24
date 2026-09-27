@@ -223,6 +223,7 @@ if(IOBUS_BUILD_TESTS)
       tests/test_iobus_config.cpp tests/test_io_cache.cpp tests/test_shm_layout.cpp
       tests/test_network_address.cpp
       tests/test_realtime_memlock.cpp
+      tests/test_pid_file.cpp
       adapters/bacnet/tests/test_bacnet_priority.cpp
       adapters/bacnet/tests/test_bacnet_reliability.cpp
       adapters/bacnet/tests/test_bacnet_object_map.cpp

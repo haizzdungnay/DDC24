@@ -82,14 +82,22 @@ $SSH $FOXLINX '/usr/sbin/mkddc-st-compile --version; /usr/sbin/mkddc-st-package 
 Nếu `profile_sha256` khác nhau, cross-build và cài lại cả ba tool, kèm backup:
 
 ```bash
+# BẮT BUỘC truyền khoá công khai phát hành. Thiếu cờ này, binary nhúng KHOÁ TEST có
+# sẵn trong repo (ai cũng có khoá riêng tương ứng). Đã xảy ra thật: Core deploy tay
+# lên Foxlinx sáng 2026-09-27 báo `mode=TEST`, trong khi bản cài chính thức 2026-09-10
+# là `RELEASE` fingerprint 2fb77aa42e7fe446 (sửa khi cài sạch bo cùng ngày).
+KEY=$(tr -d '[:space:]' < ~/.config/mkddc/release-signing/release.pub)
 cmake --fresh -S . -B build/fw-aarch64 \
   -DCMAKE_TOOLCHAIN_FILE=platform/cmake/toolchain-aarch64-linux-gnu.cmake \
   -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON \
+  -DMKDDC_ST_PUBLIC_KEY_HEX=$KEY \
   -DIOBUS_BUILD_TESTS=OFF -DCORE_BUILD_TESTS=OFF
 cmake --build build/fw-aarch64 --parallel \
   --target mkddc-st-compile mkddc-st-package mkddc-st-validate
 # board chỉ có libstdc++ tới GLIBCXX_3.4.30: kiểm trước khi chép
 aarch64-linux-gnu-objdump -T build/fw-aarch64/core/mkddc-st-compile | grep -o 'GLIBCXX_[0-9.]*' | sort -V | tail -1
+# khoá nhúng phải là RELEASE trước khi chép bất kỳ binary nào của core lên bo
+qemu-aarch64 -L /usr/aarch64-linux-gnu build/fw-aarch64/core/mkddc-core --st-key-info
 ```
 
 Chép lên `/tmp` của bo, sao lưu ba file cũ, rồi
@@ -213,6 +221,35 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
   # Restart theo bước 6
 "
 ```
+
+## Cài sạch bo lab (như xuất xưởng)
+
+Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi tổng hợp release. Lần chạy đầu tiên, 2026-09-27: `docs/07_records/test-evidence/fw-som/2026-09-27-foxlinx-factory-reset.md`. Việc này **xoá dữ liệu** (Project Programming, historian, người dùng, cấu hình I/O, …), nên chỉ làm khi chủ sở hữu yêu cầu.
+
+1. **Sao lưu toàn bộ về máy khác, và kiểm bản sao lưu trước khi xoá.** Dùng `tar` busybox trên bo (không có `--warning`). Kiểm lại bằng `gzip -t` và danh sách mục.
+2. **Build bản cài từ `main`:**
+   - cross-build C++ vào `build/release/cpp`, kèm khoá phát hành (lệnh ở bước 2b), HMI ON, test OFF;
+   - web Go `linux/arm64`, FE `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`;
+   - `provenance.json`, `sbom.json` và `checksums.sha256` theo đúng định dạng `build-release.sh`.
+3. **Đóng gói** `platform/packaging`, `platform/systemd`, `apps/hmi/packaging/{hmi.conf,point_db.example.json}`, `build/release/**` và `build/web-ui/dist`. Giải nén vào `/var/tmp/mkddc-release` trên bo, rồi `sha256sum --check build/release/checksums.sha256`.
+4. **Chạy `tools/deploy/foxlinx_factory_reset.sh` theo từng pha, kiểm kết quả sau mỗi pha:**
+   - `stop`: sau pha này, chụp DB lúc đã dừng;
+   - `wipe`;
+   - `install`: gồm `install.sh --with-fake-mcu` và drop-in `PORT=8082` của bo lab.
+5. **Giữ lại:**
+   - cấu hình thiết bị Modbus (`fieldbus.*`, `profiles/*.json`);
+   - mạng (`/etc/mkddc/netcfg.conf`, journal netcfg);
+   - SSH chỉ nhận khoá;
+   - ba unit bảo mật sau sự cố;
+   - drop-in iobus `nomcu.conf`, và `pidfile.conf` cho tới khi iobus tự ghi pidfile (PR #783).
+6. **Kiểm sau cài:**
+   - `/proc/MainPID/exe` khớp `runtime-checksums.sha256`;
+   - `mkddc-core --st-key-info` ra `RELEASE`;
+   - health 6/6;
+   - Programming `READY` với 0 Project;
+   - bus Modbus đủ thiết bị online.
+
+Đây chỉ là cài sạch lớp ứng dụng. Nạp lại image hệ điều hành cần truy cập vật lý (USB/maskrom).
 
 ## Lưu ý
 

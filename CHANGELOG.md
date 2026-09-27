@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### Deploy — Cài sạch bo lab Foxlinx như mới xuất xưởng từ `main@05182713`, giữ thiết bị Modbus (2026-09-27)
+
+- **Phạm vi:**
+  - bo lab Foxlinx: xoá toàn bộ ứng dụng, dữ liệu, sao lưu cũ và rác thử nghiệm, rồi cài lại bằng `install.sh --with-fake-mcu`;
+  - tài liệu: `tools/deploy/foxlinx_factory_reset.sh` (mới), `DEPLOY_FOXLINX.md` mục "Cài sạch bo lab", hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`.
+- **Yêu cầu của chủ sở hữu:** "sạch sẽ như mới sản xuất và cài đặt mới", "giữ nguyên mấy thiết bị Modbus". Giữ thêm mạng, SSH chỉ nhận khoá, ba unit bảo mật sau sự cố, và drop-in của bo lab không MCU.
+- **Sao lưu trước khi xoá:** `~/Desktop/DDC-board-backups/foxlinx-factory-reset-20260927/` trên máy dev, ngoài repo. Gồm 91 MB trạng thái, 2,68 GB khối lớn và journal, 24 MB DB chụp sau khi dừng; cả ba qua `gzip -t`.
+- **Kết quả:**
+  - Binary khớp `runtime-checksums`; Core khoá `RELEASE 2fb77aa42e7fe446` (trước: `TEST`); RT ok; health 6/6.
+  - Programming `READY`, 0 Project.
+  - Modbus `rs485-1` 4/4 thiết bị online, 0 lỗi, 48 điểm `GOOD`.
+  - Phân vùng gốc 7,1 GB → 984 MB đã dùng.
+- **Finding:**
+  - F-FR-01…03: đã sửa trong PR #783.
+  - F-FR-05: cổng 8082 của bo lab, đưa vào drop-in `port.conf`.
+  - **F-FR-04 (P1 bảo mật): `install.sh` sinh `JWT_SECRET` chỉ 0–5 ký tự** (`tr -dc 'a-f0-9'` trên byte ngẫu nhiên). Web lặp restart vì cursor secret < 16 byte; nếu Programming tắt thì JWT giả được. Trên bo đã sinh lại secret 64 hex. Sửa mã chưa làm, chờ chủ sở hữu cho phép (hệ thống tự duyệt chặn thao tác thuộc nhóm ghi secret).
+- **Giới hạn:** chưa nạp lại image hệ điều hành; việc đó cần truy cập vật lý.
+
+### Fixed — iobus tự ghi pidfile; test HMI chặn cross-build; runbook cross-build thiếu khoá phát hành (2026-09-27)
+
+Cả ba lộ ra khi dựng gói cài sạch cho bo lab Foxlinx.
+
+- **iobus không ghi `/run/mkddc/iobus.pid`.**
+  - Phạm vi: `apps/iobus/adapters/platform/pid_file.hpp` (mới), `apps/iobus/bootstrap/main.cpp`, `apps/iobus/tests/test_pid_file.cpp` (mới), `apps/iobus/CMakeLists.txt`.
+  - Triệu chứng: web đọc file này cho health (check `iobus`) và SIGHUP reload iobus. Nhưng trong gói phát hành, cả binary lẫn unit đều không ghi nó. Bo lab chạy được chỉ nhờ drop-in vá tay `pidfile.conf` (`ExecStartPost=… echo $MAINPID`, 2026-08-04). Một bo cài mới bằng `install.sh` sẽ báo health iobus hỏng và không nạp lại cấu hình iobus được.
+  - Cách sửa: iobus tự ghi pidfile ngay khi khởi động (`IOBUS_PID`, mặc định `/run/mkddc/iobus.pid`): ghi file tạm rồi rename; guard RAII xoá file ở mọi đường thoát, chỉ khi file vẫn là của chính tiến trình. Cùng cách Core đã làm ở F16.
+  - Test: 5 test `PidFileTest.*`.
+- **Cross-build `all` với HMI ON bị gãy.** `hmi_tests` gọi `gtest_discover_tests`, tức chạy binary aarch64 ngay trên máy x86_64. Đã thêm nhánh `CMAKE_CROSSCOMPILING` như iobus (`apps/hmi/CMakeLists.txt`).
+- **Runbook `DEPLOY_FOXLINX.md` cross-build Core thiếu `-DMKDDC_ST_PUBLIC_KEY_HEX`.**
+  - Triệu chứng: Core deploy tay lên Foxlinx sáng 2026-09-27 báo `st_public_key mode=TEST`, trong khi bản cài chính thức 2026-09-10 là `RELEASE` (`2fb77aa42e7fe446`).
+  - Cách sửa: lệnh cross-build nay đọc `release.pub`, và thêm bước kiểm `qemu-aarch64 … --st-key-info` phải ra `mode=RELEASE`.
+- **Kiểm chứng:**
+  - `cmake --fresh` (MODBUS/BACNET/HMI ON): configure và build exit 0, 0 warning; `ctest` **1628/1628** (thêm 5 test pidfile).
+  - Cross-build aarch64 target `all` với HMI ON: exit 0, 0 warning; Core nhúng khoá `RELEASE` `2fb77aa42e7fe446`.
+
 ### Deploy — web `main@d7022923` lên Foxlinx, F23 PASS trên target (2026-09-27)
 
 - Phạm vi: bo lab Foxlinx, chỉ thay `/opt/mkddc-web/mkddc-web`; Core `01fd8708`, iobus `e4953080` và FE `6471a34d` giữ nguyên. Hồ sơ `EV-PROG-FBD-ST-MB-20260925` (nhật ký lượt 4, hàng F23).
