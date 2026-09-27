@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added — Báo cáo vấn đề cần nâng cấp mã nguồn DDC-24 qua sử dụng thực tế (2026-09-27)
+
+- Thêm `docs/07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md` (`REC-DDC-FIELD-USE-20260927`): 21 vấn đề rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo lab. Mỗi vấn đề có mức, kịch bản hỏng, dẫn chứng `file:dòng` và tiêu chí đóng; kèm lộ trình 4 đợt. Những vấn đề đáng chú ý:
+  - Check lệch kiểu VP (đã sửa ở PR #795, chờ merge).
+  - Trace: phiên thứ hai âm thầm lấy mẫu thưa nhưng vẫn báo 100 ms; `freshness = FRESH` ngoài OpenAPI; mẫu có thể trộn đầu vào mới với đầu ra cũ.
+  - Modbus không gộp FC15; trần 512 slot/Program.
+  - Ngôn ngữ ST thiếu ARRAY/toán tử bit/hằng; thư viện hệ thống thiếu khối DDC; `PID` bị cổng review chặn.
+- Đăng ký trong `docs/07_records/reviews/README.md` (v1.28) và `docs/README.md`. Sửa nhận định DO16-O3 trong `EV-PROG-DO16-MB-20260927`: phiên Trace thứ hai không dừng sớm mà chạy đủ thời lượng với mẫu thưa ~500 ms. Chỉ thêm tài liệu, không đổi mã hay runtime.
+
 ### Added — `PRG_DO16_MODBUS` 1.3: chế độ AUTO tự chạy lần lượt mọi chế độ, đang chạy trên bo (2026-09-27)
 
 - Phạm vi: `PRG_DO16_MODBUS` trong `docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md` (bản 1.3: bảng vòng AUTO, T13, S16, lỗi 9); hồ sơ `EV-PROG-DO16-MB-20260927` (mục "Chế độ AUTO"); bo lab: VP `DO16_MODE` thêm trạng thái `10 = AUTO`, Revision Active `a0f107fa…`, `DO16_MODE = 10`.

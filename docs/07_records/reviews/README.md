@@ -1,9 +1,9 @@
 # Hồ sơ rà soát — chỉ mục
 
 **ID:** REC-REVIEW-INDEX-001
-**Phiên bản:** 1.27
+**Phiên bản:** 1.28
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-27 (bổ sung chín đề xuất tính năng vào record so sánh DDC-24; chỉ để Product review)
+**Cập nhật:** 2026-09-27 (đăng ký `REC-DDC-FIELD-USE-20260927`: vấn đề nâng cấp rút từ sử dụng thực tế; trước đó bổ sung chín đề xuất vào record so sánh DDC-24)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -33,6 +33,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 |---|---|---|---|
 | [Rà soát kiến trúc, lời giải và đối chiếu DDC-24](DDC24_ARCHITECTURE_SOLUTION_COMPARATIVE_REVIEW_2026-09-26.md) | 2026-09-26; bổ sung 27/09 | Record source + nguồn chuẩn/hãng; release `NO-GO` (`REC-DDC-ARCH-COMP-20260926`) | Sơ đồ POU/Commission/output, so sánh hãng và **§9: chín đề xuất `CP-01..09` để Product review**, có lợi ích, phần nền hiện có, phép thử pilot và quyết định cần ký. |
 | [Finding và đề xuất kiến trúc DDC-24](DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md) | 2026-09-26 | 7 finding có trạng thái và gate; record, chưa phải design authority (`REC-DDC-ARCH-GAP-20260926`) | Hồ sơ chu kỳ lệch profile; BACnet object thiếu nguồn; safe output khi đổi package; soak/HIL; 70 ms Commission; Modbus write result; ma trận audit trộn thời điểm. |
+| [Đánh giá mã nguồn DDC-24 qua sử dụng thực tế](DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md) | 2026-09-27 | 21 vấn đề cần nâng cấp/cải tiến, 1 đã sửa ở PR #795 chờ merge; record, chưa phải design authority (`REC-DDC-FIELD-USE-20260927`) | Rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo: kiểu VP lệch 3 lớp, Trace báo sai nguồn/chu kỳ, Modbus không gộp FC15, trần slot, ngôn ngữ ST thiếu ARRAY/bit/hằng, thư viện thiếu khối DDC, PID bị chặn; kèm lộ trình |
 | [Audit Modbus RTU — finding, gap, logic tìm lỗi, hai phương án](MODBUS_AUDIT_2026-09-25_FINDINGS_GAP_SOLUTIONS.md) | 2026-09-25 | Record tại mốc `36c1a863`; `MBA-FW-08` đã sửa bằng `ext_cmd_seq` theo audit Programming sau đó; các gap còn lại cần đối chiếu (`REC-MBA-GAP-001`) | Sáu phép kiểm theo đường dữ liệu; 10 finding đã sửa kèm test đỏ→xanh; 9 gap được ghi tại mốc audit (gồm kết quả ghi đầu–cuối và ST ghi theo index slot); hai phương án thiết kế chưa được record này phê duyệt |
 | [Audit Modbus RTU — hoạt động trên bo Forlinx](MODBUS_AUDIT_2026-09-25_BOARD_OPERATION_REPORT.md) | 2026-09-25 | TARGET/runtime, Fake MCU — không phải HIL (`REC-MBA-BOARD-001`) | Log 5 lần boot (309.672 `write_fail` khi thiết bị offline); 4/4 thiết bị online, lỗi poll 0,013 %; SCHED_FIFO sai ở thread phụ; deploy `2840392f`/`efb3e4ae` và kiểm chứng 4 bản sửa trên bo; `ttyS1` (bus 2) không tồn tại |
 | [Audit Modbus RTU — hiện trạng mã nguồn FE/BE/FW SOM](MODBUS_AUDIT_2026-09-25_SOURCE_STATUS.md) | 2026-09-25 | Record đối chiếu `36c1a863` (`REC-MBA-SRC-001`) | Kiến trúc 3 tiến trình, 3 đường dữ liệu; đường đọc chín, đường ghi dùng cờ mức không danh tính; đối chiếu 20 gap F-FW của thiết kế |
@@ -195,3 +196,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.25 | 2026-09-25 | Thêm `REC-MBA-SRC-001`, `REC-MBA-BOARD-001`, `REC-MBA-GAP-001` (audit Modbus RTU FE/BE/FW SOM + bo Forlinx); không đổi authority/runtime/HIL/release gate |
 | 1.26 | 2026-09-26 | Đăng ký hai record kiến trúc/so sánh/finding DDC-24; sửa trạng thái chỉ mục `MBA-FW-08` theo audit target tiếp theo, không sửa record lịch sử hoặc nâng release gate |
 | 1.27 | 2026-09-27 | Mở rộng record so sánh DDC-24 bằng chín đề xuất `CP-01..09` để Product review; chưa đổi authority hoặc release gate. |
+| 1.28 | 2026-09-27 | Đăng ký `REC-DDC-FIELD-USE-20260927`: 21 vấn đề nâng cấp/cải tiến rút từ sử dụng thực tế trên bo lab; không đổi authority, runtime hoặc release gate |
