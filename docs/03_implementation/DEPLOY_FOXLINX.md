@@ -82,14 +82,22 @@ $SSH $FOXLINX '/usr/sbin/mkddc-st-compile --version; /usr/sbin/mkddc-st-package 
 Nếu `profile_sha256` khác nhau, cross-build và cài lại cả ba tool, kèm backup:
 
 ```bash
+# BẮT BUỘC truyền khoá công khai phát hành. Thiếu cờ này, binary nhúng KHOÁ TEST có
+# sẵn trong repo (ai cũng có khoá riêng tương ứng). Đã xảy ra thật: Core deploy tay
+# lên Foxlinx sáng 2026-09-27 báo `mode=TEST`, trong khi bản cài chính thức 2026-09-10
+# là `RELEASE` fingerprint 2fb77aa42e7fe446 (sửa khi cài sạch bo cùng ngày).
+KEY=$(tr -d '[:space:]' < ~/.config/mkddc/release-signing/release.pub)
 cmake --fresh -S . -B build/fw-aarch64 \
   -DCMAKE_TOOLCHAIN_FILE=platform/cmake/toolchain-aarch64-linux-gnu.cmake \
   -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON \
+  -DMKDDC_ST_PUBLIC_KEY_HEX=$KEY \
   -DIOBUS_BUILD_TESTS=OFF -DCORE_BUILD_TESTS=OFF
 cmake --build build/fw-aarch64 --parallel \
   --target mkddc-st-compile mkddc-st-package mkddc-st-validate
 # board chỉ có libstdc++ tới GLIBCXX_3.4.30: kiểm trước khi chép
 aarch64-linux-gnu-objdump -T build/fw-aarch64/core/mkddc-st-compile | grep -o 'GLIBCXX_[0-9.]*' | sort -V | tail -1
+# khoá nhúng phải là RELEASE trước khi chép bất kỳ binary nào của core lên bo
+qemu-aarch64 -L /usr/aarch64-linux-gnu build/fw-aarch64/core/mkddc-core --st-key-info
 ```
 
 Chép lên `/tmp` của bo, sao lưu ba file cũ, rồi
