@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Fixed — F20: đổi gói rút claim mức 5 và lệnh EXT của instance gói cũ mà gói mới không nắm (2026-09-27)
+
+- Phạm vi:
+  - `apps/core/application/st/st_process_image.{hpp,cpp}` (`st_withdraw_replaced_outputs`, mới);
+  - `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}` (overload `on_safe_boundary(resolver, writer)`);
+  - `apps/core/application/runtime/scan_loop.cpp` (chỉ lời gọi `on_safe_boundary`; không đụng `SafeState::apply`);
+  - `apps/core/application/programming/programming_core_sim_main.cpp`;
+  - test `test_programming_package_swap_withdraw.cpp` (mới) và `test_programming_stage_atomicity.cpp`;
+  - chú thích `--outputs hold` trong `scripts/programming_soak_adr061.py`;
+  - `PROGRAMMING_CONTROL_SEMANTICS` §6 v1.3 và hàng F20 của `EV-PROG-FBD-ST-MB-20260925`.
+- **Triệu chứng:** Commission/Restore sang gói không còn Program nào lái một điểm thì AO/DO cục bộ giữ giá trị cuối của Active cũ ở mức 5 vô thời hạn: không hết `holdTtl` 60 s, và T7 `no_ctrl` không bật. EXT Modbus cũng giữ giá trị cuối. Trên host, DO-01 vẫn = 1 với `safe=0 no_ctrl=0` sau 65 s.
+- **Nguyên nhân gốc:**
+  - Chỉ `st_withdraw_stale_outputs` gọi `release_*`, và nó chỉ duyệt Program của gói ĐANG chạy.
+  - `swap_prepared_program_set_at_boundary` chỉ đổi topology.
+  - Coordinator chỉ xoá sổ candidate (`PACKAGE_REPLACED`), không rút claim trong `PriorityResolver` hay slot EXT.
+- **Cách sửa:** theo quyết định đã có (ADR-061 §3, F06): instance bị loại khỏi gói là instance bị rút. ScanLoop truyền resolver và `PointWriter` vào `on_safe_boundary`. Tại đúng boundary đổi topology, sau khi owner mode đã áp dụng, coordinator gọi `st_withdraw_replaced_outputs()` cho `previous_program_set_`. Lúc đó instance cũ chưa bị huỷ (việc huỷ chạy ở luồng non-RT), và chưa Program nào của gói mới chạy.
+  - Điểm gói mới cũng nắm (instance `RUNNING`, owner `PROGRAM_ONLY`): bàn giao, không nhả. Nhờ vậy không có scan nào ở trạng thái đã nhả, không glitch `dirty=0` cho iobus, và không tạo lại khoảng `no_ctrl` (F13/ADR-062). Instance mới kế thừa mốc publish của lệnh đang treo, để TTL và nhánh nhả EXT tính đúng tuổi lệnh.
+  - Điểm còn lại: AO/DO nhả mức 5 để tầng dưới quyết định. EXT đã publish thì `release_ext_command` (`dirty=0` + seq mới) và iobus ghi `safe_value`.
+  - Rollback chu kỳ đầu (owner về `GRAPH_ONLY`): nhả mọi claim của gói ứng viên.
+  - Bảng chủ sở hữu là mảng cố định trên stack, không cấp phát. Mỗi lần đổi gói ghi một dòng `INFO programming.package_swap_withdraw`.
+- **Không đổi:** boot fail-closed (khôi phục checkpoint không đi qua đường này), các nhánh Disable/TTL/F06, và lời gọi `SafeState::apply` (F21, đã sửa ở PR #778).
+- **Kiểm chứng** (host, cây `main@0c23c143` sau F21/F22, cộng bản sửa):
+  - 8 test `ProgrammingPackageSwapWithdraw.*`, 7 ca qua `ScanLoop` thật. Trên mã cũ (`main@fa18bfe7` và lại trên `main@0c23c143`) có 6/7 ca `ScanLoop` đỏ; ca còn lại là ca chặn bản sửa ngây thơ. Sau sửa cả 8 xanh. Mutation "nhả hết điểm của gói cũ" làm đỏ 4 ca điểm chung/rollback.
+  - Hai phép đếm cấp phát forward/rollback của `test_programming_stage_atomicity.cpp` nay đi qua overload mới: 0 cấp phát.
+  - `cmake --fresh` (MODBUS/BACNET/HMI ON): configure và build exit 0; `ctest` 1623/1623 PASS (9 skip môi trường có sẵn).
+  - `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok, 3 không có test).
+  - Cross-build ARM `mkddc-core` exit 0: GLIBCXX_3.4.29, GLIBC_2.38.
+  - `scripts/verify-project.sh --component layout` exit 0; `python3 scripts/docs_iso_harness.py --expect` PASS.
+- **Chưa làm:** deploy Core và đo target theo mục "F20 — cách đo trên target" của hồ sơ.
+
 ### Fixed — Graph không phải producer vẫn chi phối safe-state và ghi EXT dưới PROGRAM_ONLY (F21, F22, 2026-09-27)
 
 - Phạm vi: `apps/core/application/runtime/{scan_loop.cpp,test_scan_loop.cpp}`, hồ sơ `EV-PROG-FBD-ST-MB-20260925`.

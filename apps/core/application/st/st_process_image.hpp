@@ -121,6 +121,42 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                                    programming::ProgramCandidateRegistry* registry,
                                    PointWriter* writer, StIoBridgeStats* stats);
 
+/* F20 (EV-PROG-FBD-ST-MB-20260925) — kết quả rút claim của các instance vừa RỜI
+ * topology ở safe boundary đổi gói. Chỉ để log và test đọc lại. */
+struct StReplacedOutputs {
+    uint32_t retired_instances = 0; /* instance rời topology còn giữ claim */
+    uint32_t released_ao = 0;       /* claim mức 5 đang active vừa được nhả */
+    uint32_t released_do = 0;
+    uint32_t released_ext = 0;      /* lệnh EXT vừa nhả về `safe_value` */
+    uint32_t handed_over = 0;       /* điểm gói mới cũng nắm: giữ nguyên, không nhả */
+};
+
+/* F20 — gọi ĐÚNG MỘT lần tại safe boundary vừa đổi topology (Commission, Restore,
+ * hoặc rollback chu kỳ đầu), trước khi Program nào của topology mới chạy và
+ * trước khi `retired` bị huỷ ở luồng non-RT.
+ *
+ * `retired` là tập instance vừa rời scheduler; `live` là scheduler đã mang
+ * topology mới. Một điểm AO/DO/EXT của instance đã rời được coi là GÓI MỚI NẮM
+ * khi `live_publishes` (owner hiện hành là `PROGRAM_ONLY`) và có instance
+ * `RUNNING` của topology mới khai nó là output:
+ *  - Gói mới nắm: KHÔNG nhả. Instance mới publish điểm đó ngay trong scan này
+ *    (Program có intent Enable chạy tại boundary kích hoạt, ADR-062). Nhả rồi
+ *    claim lại trong cùng scan cho iobus (soi `ext_cmd_seq` mỗi 5 ms) một cửa sổ
+ *    `dirty=0` để phát `safe_value` lên dây — glitch. Instance mới kế thừa mốc
+ *    publish của lệnh đang nằm trong resolver/slot EXT, để TTL (ADR-051) và nhánh
+ *    nhả EXT của F06 tính đúng tuổi lệnh nếu nó không kịp publish.
+ *  - Gói mới không nắm: AO/DO nhả mức PRIO_LOCAL_LOGIC để tầng dưới (manual/
+ *    BMS/schedule/default/T7) quyết định, như khi Disable. EXT mà instance cũ ĐÃ
+ *    publish được nhả qua `PointWriter::release_ext_command` (`dirty=0` + seq
+ *    mới): iobus ghi `safe_value`, điểm không khai thì giữ giá trị cuối kèm WARN.
+ * AV/BV/MSV không qua PriorityResolver nên không có gì để rút (§6).
+ *
+ * Không cấp phát, không lock: bảng chủ sở hữu là mảng cố định theo SHM contract. */
+StReplacedOutputs st_withdraw_replaced_outputs(StPreparedProgramSet* retired,
+                                               StScheduler* live, bool live_publishes,
+                                               PriorityResolver* resolver,
+                                               PointWriter* writer) noexcept;
+
 /* Đăng ký toàn bộ output binding AO/DO của một instance vào sổ. Gọi khi Program
  * bắt đầu chạy; trả false + `*error` khi một điểm đã thuộc Program KHÁC — bất
  * biến "một output, một owner" của DDD §4.6, ép lại ở runtime vì gói có thể tới

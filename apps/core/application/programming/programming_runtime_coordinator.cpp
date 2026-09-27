@@ -15,8 +15,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "graph/point_writer.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_package_v2.hpp"
+#include "st/st_process_image.hpp"
 #include "st/st_profile_generated.hpp"
 
 namespace core::programming {
@@ -1316,7 +1318,29 @@ void ProgrammingRuntimeCoordinator::capture_priority_overrides(
     impact_snapshot_valid_.store(true, std::memory_order_release);
 }
 
-void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
+void ProgrammingRuntimeCoordinator::withdraw_replaced_outputs(PriorityResolver* resolver,
+                                                              PointWriter* writer,
+                                                              const char* reason) noexcept
+{
+    if (resolver == nullptr) return;
+    /* Owner mode của CHÍNH boundary này đã áp dụng: sau rollback là GRAPH_ONLY,
+     * nên topology vừa trả về không publish gì và mọi claim của gói ứng viên phải
+     * nhả. Đọc trước khi áp mode thì sẽ bàn giao cho một Program không chạy. */
+    const bool live_publishes = cutover_->current() == CutoverMode::PROGRAM_ONLY;
+    const StReplacedOutputs outcome = st_withdraw_replaced_outputs(
+        &previous_program_set_, scheduler_, live_publishes, resolver, writer);
+    /* Một dòng mỗi lần đổi gói, không phải mỗi scan: đây là bằng chứng đo trên
+     * target rằng điểm của Active cũ đã về tầng dưới/safe tại đúng boundary. */
+    std::fprintf(stderr,
+                 "INFO  programming.package_swap_withdraw reason=%s retired=%u"
+                 " released_ao=%u released_do=%u released_ext=%u handed_over=%u"
+                 " live_publishes=%d\n",
+                 reason, outcome.retired_instances, outcome.released_ao, outcome.released_do,
+                 outcome.released_ext, outcome.handed_over, live_publishes ? 1 : 0);
+}
+
+void ProgrammingRuntimeCoordinator::on_safe_boundary(PriorityResolver* resolver,
+                                                     PointWriter* writer) noexcept
 {
     /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §1/§3). KHÔNG gated
      * theo LifecycleState như activation — reset phải áp dụng được ở trạng
@@ -1348,6 +1372,11 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
          * hay consumer nào chạy xen giữa. */
         cutover_->request(CutoverMode::GRAPH_ONLY);
         (void)cutover_->apply_pending_at_boundary();
+        /* F20: gói ứng viên vừa rời scheduler (`previous_program_set_` nay giữ
+         * nó). Rút claim của nó ở CÙNG boundary, kể cả khi signal không trả về
+         * được: topology đã đổi, và claim của một instance không còn chạy không
+         * được treo lại chỉ vì một nhánh khác của rollback hỏng. */
+        if (topology_restored) withdraw_replaced_outputs(resolver, writer, "rollback");
         if (topology_restored && signal_restored) {
             if (candidates_ != nullptr) {
                 for (const std::string& id : instance_ids_)
@@ -1414,6 +1443,11 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
         candidates_->clear();
     }
     (void)cutover_->apply_pending_at_boundary();
+    /* F20: sổ candidate chỉ là sổ; claim thật nằm trong PriorityResolver và slot
+     * lệnh EXT. Rút ở đây — sau khi topology, signal và owner mode đều đã chốt,
+     * trước khi Program nào của gói mới chạy, và trước khi `previous_program_set_`
+     * bị huỷ ở luồng non-RT. Điểm gói mới cũng nắm được bàn giao, không nhả. */
+    withdraw_replaced_outputs(resolver, writer, "replace");
     boundary_applied_.store(true, std::memory_order_release);
     state_.store(LifecycleState::ACTIVE_CANDIDATE, std::memory_order_release);
 }

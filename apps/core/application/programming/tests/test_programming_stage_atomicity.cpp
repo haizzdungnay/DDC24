@@ -569,8 +569,11 @@ TEST(ProgrammingStageAtomicity, ThirtyTwoProgramsPreserveExistingIntentAndDisabl
 
     std::size_t forward_allocations = 0;
     {
+        /* F20: đi đúng overload ScanLoop gọi, để phần rút claim của gói cũ (bảng
+         * chủ sở hữu + dòng log) cũng nằm trong phép đếm cấp phát. */
+        PointWriter writer(system.table, nullptr);
         allocation_probe::ScopedCounter counter;
-        system.coordinator->on_safe_boundary();
+        system.coordinator->on_safe_boundary(&system.resolver, &writer);
         forward_allocations = counter.allocations();
     }
     EXPECT_EQ(forward_allocations, 0u) << "forward handoff cấp phát heap trong scan";
@@ -818,8 +821,9 @@ TEST(ProgrammingStageAtomicity, WholePackageShrinkAddReorderAndRollbackAreAtomic
     ASSERT_EQ(system.coordinator->snapshot().state, LifecycleState::ROLLING_BACK);
     std::size_t rollback_allocations = 0;
     {
+        PointWriter writer(system.table, nullptr); /* F20: như ScanLoop gọi */
         allocation_probe::ScopedCounter counter;
-        system.coordinator->on_safe_boundary();
+        system.coordinator->on_safe_boundary(&system.resolver, &writer);
         rollback_allocations = counter.allocations();
     }
     EXPECT_EQ(rollback_allocations, 0u) << "rollback handoff cấp phát heap trong scan";

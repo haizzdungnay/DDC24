@@ -1066,12 +1066,15 @@ def _switch_to_soak(client: Client, state: dict[str, Any], args: argparse.Namesp
     active_before = record["activeBefore"]
 
     # 2. Đầu ra về trạng thái an toàn trước khi đổi gói (runbook "Hành vi đầu ra").
-    #    Đổi gói KHÔNG rút proposal mức 5 của Program thuộc gói cũ; tắt intent thì
-    #    có (TASK-PROG-401 rút mức 5 cục bộ, F06 nhả EXT về safe_value).
+    #    Core trước F20 KHÔNG rút proposal mức 5 của Program thuộc gói cũ khi đổi
+    #    gói; tắt intent thì có (TASK-PROG-401 rút mức 5 cục bộ, F06 nhả EXT về
+    #    safe_value). Core có F20 tự rút tại boundary đổi gói, nên bước này thành
+    #    thừa nhưng vô hại; giữ nó để kết quả không phụ thuộc bản Core trên bo.
     if args.outputs == "safe" and active_before:
         require(owner is not None,
                 "không xác định được Project sở hữu Active; không tắt được Program của nó. "
-                "Dùng --outputs hold nếu chấp nhận đầu ra giữ giá trị cuối")
+                "Dùng --outputs hold nếu chấp nhận đổi gói mà không tắt intent trước "
+                "(Core trước F20 giữ giá trị cuối của Active cũ)")
         live_enabled = [pid for pid, item in owner_programs.items()
                         if item.get("desiredEnabled") is True and item.get("runtimeStateSource") == "CORE_LIVE"]
         for program_id in live_enabled:
@@ -1384,7 +1387,8 @@ def build_parser() -> argparse.ArgumentParser:
     start = commands.add_parser("start", help="chụp trạng thái sống, Commission revision thử, ghi mốc bắt đầu")
     start.add_argument("--outputs", choices=("safe", "hold"), default="safe",
                        help="safe: tắt intent Program của Active trước để đầu ra về an toàn (mặc định); "
-                            "hold: đổi gói ngay, đầu ra giữ giá trị cuối của Active cũ")
+                            "hold: đổi gói ngay, không tắt intent trước. Core trước F20 giữ giá trị "
+                            "cuối của Active cũ; Core có F20 tự rút đầu ra đó tại boundary đổi gói")
     start.add_argument("--operation-timeout", type=float, default=120.0)
 
     report = commands.add_parser("report", help="bảng PASS/FAIL C1–C4 và VS-PROG-009 theo cửa sổ từ start")

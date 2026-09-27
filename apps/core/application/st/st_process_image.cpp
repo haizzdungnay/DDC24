@@ -459,6 +459,127 @@ bool st_register_instance_candidates(const StProgramInstance& instance,
     return true;
 }
 
+namespace {
+
+/* F20: ai trong topology MỚI sẽ publish điểm nào. Chỉ ba loại có claim cần rút
+ * (AO/BO qua PriorityResolver, EXT qua slot lệnh của PLC SHM); kích thước theo
+ * SHM contract nên nằm gọn trên stack của luồng quét. */
+struct LiveOwners {
+    std::array<StProgramInstance*, KX_N_AO> ao{};
+    std::array<StProgramInstance*, KX_N_DO> bo{};
+    std::array<StProgramInstance*, KX_N_EXT> ext{};
+
+    StProgramInstance** slot(PointId id) noexcept
+    {
+        if (id.idx < 0) return nullptr;
+        const auto index = static_cast<std::size_t>(id.idx);
+        switch (id.kind) {
+        case PointKind::AO:  return index < ao.size() ? &ao[index] : nullptr;
+        case PointKind::BO:  return index < bo.size() ? &bo[index] : nullptr;
+        case PointKind::EXT: return index < ext.size() ? &ext[index] : nullptr;
+        default:             return nullptr;
+        }
+    }
+};
+
+} // namespace
+
+StReplacedOutputs st_withdraw_replaced_outputs(StPreparedProgramSet* retired,
+                                               StScheduler* live, bool live_publishes,
+                                               PriorityResolver* resolver,
+                                               PointWriter* writer) noexcept
+{
+    StReplacedOutputs result;
+    if (retired == nullptr || resolver == nullptr) return result;
+
+    /* Bước 1 — bảng chủ sở hữu của topology mới. Chỉ instance RUNNING mới publish
+     * ở scan này; DISABLED thì không (T59-305/405), và nếu owner hiện hành không
+     * phải PROGRAM_ONLY (rollback về graph) thì không Program nào publish cả. */
+    LiveOwners owners;
+    if (live_publishes && live != nullptr) {
+        for (const auto& task : live->tasks()) {
+            for (const auto& program : task->programs()) {
+                if (!program || program->state != StProgramState::RUNNING) continue;
+                const StLoadedProgram* loaded = program->runtime.program();
+                if (loaded == nullptr) continue;
+                for (const StIrIoBinding& binding : loaded->io_bindings) {
+                    if (!binding.is_output) continue;
+                    PointId id{};
+                    if (!to_point_id(binding, &id)) continue;
+                    StProgramInstance** owner = owners.slot(id);
+                    if (owner != nullptr && *owner == nullptr) *owner = program.get();
+                }
+            }
+        }
+    }
+
+    /* Bước 2 — mỗi claim của instance vừa rời: bàn giao hoặc nhả. */
+    for (const auto& holder : *retired) {
+        if (!holder) continue;
+        StProgramInstance& old = *holder;
+        const StLoadedProgram* loaded = old.runtime.program();
+        /* Đã rút (Disable/Stop/TTL/WAITING) thì không còn claim nào để rút lại;
+         * rút lần nữa chỉ phát thêm một lệnh EXT thừa xuống thiết bị. */
+        if (loaded == nullptr || old.outputs_withdrawn) continue;
+
+        bool held_any = false;
+        bool handed_any = false;
+        for (const StIrIoBinding& binding : loaded->io_bindings) {
+            if (!binding.is_output) continue;
+            PointId id{};
+            if (!to_point_id(binding, &id)) continue; /* binding hỏng: không có claim */
+            StProgramInstance** owner = owners.slot(id);
+            if (owner == nullptr) continue; /* AV/BV/MSV: không có trọng tài (§6) */
+            held_any = true;
+
+            if (StProgramInstance* heir = *owner) {
+                /* Bàn giao liên tục: claim trong resolver/slot EXT giữ nguyên tới
+                 * lần publish đầu của `heir` trong chính scan này. Mốc publish đi
+                 * theo lệnh chứ không theo đối tượng: nếu `heir` không kịp publish
+                 * (WAITING, fault), TTL và nhánh nhả EXT phải thấy đúng lệnh đang
+                 * treo là của ai và già bao nhiêu. */
+                if (old.output_commit_now_ns > heir->output_commit_now_ns)
+                    heir->output_commit_now_ns = old.output_commit_now_ns;
+                handed_any = true;
+                result.handed_over++;
+                continue;
+            }
+
+            switch (id.kind) {
+            case PointKind::AO: {
+                float ignored = 0.0f;
+                if (resolver->ao_value_at_level(PRIO_LOCAL_LOGIC, id.idx, &ignored))
+                    result.released_ao++;
+                resolver->release_ao(PRIO_LOCAL_LOGIC, id.idx);
+                break;
+            }
+            case PointKind::BO: {
+                bool ignored = false;
+                if (resolver->do_value_at_level(PRIO_LOCAL_LOGIC, id.idx, &ignored))
+                    result.released_do++;
+                resolver->release_do(PRIO_LOCAL_LOGIC, id.idx);
+                break;
+            }
+            case PointKind::EXT:
+                /* Cùng điều kiện với F06: chỉ nhả lệnh EXT mà instance ĐÃ ra. Một
+                 * điểm chưa ai ra lệnh thì phát `safe_value` là một lần ghi xuống
+                 * thiết bị không có lý do. */
+                if (writer != nullptr && old.output_commit_now_ns > 0 &&
+                    writer->release_ext_command(id))
+                    result.released_ext++;
+                break;
+            default:
+                break;
+            }
+        }
+        if (held_any) result.retired_instances++;
+        /* Mọi claim đã nhả thì đánh dấu, để rollback trả instance này về topology
+         * không rút lặp. Còn điểm đã bàn giao thì chưa: claim đó vẫn sống. */
+        if (!handed_any) old.outputs_withdrawn = true;
+    }
+    return result;
+}
+
 uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
                                    uint64_t hold_ttl_ns, StIoBridgeStats* stats)
 {

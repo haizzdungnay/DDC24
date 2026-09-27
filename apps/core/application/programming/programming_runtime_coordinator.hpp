@@ -14,6 +14,10 @@
 #include "st/st_package_v2.hpp"
 #include "st/st_scheduler.hpp"
 
+namespace core {
+class PointWriter;
+} // namespace core
+
 namespace core::programming {
 
 enum class LifecycleState : uint8_t {
@@ -206,7 +210,13 @@ public:
     RecoveryResetOutcome recovery_reset(const RecoveryResetCommand& command,
                                         std::string* detail_code, std::string* error);
 
-    void on_safe_boundary() noexcept;
+    /* Safe boundary của vòng quét. F20: khi boundary này đổi topology (Commission,
+     * Restore, rollback chu kỳ đầu), claim mức 5 và lệnh EXT của instance vừa rời
+     * gói được rút NGAY tại đây qua `resolver`/`writer` — trừ điểm gói mới cũng
+     * nắm, xem `st_withdraw_replaced_outputs`. ScanLoop truyền cả hai; bản không
+     * tham số chỉ còn cho test/host chỉ kiểm lifecycle, và KHÔNG rút gì. */
+    void on_safe_boundary() noexcept { on_safe_boundary(nullptr, nullptr); }
+    void on_safe_boundary(PriorityResolver* resolver, PointWriter* writer) noexcept;
     void on_output_commit(bool committed) noexcept;
     void capture_priority_overrides(const PriorityResolver& resolver) noexcept;
 
@@ -296,6 +306,11 @@ private:
         FAILED,
     };
     PackageCycleVerdict package_first_cycle_verdict(bool committed) const;
+    /* F20 — rút claim của topology vừa rời scheduler (`previous_program_set_`
+     * ngay sau swap) mà topology mới không nắm. Chỉ gọi trong `on_safe_boundary`,
+     * SAU khi owner mode của boundary đã áp dụng. `reason` chỉ để log. */
+    void withdraw_replaced_outputs(PriorityResolver* resolver, PointWriter* writer,
+                                   const char* reason) noexcept;
     /* Quay về LKG cho TOÀN BỘ gói. Trả false nếu bất kỳ instance nào không có
      * LKG để quay về — khi đó không có bản cũ nguyên vẹn nào để khôi phục. */
     bool rollback_package(std::string* error);
