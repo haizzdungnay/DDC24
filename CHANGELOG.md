@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Deploy — Cài sạch bo lab Foxlinx như mới xuất xưởng từ `main@05182713`, giữ thiết bị Modbus (2026-09-27)
+
+- **Phạm vi:**
+  - bo lab Foxlinx: xoá toàn bộ ứng dụng, dữ liệu, sao lưu cũ và rác thử nghiệm, rồi cài lại bằng `install.sh --with-fake-mcu`;
+  - tài liệu: `tools/deploy/foxlinx_factory_reset.sh` (mới), `DEPLOY_FOXLINX.md` mục "Cài sạch bo lab", hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`.
+- **Yêu cầu của chủ sở hữu:** "sạch sẽ như mới sản xuất và cài đặt mới", "giữ nguyên mấy thiết bị Modbus". Giữ thêm mạng, SSH chỉ nhận khoá, ba unit bảo mật sau sự cố, và drop-in của bo lab không MCU.
+- **Sao lưu trước khi xoá:** `~/Desktop/DDC-board-backups/foxlinx-factory-reset-20260927/` trên máy dev, ngoài repo. Gồm 91 MB trạng thái, 2,68 GB khối lớn và journal, 24 MB DB chụp sau khi dừng; cả ba qua `gzip -t`.
+- **Kết quả:**
+  - Binary khớp `runtime-checksums`; Core khoá `RELEASE 2fb77aa42e7fe446` (trước: `TEST`); RT ok; health 6/6.
+  - Programming `READY`, 0 Project.
+  - Modbus `rs485-1` 4/4 thiết bị online, 0 lỗi, 48 điểm `GOOD`.
+  - Phân vùng gốc 7,1 GB → 984 MB đã dùng.
+- **Finding:**
+  - F-FR-01…03: đã sửa trong PR #783.
+  - F-FR-05: cổng 8082 của bo lab, đưa vào drop-in `port.conf`.
+  - **F-FR-04 (P1 bảo mật): `install.sh` sinh `JWT_SECRET` chỉ 0–5 ký tự** (`tr -dc 'a-f0-9'` trên byte ngẫu nhiên). Web lặp restart vì cursor secret < 16 byte; nếu Programming tắt thì JWT giả được. Trên bo đã sinh lại secret 64 hex. Sửa mã chưa làm, chờ chủ sở hữu cho phép (hệ thống tự duyệt chặn thao tác thuộc nhóm ghi secret).
+- **Giới hạn:** chưa nạp lại image hệ điều hành; việc đó cần truy cập vật lý.
+
 ### Fixed — iobus tự ghi pidfile; test HMI chặn cross-build; runbook cross-build thiếu khoá phát hành (2026-09-27)
 
 Cả ba lộ ra khi dựng gói cài sạch cho bo lab Foxlinx.
