@@ -51,6 +51,7 @@
 #include "mkddc_shm.h"
 #include "platform/realtime.hpp"
 #include "platform/network_address.hpp"
+#include "platform/pid_file.hpp"
 #include "platform/systemd_notify.hpp"
 #include "build_info.h"
 
@@ -418,6 +419,20 @@ int main(int argc, char** argv)
 
     std::fprintf(stderr, "INFO  iobus.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
                  MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN, getpid());
+
+    /* Pidfile cho web (health `iobus` + SIGHUP reload), ghi ngay khi khởi động
+     * thay vì nhờ drop-in `ExecStartPost` (xem platform/pid_file.hpp). Guard xoá
+     * nó ở mọi đường thoát. Ghi hỏng không chặn iobus: chỉ health của web và
+     * reload bằng SIGHUP bị ảnh hưởng, và log nói rõ điều đó. */
+    const char* pid_env = std::getenv("IOBUS_PID");
+    const std::string pid_path = pid_env && pid_env[0] ? pid_env : "/run/mkddc/iobus.pid";
+    const long self_pid = static_cast<long>(::getpid());
+    if (iobus::write_pid_file(pid_path, self_pid))
+        std::fprintf(stderr, "INFO  iobus.pidfile path=%s pid=%ld\n", pid_path.c_str(), self_pid);
+    else
+        std::fprintf(stderr, "WARN  iobus.pidfile_fail path=%s errno=%d (web health/reload iobus sẽ hỏng)\n",
+                     pid_path.c_str(), errno);
+    iobus::PidFileGuard pid_file_guard(pid_path, self_pid);
 
     /* 1. Load config — JSON hỏng → fail-fast exit(1) */
     IobusConfig cfg;
