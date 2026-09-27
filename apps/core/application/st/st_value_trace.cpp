@@ -273,6 +273,22 @@ uint32_t StValueTrace::dropped_count() const
     return dropped;
 }
 
+uint64_t StValueTrace::next_sequence() const
+{
+    guard_.lock();
+    const uint64_t next = total_written_ + 1;
+    guard_.unlock();
+    return next;
+}
+
+uint64_t StValueTrace::first_sequence() const
+{
+    guard_.lock();
+    const uint64_t first = total_written_ + 1 - sample_count_;
+    guard_.unlock();
+    return first;
+}
+
 StValueTrace::ConsistentRead::ConsistentRead(const StValueTrace& trace) : trace_(trace)
 {
     trace_.guard_.lock();
@@ -290,6 +306,11 @@ StTraceSample StValueTrace::ConsistentRead::sample(std::size_t index) const
     return trace_.sample_locked_at(index);
 }
 std::size_t StValueTrace::ConsistentRead::variable_count() const { return trace_.variable_count_; }
+uint64_t StValueTrace::ConsistentRead::next_sequence() const { return trace_.total_written_ + 1; }
+uint64_t StValueTrace::ConsistentRead::first_sequence() const
+{
+    return trace_.total_written_ + 1 - trace_.sample_count_;
+}
 
 void StValueTrace::reset()
 {

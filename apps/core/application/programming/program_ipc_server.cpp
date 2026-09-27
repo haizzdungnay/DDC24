@@ -1057,26 +1057,43 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
      *    256 phần tử của bộ giải mã web sau 256 mẫu và vượt trần payload IPC
      *    sau ~1 000 mẫu; khi đó web rơi âm thầm về poll monitor với mốc sai.
      * Mẫu: `[timestampNs, [[valid, bits], ...]]`. */
-    const StTraceStatus status = value_trace_->status();
+    /* X19 / F05: luồng quét ghi trace ở mỗi base step. Trạng thái, số thứ tự và
+     * các mẫu phải đến từ CÙNG một lần giữ khoá: đọc rời từng hàm thì giữa hai
+     * lời gọi ring có thể đã dịch một mẫu, và `firstSequence` gán cho `samples[0]`
+     * sẽ lệch khỏi mẫu thật. Trong lúc giữ khoá chỉ CHÉP mẫu ra; dựng JSON sau
+     * khi nhả, vì luồng quét bỏ lượt lấy mẫu chừng nào khoá còn bị giữ. */
+    StTraceStatus status;
+    std::size_t variable_count = 0;
+    uint64_t first_held = 0;
+    uint64_t next_sequence = 0;
+    std::size_t begin = 0;
+    std::vector<StTraceSample> copied;
+    copied.reserve(trace_read_batch_limit(1));
+    {
+        StValueTrace::ConsistentRead view(*value_trace_);
+        status = view.status();
+        if (status.session_id == session_id) {
+            const std::size_t held = view.sample_count();
+            variable_count = view.variable_count();
+            const std::size_t limit = trace_read_batch_limit(variable_count);
+            first_held = view.first_sequence();
+            next_sequence = view.next_sequence();
+            if (incremental) {
+                const uint64_t start = from_sequence > first_held ? from_sequence : first_held;
+                begin = start >= next_sequence ? held : static_cast<std::size_t>(start - first_held);
+            } else if (held > limit) {
+                begin = held - limit;
+            }
+            const std::size_t end = held - begin > limit ? begin + limit : held;
+            for (std::size_t index = begin; index < end; ++index) copied.push_back(view.sample(index));
+        }
+    }
     if (status.session_id != session_id)
         return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
-    const std::size_t held = value_trace_->sample_count();
-    const std::size_t limit = trace_read_batch_limit(value_trace_->variable_count());
-    const uint64_t first_held = value_trace_->first_sequence();
-    const uint64_t next_sequence = value_trace_->next_sequence();
-    std::size_t begin = 0;
-    if (incremental) {
-        const uint64_t start = from_sequence > first_held ? from_sequence : first_held;
-        begin = start >= next_sequence ? held : static_cast<std::size_t>(start - first_held);
-    } else if (held > limit) {
-        begin = held - limit;
-    }
-    const std::size_t end = held - begin > limit ? begin + limit : held;
     json samples = json::array();
-    for (std::size_t index = begin; index < end; ++index) {
-        const StTraceSample sample = value_trace_->sample(index);
+    for (const StTraceSample& sample : copied) {
         json values = json::array();
-        for (std::size_t variable = 0; variable < value_trace_->variable_count(); ++variable) {
+        for (std::size_t variable = 0; variable < variable_count; ++variable) {
             uint64_t bits = 0;
             std::memcpy(&bits, &sample.values[variable], sizeof(bits));
             /* Gửi BIT thô của ô, không gửi số đã diễn giải: kiểu của ô là dữ

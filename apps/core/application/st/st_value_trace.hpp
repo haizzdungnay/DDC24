@@ -164,9 +164,12 @@ public:
      *  - `first_sequence()` — số của mẫu cũ nhất còn giữ (`sample(0)`);
      *  - `next_sequence()`  — số mà mẫu kế tiếp sẽ mang.
      * Ring đã ghi đè thì `first_sequence() > 1`: phần hụt so với chỗ người đọc
-     * dừng lần trước chính là số mẫu người đọc đã mất. */
-    uint64_t next_sequence() const { return total_written_ + 1; }
-    uint64_t first_sequence() const { return total_written_ + 1 - sample_count_; }
+     * dừng lần trước chính là số mẫu người đọc đã mất.
+     * X19: luồng quét đổi hai số này ở mỗi mẫu, nên đọc chúng CÙNG với
+     * `sample(i)` phải qua `ConsistentRead` — đọc rời từng hàm thì giữa hai lời
+     * gọi ring có thể đã dịch một mẫu và số thứ tự gán cho mẫu bị lệch. */
+    uint64_t next_sequence() const;
+    uint64_t first_sequence() const;
 
     void reset();
 
@@ -185,6 +188,8 @@ public:
         std::size_t sample_count() const;
         StTraceSample sample(std::size_t index) const;
         std::size_t variable_count() const;
+        uint64_t next_sequence() const;
+        uint64_t first_sequence() const;
 
     private:
         const StValueTrace& trace_;
