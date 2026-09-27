@@ -19,6 +19,14 @@
 - **Kiểm chứng** (cây đã gộp `origin/main@6471a34d`). C++: `cmake --fresh` với MODBUS/BACNET/HMI, configure 0, build 0, `ctest` **1613/1613 PASS** (9 skip có sẵn: IoCache, RealtimeMemlock, MbaThreadPolicy). ThreadSanitizer (`-DMKDDC_SANITIZE=thread`, `setarch -R`, suppressions có sẵn) cho `SpscRing*:LatestValueBuffer*:ThreadPolicy*:StValueTrace*:WebIpc*:WebIpcOffload*:ScanLoop*:ProgramIpc*`: **111/111 PASS, 0 cảnh báo**. Test TRACE_READ đồng thời đỏ trên mã TRACE_READ của main (107/154/113 số thứ tự lệch mẫu thật trên ~12 000 mẫu) và xanh 5/5 sau khi sửa. Các commit trước khi gộp tự build và chạy nhóm test liên quan: 162, 165 và 168 PASS. Go: `go vet ./...` exit 0, `go test ./... -count=1` exit 0 (21 gói ok). Cross-build `mkddc-core` aarch64 (test OFF): configure 0, build 0, `GLIBCXX` cao nhất 3.4.29, `GLIBC` cao nhất 2.38 (`__isoc23_*` của toolchain, như bản đang chạy). `verify-project.sh --component layout` PASS, `--component docs` PASS. Máy dev (`mkddc-core-scan-bench`, 4 × 3000 step, xen kẽ với binary `origin/main`): p99 `ipc` 142,0–183,1 → 1,0–1,2 µs; `publish` 82,9–85,8 → 26,3–27,6 µs; tổng 231,1–283,4 → 63,0–67,8 µs. Đường inline dự phòng ngang bản gốc.
 - Chưa làm trong PR này: deploy lên Foxlinx và đo trên target các chỉ số `core.step_wcet` (`ipc_us`/`publish_us`), `core.jitter`, và CPU của thread `web-ipc` (log `rt.thread_off_scan_cpu`, `ps -L -o psr`). Việc này thuộc lượt deploy kế tiếp; cổng nghiệm thu ghi ở hàng X19 của hồ sơ audit.
 
+### Changed — Deploy `main@6471a34d` lên Foxlinx; F13 và F18 PASS trên target; soak lần 2 chốt 953 phút (2026-09-27)
+
+- Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` lượt 4. Không đổi mã.
+- Deploy Core `9befe395…`, iobus `e4953080…`, web `c2344476…` (`git_commit=6471a34d…`), sao lưu `…/20260927T023946Z-main-6471a34d/`. FE, tool ST và sim worker trùng sha nên không thay.
+- F13: Restore về Program có intent Enable cho `activate_intents enabled=1` và không có `safe_state.enter` nào, tức `no_ctrl` từ 70 ms xuống 0.
+- F18: Trace 10 ms cho 5 000 mẫu, mọi khoảng cách = 10 ms, 0 mốc lùi, `droppedSamples` 0.
+- Soak lần 2 (core `ff2f92fe`, có F17): 953 phút, 0 lần vượt 100 µs, tối đa 72,94 µs/phút, 0 missed, 0 overrun. Kết thúc sớm vì deploy; soak 24 h đủ điều kiện ghi spec là lần 3, trên bản cuối sau X19.
+
 ### Changed — Audit ADR-061: đóng X6/X20, trạng thái gap X1–X20, F02/F03, tiêu chí `VS-PROG-009` (2026-09-27)
 
 - Phạm vi: `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` (v2.3), `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` (v1.2), hồ sơ `EV-PROG-FBD-ST-MB-20260925`. Không đổi mã.
