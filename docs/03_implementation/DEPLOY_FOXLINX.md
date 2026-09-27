@@ -222,6 +222,35 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
 "
 ```
 
+## Cài sạch bo lab (như xuất xưởng)
+
+Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi tổng hợp release. Lần chạy đầu tiên, 2026-09-27: `docs/07_records/test-evidence/fw-som/2026-09-27-foxlinx-factory-reset.md`. Việc này **xoá dữ liệu** (Project Programming, historian, người dùng, cấu hình I/O, …), nên chỉ làm khi chủ sở hữu yêu cầu.
+
+1. **Sao lưu toàn bộ về máy khác, và kiểm bản sao lưu trước khi xoá.** Dùng `tar` busybox trên bo (không có `--warning`). Kiểm lại bằng `gzip -t` và danh sách mục.
+2. **Build bản cài từ `main`:**
+   - cross-build C++ vào `build/release/cpp`, kèm khoá phát hành (lệnh ở bước 2b), HMI ON, test OFF;
+   - web Go `linux/arm64`, FE `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`;
+   - `provenance.json`, `sbom.json` và `checksums.sha256` theo đúng định dạng `build-release.sh`.
+3. **Đóng gói** `platform/packaging`, `platform/systemd`, `apps/hmi/packaging/{hmi.conf,point_db.example.json}`, `build/release/**` và `build/web-ui/dist`. Giải nén vào `/var/tmp/mkddc-release` trên bo, rồi `sha256sum --check build/release/checksums.sha256`.
+4. **Chạy `tools/deploy/foxlinx_factory_reset.sh` theo từng pha, kiểm kết quả sau mỗi pha:**
+   - `stop`: sau pha này, chụp DB lúc đã dừng;
+   - `wipe`;
+   - `install`: gồm `install.sh --with-fake-mcu` và drop-in `PORT=8082` của bo lab.
+5. **Giữ lại:**
+   - cấu hình thiết bị Modbus (`fieldbus.*`, `profiles/*.json`);
+   - mạng (`/etc/mkddc/netcfg.conf`, journal netcfg);
+   - SSH chỉ nhận khoá;
+   - ba unit bảo mật sau sự cố;
+   - drop-in iobus `nomcu.conf`, và `pidfile.conf` cho tới khi iobus tự ghi pidfile (PR #783).
+6. **Kiểm sau cài:**
+   - `/proc/MainPID/exe` khớp `runtime-checksums.sha256`;
+   - `mkddc-core --st-key-info` ra `RELEASE`;
+   - health 6/6;
+   - Programming `READY` với 0 Project;
+   - bus Modbus đủ thiết bị online.
+
+Đây chỉ là cài sạch lớp ứng dụng. Nạp lại image hệ điều hành cần truy cập vật lý (USB/maskrom).
+
 ## Lưu ý
 
 - Board không có `curl`, `nc` — dùng `wget` hoặc `busybox wget` để test.
