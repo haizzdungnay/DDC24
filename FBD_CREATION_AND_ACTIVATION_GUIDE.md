@@ -1,7 +1,7 @@
 # HƯỚNG DẪN TOÀN DIỆN VỀ TẠO CHƯƠNG TRÌNH FBD VÀ KÍCH HOẠT VẬN HÀNH TRÊN MK-DDC-24
 
 > **Tài liệu chuẩn hóa kiến trúc và quy trình vận hành hệ thống DDC-24 (Foxlinx SOM-DDC-24).**
-> - **Phiên bản:** 1.0.0
+> - **Phiên bản:** 1.1.0 (27/09/2026: sửa chu kỳ theo ADR-061, trạng thái sau Commission theo ADR-062, danh sách xác nhận Commission; xem cuối tài liệu)
 > - **Ngày lập:** 26/09/2026
 > - **Tác giả:** Em gái kỹ thuật của Onii-chan
 
@@ -32,8 +32,8 @@
 ## TỔNG QUAN KIẾN TRÚC & RÀNG BUỘC CỐT LÕI
 
 Hệ thống điều khiển MK-DDC-24 tuân thủ nghiêm ngặt chuẩn an toàn công nghiệp và tiêu chuẩn IEC 61131-3:
-1. **Chu kỳ thực thi (Rev A Allowed Periods)**: Hệ thống **chỉ hỗ trợ 3 mức chu kỳ**: `1000 ms` (1s), `5000 ms` (5s) và `30000 ms` (30s) theo quyết định `ADR-026`. Không cho phép chu kỳ tự do để tránh làm vỡ ràng buộc thời gian thực cứng (Hard Real-Time).
-2. **An toàn mặc định sau Commission (DDD §0)**: Khi một chương trình vừa được nạp lên bo thành công qua Commission, nó **luôn ở trạng thái mặc định là `DISABLED`**. Core runtime sẽ giữ ngắt an toàn (`safeState: true`, `safeStateNoControllerOnly: true`) cho đến khi người vận hành hoặc agent chủ động gửi lệnh kích hoạt (`desiredEnabled: true`).
+1. **Chu kỳ thực thi (Allowed Periods)**: Hệ thống chỉ nhận **8 mức chu kỳ** trên base step 10 ms theo `ADR-061` (thay `ADR-026` từ 2026-09-26): `10`, `50`, `100`, `500`, `1000`, `5000`, `10000`, `50000` ms. Gói cũ chu kỳ `30000 ms` chỉ còn được đọc để di trú; Check mới sẽ từ chối (`ST-SCHED-001`). Không cho phép chu kỳ tự do để tránh làm vỡ ràng buộc thời gian thực cứng (Hard Real-Time).
+2. **Trạng thái sau Commission (DDD §0, `ADR-062`)**: Program **mới** (chưa từng có ý định chạy) vào bo ở trạng thái `DISABLED`; Core giữ ngắt an toàn (`safeState: true`, `safeStateNoControllerOnly: true`) cho đến khi người vận hành hoặc agent gửi `desiredEnabled: true`. Program **đã có** ý định `Enable` được lưu thì từ 2026-09-26 ý định đó đi cùng lệnh ACTIVATE và Program **chạy ngay** tại safe boundary kích hoạt gói, không phải bật lại sau mỗi lần Commission.
 3. **Phân biệt hai hệ thống I/O vật lý**:
    - **Local I/O (`LOCAL`)**: Các cổng trực tiếp trên bo CPU (UI-01..16, AO-01..04, DO-01..04). Trên môi trường lab/test không gắn MCU STM32 thật, Local DO được mô phỏng qua `fake MCU` trong bộ nhớ ảo (không đóng cắt relay cơ).
    - **Fieldbus I/O (`MB_RTU`)**: Các module mở rộng qua cổng RS-485 như **CK508-04** (8 relay cơ + LED đỏ), **CK508-05**, **CK509-06/07**. Đây là các rơ-le vật lý thực tế gõ tiếp điểm tạch-tạch ngoài tủ.
@@ -113,7 +113,7 @@ END_FUNCTION_BLOCK
 ### Bước 4: Cấu hình Chu kỳ và Thứ tự Thực thi (Tab Execution)
 1. Nhấn vào mục **Execution** trên thanh điều hướng bên trái (hoặc biểu tượng Play).
 2. Kiểm tra thông số tác vụ:
-   - **Chu kỳ quét (Period)**: Chọn **`1 s`** (1000 ms).
+   - **Chu kỳ quét (Period)**: Chọn **`1 s`** (1000 ms). Các mức khác được phép: 10 ms, 50 ms, 100 ms, 500 ms, 5 s, 10 s, 50 s (`ADR-061`).
    - **Danh sách chương trình**: Đảm bảo chương trình `DO_Blink5s` có mặt trong danh sách thực thi.
 3. Nhấn **`Lưu`**.
 
@@ -198,7 +198,7 @@ Mỗi dự án lưu trữ nội dung nháp trong bảng `drafts.content_json` (c
 
 > **Lưu ý cho Agent**:
 > - `execution.maxProgramsEnabled` bắt buộc phải là hằng số `16`.
-> - `periodMs` của mỗi program chỉ được nhận một trong ba giá trị: `1000`, `5000`, hoặc `30000`.
+> - `periodMs` của mỗi program chỉ được nhận một trong tám giá trị của `ADR-061`: `10`, `50`, `100`, `500`, `1000`, `5000`, `10000`, `50000`. Giá trị khác (kể cả `30000` cũ) bị từ chối `400 PRG-ERR-REQ-001` với `detailCode = ST-SCHED-001`.
 
 ---
 
@@ -376,7 +376,7 @@ Response (202):
 
 #### 5. Đưa vào vận hành (Commission):
 - Đầu tiên đọc ảnh hưởng: `GET /api/v1/programming/revisions/{CURRENT_ACTIVE_ID}/changes/{NEW_REVISION_ID}`.
-- Trích xuất `impactRef` và mảng `acknowledgements` (chỉ gồm các key có trạng thái `"PRESENT"`).
+- Trích xuất `impactRef` và mảng `acknowledgements`: **đúng mọi key** có trạng thái `"PRESENT"` trong response, không thừa, không thiếu. Đừng chép cứng danh sách ở ví dụ dưới. Tập key backend nhận gồm `retain`, `activeOverrides`, `cutover`, `outputMappingChanges`, `publishedSignals`, `controlLibrary`, `programSet`, `enableIntent`, `physicalMappingChanges`, `virtualPointChanges`, `modbusMappingChanges`, `writableOutputsAffected`. Chương trình ghi vào Virtual Point sẽ có `virtualPointChanges`; thiếu nó thì nhận `422 PRG-ERR-ACK-MISSING-001`.
 ```bash
 POST /api/v1/programming/operations/commission
 Headers:
@@ -389,7 +389,7 @@ Body:
     "expectedActiveRevisionId": "<CURRENT_ACTIVE_ID>",
     "checkId": "<CHECK_ID>",
     "impactRef": "<impactRef>",
-    "acknowledgements": ["outputMappingChanges", "physicalMappingChanges", "modbusMappingChanges", "writableOutputsAffected", "programSet", "enableIntent"],
+    "acknowledgements": ["<mọi key PRESENT trong response changes, ví dụ: outputMappingChanges, virtualPointChanges, modbusMappingChanges, writableOutputsAffected, programSet>"],
     "cutover": { "requested": "PROGRAM_ONLY" }
   }
 Response (202):
@@ -417,6 +417,7 @@ Response (200): OK
 
 | Diagnostic Code | HTTP Status | Căn nguyên cốt lõi | Cách xử lý dứt điểm cho Agent |
 | :--- | :--- | :--- | :--- |
+| **`PRG-ERR-ACK-MISSING-001`** | 422 | Thiếu ít nhất một key có `status == "PRESENT"` trong mảng `acknowledgements` (hay gặp: `virtualPointChanges` khi Program ghi vào Virtual Point). | Đọc lại `changes` và gửi đủ mọi key `PRESENT`. |
 | **`PRG-ERR-ACK-UNEXPECTED-001`** | 422 | Mảng `acknowledgements` gửi thừa key đang có status `NONE`, hoặc gửi key chưa được whitelist trong backend. | Đảm bảo mảng `acknowledgements` chỉ chứa đúng các key có `status == "PRESENT"` từ API `changes`. |
 | **`PRG-ERR-SCOPE-001`** (`ST-CLI-LIMIT`) | 400 (Check) | POU Program thiếu khai báo `locals` cho biến được dùng trong binding hoặc FBD layout. | Điền đầy đủ mảng `locals` trong đối tượng PROGRAM chứa `variableId`, `name`, `class: "OUTPUT"`, `type: "BOOL"`. |
 | **`PRG-ERR-MAP-003`** (`ST-IOMAP-001`) | 400 (Check) | Một biến nằm trong `bindings` nhưng không hề xuất hiện ở bất kỳ khối Output/Input nào trong đồ thị FBD. | Kiểm tra lại mảng `nodes` của FBD: mọi biến có trong `bindings` phải có 1 node tương ứng mang `parameters.variable`. |
@@ -432,3 +433,10 @@ Response (200): OK
 
 ---
 *Tài liệu được bảo trì và cập nhật liên tục cùng kho mã nguồn MK-DDC-24.*
+
+### Lịch sử sửa đổi
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 1.1.0 | 2026-09-27 | Sửa theo `REC-DDC-FIELD-USE-20260927` U-17: tập chu kỳ `ADR-061` thay cho 1/5/30 s của `ADR-026`; Program đã có ý định Enable chạy ngay sau Commission (`ADR-062`); `acknowledgements` phải gồm mọi key `PRESENT` (thêm `virtualPointChanges`), thêm dòng `PRG-ERR-ACK-MISSING-001`. Luồng API đã kiểm trên bo: `GUIDE-PROG-ST-DO16-001` §6.8 (`docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md`) |
+| 1.0.0 | 2026-09-26 | Bản đầu |
