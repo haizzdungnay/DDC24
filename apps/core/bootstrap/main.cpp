@@ -546,6 +546,11 @@ int main(int argc, char** argv)
         }
     }
 
+    /* ADR-061 4.10 bước 2 (X19): ghi nhận CPU của vòng quét TRƯỚC khi tạo bất kỳ
+     * thread phụ nào, để mọi thread không-RT (`web-ipc`, `prog-ipc`, `st-retain`)
+     * tự dời sang các CPU còn lại (`demote_to_normal_sched`). */
+    core::remember_scan_cpus();
+
     struct sigaction sa {};
     sa.sa_handler = on_signal;
     sigaction(SIGTERM, &sa, nullptr);
