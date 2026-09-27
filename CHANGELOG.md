@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Fixed — Check từ chối mọi binding vào Virtual Point `integer` và `multistate` (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/point_binding_facts.go` (+ test), `apps/web-api/internal/app/programming_point_facts.go` (+ test).
+- Triệu chứng: khi triển khai `PRG_DO16_MODBUS` lên bo Foxlinx, Check FAILED với `PRG-ERR-MAP-003`/`PIO-SRC-001`. VP `multistate` `MSV-01` bị từ chối với biến UINT ("cần integer"), VP `integer` `AV-02`/`AV-03` bị từ chối với biến REAL ("cần float"). Trong khi đó tab Ánh xạ và Point Catalog gợi ý đúng UINT/REAL cho chính các điểm này.
+- Nguyên nhân gốc: `virtualSignalTypeForST` (ISS-PIO-28) suy kiểu từ `signalType` khai báo, với REAL ↔ `float` và UINT ↔ `integer`. Nhưng bộ cấp slot cố ý đặt VP `integer` lên `AV` và VP `multistate` lên `MSV` (ISS-PIO-17), còn `st_io_map.cpp` khoá cứng `AV ⇒ REAL`, `BV ⇒ BOOL`, `MSV ⇒ UINT`. Hai luật không có giao điểm, nên hai kiểu VP này không bind được vào biến nào. Đây là lần thứ tư cùng một lớp lỗi với ISS-PIO-33/34: để thuộc tính khai báo quyết định kiểu thay vì cách Core lưu điểm.
+- Cách sửa: Check suy kiểu biến ST từ **slot Core** (`BoundPointID` hoặc mã slot trong binding), dùng cùng bảng với Core và catalog. Chỉ khi VP chưa có slot mới rơi về `signalType`, và khi đó ánh xạ theo pool mà allocator sẽ chọn (`integer`/`float` → REAL, `multistate` → UINT, `boolean` → BOOL). Lý do chặn nay nói rõ kiểu cần đổi thành. Adapter facts chở thêm `BoundPointID`.
+- Kiểm chứng: test mới `TestVirtualBindingTypeFollowsCoreSlot` (12 ca) đỏ 10/12 trên mã cũ, xanh trên mã mới; `go vet ./...` sạch; `go test ./... -count=1` PASS toàn bộ package.
+
 ### Added — Release record DDC-24 cho bản ứng viên `main@f86150e3` (2026-09-27)
 
 - **Phạm vi:** `docs/07_records/DDC24_RELEASE_RECORD_2026-09-27.md` (mới, Draft chờ Release Owner ký), dòng register trong `docs/00_governance/CONTROL.md`, manifest authority 1.65→1.66 (re-pin `#1`).
