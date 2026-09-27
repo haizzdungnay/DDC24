@@ -1,0 +1,79 @@
+# EV-PROG-FBD-ST-MB-20260925 — F20 trên target, Core main@01fd8708 (296e077e…), 2026-09-27
+# Journal Core (bỏ AUDIT web_cmd, web_ipc.conn) và iobus quanh hai mốc đổi gói:
+#   04:03:28.743553 #68 -> #69 (điểm chung, handed_over=10)
+#   04:04:39.363673 #69 -> revision thử 8 chu kỳ không output (released_do=2 released_ext=8)
+# Nguồn: journalctl -u mkddc-core / -u mkddc-iobus --utc -o short-iso-precise trên OK1126B-buildroot
+
+## mkddc-core 04:03:20–04:05:30
+2026-09-27T04:03:22.373342+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=0.88 max_us=44.17 avg_us=10.67 overruns=0 count=6001 window_max_us=45 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:03:22.373342+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=284 ipc_us=6 sched_us=187 logic_us=73 alarm_us=24 ext_us=23 out_us=37 publish_us=78 total_us=519 base_step_us=10000 scans=6000
+2026-09-27T04:03:28.739716+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.activate_intents operation=dc876fd6-1851-401e-a3a3-fe2511f21e0f received=1 enabled=0 disabled=0 dropped_limit=0 ignored=0
+2026-09-27T04:03:28.743553+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.package_swap_withdraw reason=replace retired=1 released_ao=0 released_do=0 released_ext=0 handed_over=10 live_publishes=1
+2026-09-27T04:04:22.373366+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.48 max_us=47.67 avg_us=10.60 overruns=0 count=6000 window_max_us=48 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:04:22.373366+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=103 ipc_us=5 sched_us=181 logic_us=114 alarm_us=21 ext_us=17 out_us=28 publish_us=76 total_us=372 base_step_us=10000 scans=6000
+2026-09-27T04:04:39.357642+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.activate_intents operation=db0ffa79-947d-499c-b6d4-62363b2f7fa0 received=8 enabled=8 disabled=0 dropped_limit=0 ignored=0
+2026-09-27T04:04:39.363673+0000 OK1126B-buildroot mkddc-core[121171]: INFO  programming.package_swap_withdraw reason=replace retired=1 released_ao=0 released_do=2 released_ext=8 handed_over=0 live_publishes=1
+2026-09-27T04:04:39.363673+0000 OK1126B-buildroot mkddc-core[121171]: ERROR safe_state.enter fault=0 stale=0 graph_bad=0 no_ctrl=1 overrun=0 (AO->safe, DO->open)
+2026-09-27T04:05:22.383358+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.jitter min_us=7.74 max_us=48.72 avg_us=11.80 overruns=0 count=6001 window_max_us=49 violations=0 missed_steps=0 base_step_us=10000
+2026-09-27T04:05:22.383358+0000 OK1126B-buildroot mkddc-core[121171]: INFO  core.step_wcet io_us=110 ipc_us=4 sched_us=188 logic_us=137 alarm_us=22 ext_us=20 out_us=29 publish_us=77 total_us=393 base_step_us=10000 scans=6001
+
+## mkddc-iobus 04:03:20–04:03:22 (nhịp set_do của Program trước khi đổi gói, 40 dòng đầu)
+2026-09-27T04:03:20.015199+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.065050+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.115214+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.165041+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.215215+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.265170+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.315199+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.364989+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.415071+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.465119+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.516024+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.570118+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.615249+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.665174+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.715152+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.765202+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.815218+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.865089+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:20.915208+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:20.964978+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.015579+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.065163+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.115270+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.164952+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.215336+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.265307+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.315353+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.365249+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.415018+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.465049+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.515053+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.564943+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.615431+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.665122+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.715057+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.765079+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.814938+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.865027+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:21.915162+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:21.964945+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+
+## mkddc-iobus 04:04:39.20–04:04:42 (nhả tại boundary)
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO1 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO2 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO3 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO4 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO5 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO6 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO7 safe_value=0
+2026-09-27T04:04:39.364733+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  modbus_master.ext_release_safe slave=CK508-04 point=CK50804-DO8 safe_value=0
+2026-09-27T04:04:39.365693+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x04 value=0x00 ack=ok
+2026-09-27T04:04:39.365693+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_ao raw=[0,0,0,0] ack=ok
+
+## mkddc-iobus 04:03:28.60–04:03:29.0 (bàn giao điểm chung)
+2026-09-27T04:03:28.615117+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:28.665139+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:28.715192+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
+2026-09-27T04:03:28.745787+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x04 ack=ok
+2026-09-27T04:03:28.944968+0000 OK1126B-buildroot mkddc-iobus[119164]: INFO  output.set_do mask=0x03 value=0x07 ack=ok
