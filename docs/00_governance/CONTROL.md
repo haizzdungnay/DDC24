@@ -72,6 +72,7 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | `RSK-PROG-001` v4.22-candidate — 23/23 Open; `RSK-PROG-023` nối DDD/ADR/U15 nhưng residual chưa hạ |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | `TRACE-PROG-001` v6.9 — 89 requirement/47 scenario authorized for implementation; PGM-02 giữ `I/T/P/R=N` tới khi có source/evidence |
 | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | baseline v2.0 + v2.1-candidate; 47 scenario, `U13..U15` NOT_RUN |
+| [DDC-24 Release Record 2026-09-27](../07_records/DDC24_RELEASE_RECORD_2026-09-27.md) | `DDC24-RELEASE-RECORD-2026-09-27` **Draft chờ Release Owner ký** — RC `main@f86150e3`; W7 9 PASS / 1 FAIL / 4 NOT_RUN; bảy điều kiện mở `GO` cập nhật + hai điều kiện mới; verdict đề xuất **NO-GO** phát hành hiện trường |
 | [Programming Release Record 2026-08-23](../07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md) | `PROG-RELEASE-RECORD-2026-08-23` Active — verdict **NO-GO** đã ký; bảng 14 cổng W7, 12 scenario Product và bảy điều kiện mở `GO` |
 | [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | v1.49 ghim 17-file authority set sau `AUTH-PROG-2026-08-24-05`; exact Candidate ngoài bảng được khóa bằng commit `413a043` |
 | [ADR-050](DECISIONS.md) | Quyết định hợp nhất một Product và supersede mô hình phạm vi Rev cũ |

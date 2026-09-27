@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.65 |
+| Phiên bản | 1.66 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -45,7 +45,7 @@ chứng minh code, target, HIL hoặc release.
 
 | # | Đường dẫn | SHA-256 nội dung | Source baseline |
 |---:|---|---|---|
-| 1 | `docs/00_governance/CONTROL.md` | `7e8f169298adba8d315751f23a5e607de1a1eb19d252b7c87edd15a7ffcac9e2` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 1 | `docs/00_governance/CONTROL.md` | `49497f43ba144044d8b875c5887395003181052bae6bed5fc8765b667d1ea402` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 2 | `docs/00_governance/DECISIONS.md` | `5fe60e5e4baa20c416685061833c675915a0cee3dd06be97b23cfb436b664066` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
 | 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `a68c3990cea169a903091601f69c07737afb289368c942518577863311cc6501` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
 | 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `1e26ac6f85ad2ba8b2b49654bdaf5a5c076e65bfa866dc5d361022492324b6c9` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
@@ -96,6 +96,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.66 | 2026-09-27 | Re-pin `#1` (`CONTROL.md`) sau khi thêm dòng register cho release record `DDC24-RELEASE-RECORD-2026-09-27` (Draft chờ ký, verdict đề xuất NO-GO). **Đánh giá impact:** chỉ thêm một dòng mục lục trỏ tới bản ghi phát hành; không đổi authority Product/SRS/Architecture/DDD/VVP/Trace/Risk. `RELEASE_READY` giữ NO-GO. |
 | 1.65 | 2026-09-27 | Re-pin `#1/#2/#5/#7/#12`. Cổng `candidate-pin` đã đỏ từ 2026-09-09 mà không ai phát hành manifest (W7 trên RC `main@4b833b38` bắt được khi tổng hợp release 2026-09-27). **Đánh giá impact từng dòng:** `#1` CONTROL — chỉ thêm dòng register `WF-CLEAN-001` (2026-09-09) và cập nhật phiên bản Product/SRS; không đổi authority. `#2` DECISIONS — ADR-057..060 (phạm vi/catalog/thang bằng chứng BACnet, không chạm Programming); **ADR-061** (base step 10 ms, chu kỳ Program {10…50000} ms, C1–C4) và **ADR-062** (intent Enable đi cùng ACTIVATE) đổi hành vi Programming. Impact đã xử lý trong cùng change-set: `#5` Product 3.2→3.3 và `#7` SRS 1.2→1.3 đồng bộ hai ADR (`SYS-101/113`, `FE-106`, `CORE-102/108/115`, bảng quyết định) — trước đó hai hồ sơ này vẫn ghi `1/5/30 s` và "Program mới Disabled" không điều kiện, tức authority mâu thuẫn; không thêm/bỏ requirement, không đổi priority hay trạng thái verified. `#12` VVP 2.2→2.4 — `VS-PROG-009` theo ADR-061 (v2.3) rồi ngưỡng ≥ 10 chu kỳ mỗi lớp do chủ sở hữu chốt lại (v2.4); không đổi trạng thái PASS nào. DDD-CTRL (ngoài bảng ghim) đã đồng bộ ở v1.2–v1.4. Risk `#13` và Trace `#14` **không đổi**: `RSK-PROG-002` (Task dài lấn base step) vẫn đúng với lớp 50 s và giữ Open; cột `D/I/T/P/R` giữ nguyên. `RELEASE_READY` giữ NO-GO. |
 | 1.64 | 2026-09-08 | Re-pin `#4/#6/#9/#11/#17` sau `AUTH-UX-PROG-2026-09-08-01`: gói FE Handoff PNG/HTML trở thành authority trực quan PGM-01..06; UX-WEB giữ requirement/safety/contract companion; bộ 15 SVG Programming sai bị loại và PGM-03 trở về composition `2 + 1`. Đồng thời re-pin drift kế thừa trên `main` ở `#2/#3/#10/#13/#14`; đối chiếu lịch sử xác nhận đây là các thay đổi đã merge qua ADR-054..056, FBD Edit #573, namespace diagnostic ST, PGM-04 rollback và trace PGM-03/04/05/06 + ST Editor. Không đổi Product/SRS/API/runtime/VVP/Plan, không hạ rủi ro/residual, không thêm evidence As-Built/target/HIL và `RELEASE_READY` giữ NO-GO. |
 | 1.63 | 2026-08-30 | Re-pin `#13` (Risk Register) và `#14` (Traceability Matrix) sau `b28e317` (PGM-04 WP-03/WP-04, PR #338) — commit đó sửa nội dung nhưng **không phát hành manifest**, nên `candidate_pin_check.py` đỏ suốt từ 29/08 và bất kỳ ai đọc theo ghim đều đang đọc revision cũ hơn cây. **Đánh giá impact:** cả hai thay đổi là **thuần bổ sung**, không dòng nào có sẵn bị sửa hay rút. `#13` thêm mục *Cập nhật 2026-08-29*: `RSK-PROG-005` giữ nguyên `OPEN — PARTIAL SOURCE` (evidence Controls/Safety thật vẫn thuộc `T59-706`), và ghi thêm hai rủi ro **mới, chưa đóng** — `RSK-PGM04-101` (diễn tập rollback Forlinx chưa chạy: đường lùi của lát deploy là đường chưa được kiểm) và `RSK-PGM04-102` (lane `programming-real.spec.ts` chạy ngoài suite mặc định nên khẳng định lạc hậu mà không ai thấy; lát đó tìm ra hai khẳng định đã hỏng từ PR trước). `#14` thêm mục truy vết `T61-301..307`/`401..406`/`505`/`506`, mỗi dòng có cột *Điều KHÔNG được suy ra*; mức là **HOST/LOCAL** trừ `T61-506` **TARGET** cho riêng nhánh upgrade, nhánh rollback vẫn `NOT_RUN`. `VS-PROG-U03` vẫn **NOT_RUN**, không verdict Verification nào bị nâng. Ghim này là chữ ký lên nội dung đã đọc trọn hai mục mới, không phải một phép đồng bộ hash máy móc. |
