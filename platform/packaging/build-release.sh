@@ -46,7 +46,12 @@ if [ -f "$release_key_dir/release.pub" ]; then
   release_key_args=(-DMKDDC_ST_PUBLIC_KEY_HEX="$release_public_hex")
 fi
 
-cmake -S "$MKDDC_CPP_SOURCE" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
+# `--fresh`: cache cũ của `$build_dir` (ví dụ một lần cross-build aarch64 vào cùng
+# thư mục) sẽ âm thầm giữ CMAKE_TOOLCHAIN_FILE, và gói "native" ra binary ARM —
+# lộ ra ở `mkddc-core --st-key-info` ("libstdc++.so.6: cannot open shared object
+# file") trong cổng release-package của W7 ngày 2026-09-27. Bản phát hành luôn
+# phải cấu hình lại từ đầu, cùng lý do CLAUDE.md đòi `--fresh` cho cổng C++.
+cmake --fresh -S "$MKDDC_CPP_SOURCE" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
   -DMKDDC_VERSION="$version" -DMKDDC_ENABLE_MODBUS=ON \
   -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON "${release_key_args[@]}"
 cmake --build "$build_dir" -j"$(nproc)"

@@ -483,7 +483,13 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
 function Basics({ item, tagError, nameError, fieldIndex, onChange }: { item: VirtualPoint; tagError?: string; nameError?: string; fieldIndex: number; onChange: (patch: Partial<VirtualPoint>) => void }) {
   const { t, pick } = useI18n()
   return (
-    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_140px_minmax(0,1fr)_180px_120px_120px]">
+    /* Lưới TỰ CO theo bề rộng khung, không cột px cố định: bản cũ khai 7 cột
+     * (5 cột cố định cộng 680 px + 72 px khoảng cách) trong khung soạn chỉ rộng
+     * 676 px ở màn hình 1280 px, nên hai cột `minmax(0,1fr)` là Tag và Label co
+     * về 0 px — tên và lỗi xung đột tên của Virtual Point không đọc được (e2e
+     * `point-names` đỏ từ 2026-09-04). Một class, không breakpoint: tránh bẫy
+     * cascade breakpoint của Tailwind v4. */
+    <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">
       <TextInput fieldPath={`items[${fieldIndex}].tag`} label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
       <TextInput label={t('channelLabel')} value={String(item.channel || globalVirtualPointChannel(item.id))} disabled onChange={() => {}} />
       {/* `ISS-PIO-03`: slot Core do backend cấp — chỉ đọc, vì đổi nó bằng tay là

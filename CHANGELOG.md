@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Fixed — Ba cổng W7 đỏ trên RC `main@4b833b38`: Tag/Label của Virtual Point rộng 0 px, spec `gate369` lọt vào hai lane e2e, gói release nhận cache cross-build (2026-09-27)
+
+Lộ ra khi chạy `scripts/verify-project.sh --wave W7` để tổng hợp release (6 PASS / 4 FAIL / 4 NOT_RUN).
+
+- **Trình soạn Virtual Point: Tag và Label rộng 0 px** (`apps/web-ui/src/features/points/VirtualIoPage.tsx`).
+  - Triệu chứng: e2e `point-names` đỏ 4 ca (đổi tên VP bị từ chối vì trùng tên UI/AO/DO; xung đột chéo loại). Thông báo lỗi có trong DOM nhưng "hidden": đo bằng `getBoundingClientRect`, ô Label rộng `0×216`, dòng lỗi `0×144`. Đỏ ở cả `main@9affe998` (2026-09-04), `f49df805` (09-12), `d2556be6` (09-26).
+  - Nguyên nhân gốc: lưới 7 cột `minmax(0,1fr)_120px_140px_minmax(0,1fr)_180px_120px_120px` có 680 px cột cố định + 72 px khoảng cách, trong khi khung soạn chỉ rộng 676 px ở màn hình 1280 px. Hai cột `1fr` (Tag, Label) co về 0; người dùng laptop không đọc được tên và lỗi của VP.
+  - Cách sửa: lưới tự co `grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]`, một class, không breakpoint (tránh bẫy cascade breakpoint của Tailwind v4).
+- **Spec `gate369-cli-go-fe-real.spec.ts` lọt vào lane e2e mock và e2e-real** (`scripts/verify-project.sh`, `apps/web-ui/playwright.config.ts`, `apps/web-ui/package.json`).
+  - Triệu chứng: spec ném "Thiếu GATE369_ST_FIXTURE" ở cả hai lane.
+  - Nguyên nhân: spec chỉ chạy được qua `scripts/gate369-stage-c.sh`. Lane mock liệt kê spec động mà không loại nó; `test:e2e:programming-real` chạy cả `testMatch` của config real, vốn cố ý gồm gate369 để stage-c gọi được.
+  - Cách sửa: thêm vào `MKDDC_E2E_OTHER_LANE_SPECS` và `testIgnore` của config mock; `test:e2e:programming-real` chỉ chạy `e2e/programming-real.spec.ts`. `gate369-stage-c.sh` không đổi (vẫn tự truyền spec của nó).
+- **`build-release.sh` nhận cache cross-build** (`platform/packaging/build-release.sh`).
+  - Triệu chứng: cổng release-package lỗi "`mkddc-core`: libstdc++.so.6: cannot open shared object file".
+  - Nguyên nhân: `cmake -S … -B build/release/cpp` giữ `CMAKE_TOOLCHAIN_FILE` aarch64 của một lần cross-build trước vào cùng thư mục, nên gói "native" ra binary ARM.
+  - Cách sửa: `cmake --fresh`.
+- **Kiểm chứng:**
+  - e2e mock: 10 spec, **195 passed / 0 failed** / 30 skipped (trước: 190 / 6 failed).
+  - vitest 3466/3466; `npm run lint` và `npm run build` exit 0; `test_release_packaging_guard.py` 13/13.
+  - `verify-project.sh --component release` exit 0 (build native `--fresh` + diễn tập cài mới/nâng cấp/rollback).
+  - e2e-real: gate369 đã ra khỏi lane. Còn T59-505 đỏ — Issue #786 (hợp đồng thư viện `4a2e7ead` so với kỳ vọng test). ISS-PGM03-08 đỏ 1 lần khi tải cao nhưng đạt 2/2 khi chạy riêng.
+  - Hai ca vitest/e2e chập chờn khi tải cao (`LibraryPage` lọc server, ISS-PGM03-05) đạt khi chạy riêng (3/3, 2/2).
+
 ### Security — F-FR-04: `install.sh` sinh `JWT_SECRET` đủ 32 byte; web từ chối secret ngắn (2026-09-27)
 
 - **Phạm vi:** `platform/packaging/install.sh`, `apps/web-api/internal/app/config.go` + `config_test.go`, `tests/integration/test_release_dryrun.py`; hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`; header `tools/deploy/foxlinx_factory_reset.sh`.

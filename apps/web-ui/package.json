@@ -21,7 +21,7 @@
     "check:ui-strings": "python3 ../../scripts/check_ui_strings.py",
     "test": "vitest --run --environment jsdom src",
     "test:e2e": "playwright test",
-    "test:e2e:programming-real": "playwright test --config playwright.programming-real.config.ts",
+    "test:e2e:programming-real": "playwright test --config playwright.programming-real.config.ts e2e/programming-real.spec.ts",
     "test:e2e:programming-target": "playwright test --config playwright.programming-target.config.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",

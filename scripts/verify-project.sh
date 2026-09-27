@@ -276,9 +276,15 @@ MKDDC_E2E_QUARANTINE=""
 # chứ không phải lane mock. Cổng đó chưa từng chạy trên CI (job FE luôn chết
 # trước ở bước khác), nên vi phạm này ngồi im trong repo.
 MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
+# `gate369-cli-go-fe-real.spec.ts` là phép đo CLI -> Go -> FE của cổng V&V #369, chỉ
+# chạy qua `scripts/gate369-stage-c.sh` (script đó đặt `GATE369_ST_FIXTURE` và dựng
+# fixture). Chạy trong lane mock hay e2e-real, spec ném "Thiếu GATE369_ST_FIXTURE"
+# nên cả hai cổng đỏ vì một phép đo không thuộc về chúng (W7 trên RC
+# `main@4b833b38`, 2026-09-27).
 MKDDC_E2E_OTHER_LANE_SPECS=(
   "e2e/programming-real.spec.ts"
   "e2e/programming-target-fault.spec.ts"
+  "e2e/gate369-cli-go-fe-real.spec.ts"
 )
 
 # spec_owned_by_other_lane trả 0 khi spec thuộc lane khác.
