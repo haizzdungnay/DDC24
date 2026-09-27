@@ -433,8 +433,13 @@ std::vector<uint8_t> capabilities_payload()
      * cứng — bản chép `[1000,5000,30000]` cũ nói sai ngay khi profile đổi. */
     json periods = json::array();
     for (const uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) periods.push_back(period_ms);
+    /* ADR-062 — phần tử thứ năm là danh sách tính năng. Đây là cách báo cho web
+     * mới biết Core này nhận `programIntents` trong ACTIVATE mà KHÔNG nâng
+     * `protocolMinor`: web cũ từ chối response có minor cao hơn của nó, nên nâng
+     * minor sẽ cắt đứt web cũ khỏi mọi action chứ không chỉ khỏi tính năng này. */
+    json features = json::array({PROGRAM_IPC_FEATURE_ACTIVATE_PROGRAM_INTENTS});
     json payload = json::array({"MK-DDC-24-REV-A", PROGRAM_IPC_MAX_FRAME,
-                                PROGRAM_IPC_MAX_QUEUE, periods});
+                                PROGRAM_IPC_MAX_QUEUE, periods, features});
     return json::to_cbor(payload);
 }
 
@@ -476,11 +481,15 @@ bool parse_stage_payload(const ProgramRequest& request, StageCommand* output)
     }
 }
 
+/* Payload ACTIVATE: `[expectedActive, stagedToken, cutover, planHash,
+ * programIntents?]`. Phần tử thứ năm là tuỳ chọn (ADR-062): web cũ gửi 4 phần
+ * tử và phải được nhận y như trước. Ở đây chỉ kiểm KIỂU; id hợp lệ, trùng lặp và
+ * trần số phần tử do coordinator kiểm, cùng chỗ với các identity khác của lệnh. */
 bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* output)
 {
     try {
         const json value = json::from_cbor(request.payload, true, true);
-        if (!value.is_array() || value.size() != 4 ||
+        if (!value.is_array() || (value.size() != 4 && value.size() != 5) ||
             (!value[0].is_null() && !value[0].is_string()) ||
             !value[1].is_string() || !value[2].is_string() || !value[3].is_string())
             return false;
@@ -492,6 +501,26 @@ bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* outp
         if (cutover != "PROGRAM_ONLY") return false;
         output->cutover = CutoverMode::PROGRAM_ONLY;
         output->plan_hash = value[3].get<std::string>();
+        output->has_program_intents = false;
+        output->program_intents.clear();
+        if (value.size() == 5) {
+            const json& intents = value[4];
+            /* `null` KHÔNG được hiểu là "không có intent": web mới luôn gửi mảng.
+             * Nhận `null` sẽ để một encoder lỡ tay biến "có danh sách" thành
+             * "không có gì" mà không ai thấy. */
+            if (!intents.is_array() || intents.size() > kMaxActivateProgramIntents) return false;
+            output->program_intents.reserve(intents.size());
+            for (const json& item : intents) {
+                if (!item.is_array() || item.size() != 2 || !item[0].is_string() ||
+                    !item[1].is_boolean())
+                    return false;
+                ActivateProgramIntent intent;
+                intent.instance_id = item[0].get<std::string>();
+                intent.enabled = item[1].get<bool>();
+                output->program_intents.push_back(std::move(intent));
+            }
+            output->has_program_intents = true;
+        }
         return true;
     } catch (const json::exception&) {
         return false;
@@ -588,7 +617,47 @@ bool parse_trace_start_payload(const ProgramRequest& request, std::string* sessi
     }
 }
 
-/* Payload `TRACE_STOP` và `TRACE_READ`: `[sessionId]`. */
+/* F18 — payload `TRACE_READ`: `[sessionId]` (đời cũ) hoặc `[sessionId, fromSequence]`.
+ * `fromSequence` là số thứ tự tuyệt đối (từ 1) của mẫu đầu tiên người đọc CHƯA
+ * có — xem `StValueTrace::next_sequence()`. */
+bool parse_trace_read_payload(const ProgramRequest& request, std::string* session_id,
+                              uint64_t* from_sequence, bool* incremental)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.empty() || value.size() > 2 || !value[0].is_string())
+            return false;
+        *session_id = value[0].get<std::string>();
+        *incremental = value.size() == 2;
+        *from_sequence = 1;
+        if (*incremental) {
+            if (!value[1].is_number_unsigned()) return false;
+            *from_sequence = value[1].get<uint64_t>();
+            if (*from_sequence == 0) return false;
+        }
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* F18 — số mẫu tối đa trong MỘT phản hồi `TRACE_READ`. Hai trần cùng áp:
+ *  - số phần tử: bộ giải mã CBOR phía web từ chối mảng > 256 phần tử
+ *    (`coreipc.DecOptions.MaxArrayElements`), nên giữ dưới hẳn mức đó;
+ *  - byte: một mẫu CBOR tốn ~12 byte + ~11 byte mỗi biến; giữ tổng dưới
+ *    ~28 KiB, dưới trần payload IPC 32 KiB (`PROGRAM_IPC_MAX_PAYLOAD`) kể cả
+ *    với 32 biến. */
+constexpr std::size_t kTraceReadMaxSamples = 200;
+constexpr std::size_t kTraceReadByteBudget = 28U * 1024U;
+
+std::size_t trace_read_batch_limit(std::size_t variable_count)
+{
+    const std::size_t per_sample = 12U + 11U * (variable_count == 0 ? 1U : variable_count);
+    const std::size_t by_bytes = kTraceReadByteBudget / per_sample;
+    return by_bytes < kTraceReadMaxSamples ? by_bytes : kTraceReadMaxSamples;
+}
+
+/* Payload `TRACE_STOP`: `[sessionId]`. */
 bool parse_trace_session_payload(const ProgramRequest& request, std::string* session_id)
 {
     try {
@@ -965,22 +1034,46 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
         const json accepted = json::array({value_trace_->status().effective_sample_period_ms});
         return make_response(request, ProgramResult::Accepted, nullptr, json::to_cbor(accepted));
     }
-    if (!parse_trace_session_payload(request, &session_id))
-        return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
     if (request.action == ProgramAction::TraceStop) {
+        if (!parse_trace_session_payload(request, &session_id))
+            return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
         if (!value_trace_->stop(session_id, &error))
             return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
         return make_response(request, ProgramResult::Ok, nullptr);
     }
+    uint64_t from_sequence = 1;
+    bool incremental = false;
+    if (!parse_trace_read_payload(request, &session_id, &from_sequence, &incremental))
+        return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
 
-    /* TRACE_READ: `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...]]`.
-     * Trả trọn nội dung ring; bounded theo trần Ô nên kích thước có giới hạn
-     * trên biết trước. */
+    /* TRACE_READ, F18:
+     *  - `[sessionId, fromSequence]` ⇒ `[state, droppedCount, samples,
+     *    firstSequence, nextSequence]`: tối đa `trace_read_batch_limit` mẫu, bắt
+     *    đầu từ `max(fromSequence, first_sequence())`. `firstSequence` là số của
+     *    `samples[0]` (bằng `nextSequence` khi rỗng); `nextSequence` là số mẫu kế
+     *    tiếp Core sẽ ghi, để người đọc biết còn phải đọc tiếp hay không.
+     *  - `[sessionId]` (đời cũ) ⇒ `[state, droppedCount, samples]` với tối đa
+     *    `trace_read_batch_limit` mẫu MỚI NHẤT. Bản cũ trả TRỌN ring, vượt trần
+     *    256 phần tử của bộ giải mã web sau 256 mẫu và vượt trần payload IPC
+     *    sau ~1 000 mẫu; khi đó web rơi âm thầm về poll monitor với mốc sai.
+     * Mẫu: `[timestampNs, [[valid, bits], ...]]`. */
     const StTraceStatus status = value_trace_->status();
     if (status.session_id != session_id)
         return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+    const std::size_t held = value_trace_->sample_count();
+    const std::size_t limit = trace_read_batch_limit(value_trace_->variable_count());
+    const uint64_t first_held = value_trace_->first_sequence();
+    const uint64_t next_sequence = value_trace_->next_sequence();
+    std::size_t begin = 0;
+    if (incremental) {
+        const uint64_t start = from_sequence > first_held ? from_sequence : first_held;
+        begin = start >= next_sequence ? held : static_cast<std::size_t>(start - first_held);
+    } else if (held > limit) {
+        begin = held - limit;
+    }
+    const std::size_t end = held - begin > limit ? begin + limit : held;
     json samples = json::array();
-    for (std::size_t index = 0; index < value_trace_->sample_count(); ++index) {
+    for (std::size_t index = begin; index < end; ++index) {
         const StTraceSample sample = value_trace_->sample(index);
         json values = json::array();
         for (std::size_t variable = 0; variable < value_trace_->variable_count(); ++variable) {
@@ -993,7 +1086,12 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
         }
         samples.push_back(json::array({sample.timestamp_ns, values}));
     }
-    const json body = json::array({st_trace_state_name(status.state), status.dropped_count, samples});
+    if (!incremental) {
+        const json body = json::array({st_trace_state_name(status.state), status.dropped_count, samples});
+        return make_response(request, ProgramResult::Ok, nullptr, json::to_cbor(body));
+    }
+    const json body = json::array({st_trace_state_name(status.state), status.dropped_count, samples,
+                                   first_held + begin, next_sequence});
     return make_response(request, ProgramResult::Ok, nullptr, json::to_cbor(body));
 }
 

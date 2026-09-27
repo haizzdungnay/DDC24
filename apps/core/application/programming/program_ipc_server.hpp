@@ -21,6 +21,11 @@ constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
 /* T59-702 nâng 3 -> 4: thêm action `RECOVERY_RESET`. Core minor 3 gặp action
  * này trả lỗi action không hợp lệ — đúng fail-closed. */
 constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 4;
+/* ADR-062 — tên tính năng công bố ở phần tử thứ năm của payload CAPABILITIES.
+ * Web chỉ gửi `programIntents` trong ACTIVATE khi thấy tên này. Không nâng
+ * `PROGRAM_IPC_PROTOCOL_MINOR` cho tính năng này: xem ghi chú ở
+ * `capabilities_payload()` và ADR-062 mục 2. */
+constexpr const char* PROGRAM_IPC_FEATURE_ACTIVATE_PROGRAM_INTENTS = "ACTIVATE_PROGRAM_INTENTS";
 constexpr std::size_t PROGRAM_IPC_MAX_FRAME = 64U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_PAYLOAD = 32U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_QUEUE = 32;

@@ -29,12 +29,31 @@ type fakeOperationRuntime struct {
 	reconcileStaged    bool
 	retainResetResults []coreipc.Result
 	retainResetErrOnce bool
+	// ADR-062: Core giả công bố `ACTIVATE_PROGRAM_INTENTS` ở CAPABILITIES.
+	// Mặc định false = Core cũ (payload CAPABILITIES rỗng).
+	advertiseActivateIntents bool
+	failCapabilities         bool
+	activatePayloads         [][]byte
+	// invalidRequests ghi mọi request KHÔNG qua được `coreipc.ValidateRequest`.
+	// Core thật chạy đúng phép kiểm đó ở biên, nên một bản giả nhận request
+	// hỏng sẽ để test xanh cho một lệnh mà Core thật từ chối.
+	invalidRequests []error
 }
 
 func (f *fakeOperationRuntime) Call(_ context.Context, request coreipc.Request) (coreipc.Response, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, request.Action)
+	if err := coreipc.ValidateRequest(request); err != nil {
+		f.invalidRequests = append(f.invalidRequests, err)
+		return coreipc.Response{}, err
+	}
+	if request.Action == coreipc.ActionActivate {
+		f.activatePayloads = append(f.activatePayloads, append([]byte(nil), request.Payload...))
+	}
+	if request.Action == coreipc.ActionCapabilities && f.failCapabilities {
+		return coreipc.Response{}, errors.New("CAPABILITIES mất response")
+	}
 	if request.Action == coreipc.ActionActivate && f.failActivate {
 		// Mô phỏng Core đã nhận mutation nhưng response mất: trạng thái chỉ được
 		// xác định lại bằng OPERATION_STATUS, tuyệt đối không gọi ACTIVATE lần hai.
@@ -49,6 +68,13 @@ func (f *fakeOperationRuntime) Call(_ context.Context, request coreipc.Request) 
 	}
 	response := coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", coreipc.EmptyPayload())
 	switch request.Action {
+	case coreipc.ActionCapabilities:
+		if f.advertiseActivateIntents {
+			payload, _ := coreipc.EncodePayload([]any{"MK-DDC-24-REV-A", 65536, 32,
+				[]int{10, 50, 100, 500, 1000, 5000, 10000, 50000},
+				[]string{coreFeatureActivateProgramIntents}})
+			response.Payload = payload
+		}
 	case coreipc.ActionStatus:
 		payload, _ := coreipc.EncodePayload(runtimeImpactPayload{ProducerMode: "GRAPH_ONLY",
 			ActiveOverrideIDs: []string{}})
@@ -74,6 +100,10 @@ func (f *fakeOperationRuntime) Reconcile(_ context.Context, request coreipc.Requ
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reconciles++
+	if err := coreipc.ValidateRequest(request); err != nil {
+		f.invalidRequests = append(f.invalidRequests, err)
+		return coreipc.Response{}, err
+	}
 	if f.reconcileStaged {
 		f.reconcileStaged = false
 		response := coreipc.ResponseFor(request, coreipc.ResultStaged, "", "core.programming.ipc", coreipc.EmptyPayload())
@@ -369,7 +399,10 @@ func TestOperationRestoreUsesVerifiedArtifactAndActivatesThroughSameBoundary(t *
 	if operation.State != "SUCCEEDED" || operation.ActualActiveRevisionID != fixture.revision {
 		t.Fatalf("Restore terminal=%+v", operation)
 	}
-	want := []coreipc.Action{coreipc.ActionStatus, coreipc.ActionRestore, coreipc.ActionActivate}
+	// ADR-062: CAPABILITIES đứng ngay trước ACTIVATE để web biết Core có nhận
+	// `programIntents` hay không.
+	want := []coreipc.Action{coreipc.ActionStatus, coreipc.ActionRestore, coreipc.ActionCapabilities,
+		coreipc.ActionActivate}
 	if len(runtime.calls) != len(want) {
 		t.Fatalf("Restore calls=%v want=%v", runtime.calls, want)
 	}

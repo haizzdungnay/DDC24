@@ -19,6 +19,71 @@
 - **Kiểm chứng.** C++ `cmake --fresh` (MODBUS/BACNET/HMI) configure 0, build 0, `ctest` **1601/1601 PASS** (0 fail, 9 skip có sẵn: IoCache/RealtimeMemlock/MbaThreadPolicy). ThreadSanitizer (`-DMKDDC_SANITIZE=thread`, `setarch -R`, suppressions có sẵn) cho `SpscRing*:LatestValueBuffer*:ThreadPolicy*:StValueTrace*:WebIpc*:WebIpcOffload*:ScanLoop*:ProgramIpc*` **109/109 PASS, 0 cảnh báo**. Từng commit trung gian tự build và chạy nhóm test liên quan: 162, 165 và 168 PASS. Go `go vet ./...` exit 0. `go test ./... -count=1`: 20 gói ok; `internal/app` chỉ đỏ `TestRouteTableMatchesOpenAPI` (route `GET /api/v1/ws/simulation` chưa khai OpenAPI). Test này đã đỏ sẵn trên `origin/main`, không do PR này, và phiên chính sửa ở nhánh riêng. Cross-build `mkddc-core` aarch64 (test OFF) configure 0, build 0, `GLIBCXX` cao nhất 3.4.29, `GLIBC` cao nhất 2.38. `scripts/verify-project.sh --component layout` PASS, `--component docs` PASS. Máy dev (`mkddc-core-scan-bench`, 2 × 3000 step, xen kẽ với binary `origin/main`): p99 `ipc` 161,5–183,1 → 1,1–1,2 µs; `publish` 82,9–85,3 → 26,4–27,2 µs; tổng 259,2–283,4 → 64,7–67,8 µs. Đường inline dự phòng ngang bản gốc.
 - Chưa làm trong PR này: deploy lên Foxlinx và đo trên target các chỉ số `core.step_wcet` (`ipc_us`/`publish_us`), `core.jitter`, và CPU của thread `web-ipc` (log `rt.thread_off_scan_cpu`, `ps -L -o psr`). Việc này thuộc lượt deploy kế tiếp; cổng nghiệm thu ghi ở hàng X19 của hồ sơ audit.
 
+### Changed — Audit ADR-061: đóng X6/X20, trạng thái gap X1–X20, F02/F03, tiêu chí `VS-PROG-009` (2026-09-27)
+
+- Phạm vi: `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` (v2.3), `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` (v1.2), hồ sơ `EV-PROG-FBD-ST-MB-20260925`. Không đổi mã.
+- X20: `VS-PROG-009` và `CTRL-T-001` theo tập chu kỳ ADR-061. Ngưỡng 10 000 chu kỳ giữ cho chu kỳ ≤ 5 s; 10 s và 50 s đo trong soak 24 h (8 640 / 1 728 chu kỳ), missed = 0. Chủ sở hữu chốt 2026-09-27, vì 10 000 chu kỳ 50 s mất 5,8 ngày.
+- X6: đóng, không đổi hành vi. C2 (overrun = 0) là tiêu chí đo; FAULT ở overrun thứ ba là phản ứng an toàn (ADR-029). Mọi overrun đều làm health `DEGRADED` ngay.
+- X13 ghi "đã giảm" (vòng mô phỏng ≥ 20 ms, SQLite ≤ 1 lần/s). F02 đã sửa (PR #756). F03 giảm thiểu: soak lần 2 sau 937 phút 0 lần vượt, tối đa 72,9 µs; PREEMPT_RT vẫn chặn vì BSP.
+- Bảng trạng thái X1–X20 trong hồ sơ; câu chữ spec nháp theo tập chu kỳ mới.
+- Kiểm chứng: `docs_iso_harness.py --expect` PASS; `verify-project.sh --component layout` exit 0.
+
+### Fixed — F13 về 0 ms: intent Enable đã lưu đi cùng ACTIVATE, Program chạy ngay tại safe boundary kích hoạt gói (ADR-062, 2026-09-26)
+
+- Phạm vi:
+  - Tài liệu: `docs/adr/ADR-062-programming-intent-enable-di-cung-activate.md` (mới), `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`, `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` (0.7), hàng F13 của `EV-PROG-FBD-ST-MB-20260925`.
+  - Hợp đồng: `contracts/ipc/programming_v1/{schema.json,README.md,golden/manifest.json,golden/request_activate_program_intents.hex}`; re-pin `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}`.
+  - Core: `apps/core/application/programming/{programming_runtime_coordinator,program_ipc_server}.{hpp,cpp}` và test mới `tests/test_programming_activate_intent.cpp`.
+  - Web: `apps/web-api/internal/programming/application/operations.go` và test.
+  - **Không** đụng `apps/core/application/runtime/scan_loop.*`, OpenAPI hay FE.
+- **Triệu chứng:** Commission/Restore sang Revision có Program chưa chạy trong gói cũ làm Core vào safe-state `no_ctrl` và ép mọi AO/DO về giá trị an toàn. Đo trên Foxlinx: 1,38 s, sau `Nudge` (`1de5373c`) còn 70 ms.
+- **Nguyên nhân gốc:** Core dựng Program mới ở Disabled (fail-closed, T59-305/405), còn intent Enable chỉ tới qua `SET_PROGRAM_ENABLED` **sau** boundary kích hoạt. Không tối ưu IPC nào xoá được một vòng.
+- **Cách sửa (ADR-062, phương án a):**
+  - ACTIVATE có thêm phần tử thứ năm tuỳ chọn `programIntents = [[instanceId, desiredEnabled], …]` (≤ 32), chụp từ `program_runtime_intents` cho đúng các Program thuộc Revision.
+  - Core áp nó lên shadow sau `COMMIT_INTENT` và trước arm. `false` đưa Program về Disabled. `true` bật Program theo thứ tự gói, trong trần 16; phần vượt trần giữ Disabled và **không** chặn kích hoạt. Program không có phần tử giữ luật cũ. Sai kiểu, id trùng/sai hoặc quá 32 phần tử trả `IPC-PAYLOAD` trước mọi thay đổi.
+  - Core log `INFO  programming.activate_intents …` làm mốc đo target.
+  - Loại phương án (b) "ghi vào gói": gói bất biến sẽ đông cứng intent cũ khi Restore và phá T59-305.
+  - **Không nâng `protocolMinor`**, vì `ValidateResponse` của web cũ từ chối response có minor cao hơn. Core mới công bố `features: ["ACTIVATE_PROGRAM_INTENTS"]` ở phần tử thứ năm của CAPABILITIES. Web mới dò trước mỗi ACTIVATE; không thấy tính năng, hoặc dò lỗi, hoặc store lỗi, thì gửi 4 phần tử như cũ.
+  - Bảng tương thích bốn tổ hợp phiên bản ở ADR-062 mục 7.
+  - Boot fail-closed, rollback, reconcile F04/F07 và `Nudge` giữ nguyên. Program bật bằng intent nay tham gia barrier chu kỳ đầu (T59-501).
+- **Sửa kèm:**
+  - `fakeOperationRuntime` chạy `coreipc.ValidateRequest` cho mọi request, như Core thật ở biên.
+  - `DECISIONS.md` bổ sung dòng bảng `ADR-061` còn thiếu.
+  - File golden `.hex` bị `*.hex` của `.gitignore` chặn, nên được thêm bằng `git add -f` như ba golden cũ.
+- **Số đo thật (2026-09-26, nền `origin/main@dc443fde`):**
+  - `cmake --fresh … MODBUS/BACNET/HMI=ON` → configure exit 0, build exit 0. `ctest --test-dir build/fw` → **1594/1594 PASS**, exit 0, 9 skip như nền (nền 1584/1584; +10 test `ProgrammingActivateIntent.*`).
+  - Test qua `ScanLoop` thật: có intent thì 0 scan `no_ctrl` và DO-01 giữ 1 từ ACTIVATE tới COMMITTED. Ca đối chứng không intent tái hiện `safe_state.enter … no_ctrl=1`.
+  - Đột biến tắt `apply_activation_intents` → 8/10 test mới đỏ; đã khôi phục.
+  - `go vet ./...` → exit 0. `go test ./... -count=1` → 20/21 package `ok`. Package còn lại `internal/app` đỏ **một** test có sẵn trên main: `TestRouteTableMatchesOpenAPI`, route `GET /api/v1/ws/simulation` do `73674477` thêm mà chưa khai OpenAPI. Chạy lại trên ảnh `git archive origin/main` cũng đỏ y hệt. Ngoài phạm vi F13, không sửa ở nhánh này (phiên chính sửa ở nhánh riêng). Các test còn lại của `internal/app` (`go test ./internal/app/ -skip TestRouteTableMatchesOpenAPI -count=1`) → `ok`.
+  - `scripts/verify-project.sh --component layout` → exit 0 (G1 10/10, PGM-02, IPC actions 12/12). `--component docs` → exit 0.
+  - `python3 -m pytest tests/integration/` → 43 passed, 14 skipped (`test_release_dryrun` cần `build/release`).
+  - FE không đổi nên không chạy.
+- **Còn mở:** F13 chỉ đóng ở mức source/host. Phải deploy **cả** Core lẫn web rồi đo target theo ADR-062 mục 8 (`programming.activate_intents … enabled=1`, không có `safe_state.enter … no_ctrl=1` quanh Restore).
+
+### Fixed — Trace hỏng âm thầm sau 256 mẫu (F18); OpenAPI thiếu kênh `/ws/simulation` làm cổng Go đỏ trên main (2026-09-27)
+
+- Phạm vi:
+  - Core: `apps/core/application/st/st_value_trace.{hpp,cpp}`, `apps/core/application/programming/program_ipc_server.cpp` và test `test_program_ipc_server.cpp`.
+  - Web: `apps/web-api/internal/programming/application/{trace.go,monitor_trace_test.go}`, `apps/web-api/internal/app/rbac_contract_test.go`.
+  - Hợp đồng: `contracts/openapi/openapi.yaml` 1.42.0 → 1.43.0; re-pin `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}`; `contracts/ipc/programming_v1/README.md` §4.1.
+  - FE: `apps/web-ui/src/features/programming/api/generated/{client.ts,client.test.ts}`.
+  - Khác: `apps/iobus/tests/test_output_command.cpp`; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (F18, lượt 4).
+- F18 — triệu chứng: Trace 10 ms trên Foxlinx chỉ có mẫu Core trong 2,56 s đầu. Sau đó web trộn mẫu poll monitor: mốc trùng nhau 33–45 lần mỗi giây, có lúc chạy lùi 920 ms, mà `droppedSamples` vẫn báo 0.
+- F18 — nguyên nhân: `TRACE_READ` trả trọn ring, còn bộ giải mã CBOR của web đặt `MaxArrayElements: 256`, nên từ mẫu 257 mọi lần đọc hỏng và `runTrace` rơi về poll monitor. Ring đầy còn vượt trần payload IPC 32 KiB.
+- F18 — cách sửa:
+  - `TRACE_READ` đọc tăng dần theo số thứ tự tuyệt đối (`[sessionId, fromSequence]`), mỗi lô ≤ 200 mẫu và dưới 28 KiB, trả `firstSequence`/`nextSequence`. Payload cũ `[sessionId]` vẫn được phục vụ (lô mẫu mới nhất).
+  - Web nối mẫu và cộng khoảng hụt vào `droppedSamples`. Phiên Core không bao giờ trộn mẫu monitor; đọc hỏng liên tục 3 s thì FAILED `SOURCE_UNAVAILABLE`.
+  - Mốc wall neo một lần mỗi phiên, vì tính lại mỗi lô làm mốc chạy lùi ở ranh giới lô.
+  - Web poll Core ≥ 100 ms thay vì mỗi 10 ms.
+  - Đường dự phòng bỏ mẫu trùng mốc.
+- Cổng Go đỏ sẵn trên main: route `GET /api/v1/ws/simulation` (PR #759) chạy mà không có trong OpenAPI, nên `TestRouteTableMatchesOpenAPI` đỏ. Đã khai kênh chỉ đọc này (viewer+, cùng quyền với REST observations), thêm vào danh sách ngoại lệ xác thực WebSocket của test RBAC, và re-pin sha OpenAPI trong cùng PR.
+- GCC 13.3 báo nhầm `-Wstringop-overflow` trong `test_output_command.cpp` (có sẵn trên main): tắt cục bộ kèm lý do.
+- Đo trên target (lượt 4), không dùng Trace:
+  - Release → `ext_cmd_seq` trung vị 1,5–1,7 ms; `ext_cmd_seq` → FC05 trung vị 1,1–1,2 ms, tối đa 4,5 ms: G7 PASS.
+  - Disable ⇒ `safe_value` sau 12–261 ms: F06 PASS.
+  - Active trả về `4206243c…` sau mỗi lượt.
+- Kiểm chứng: xem PR.
+
 ### Changed — Deploy `main@d2556be6` (web + FE) lên Foxlinx (2026-09-26)
 
 - Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (lượt 4). Không đổi mã.
