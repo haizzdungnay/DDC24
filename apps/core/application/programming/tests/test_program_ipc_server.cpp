@@ -517,6 +517,103 @@ TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
     EXPECT_EQ(trace.status().state, StTraceState::STOPPED);
 }
 
+/* F18 (EV-PROG-FBD-ST-MB-20260925) — `TRACE_READ` đọc TĂNG DẦN theo số thứ tự
+ * tuyệt đối, mỗi phản hồi có trần. Bản cũ trả trọn ring: trên Foxlinx, Trace
+ * 10 ms hỏng sau đúng 256 mẫu (2,56 s) vì bộ giải mã CBOR của web từ chối mảng
+ * > 256 phần tử, rồi web rơi âm thầm về poll monitor với mốc thời gian sai. */
+TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_us = 199000;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    server.set_value_trace(&trace, &scheduler);
+    uint8_t seed = 0x10;
+    auto send = [&](ProgramAction action, const nlohmann::json& body) {
+        ProgramRequest input = request(action);
+        input.request_id = bytes(16, seed++);
+        input.operation_id = bytes(16, seed++);
+        input.actor_id = "admin-1";
+        input.payload = nlohmann::json::to_cbor(body);
+        crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+        ProgramCodecError codec_error = ProgramCodecError::None;
+        const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+        EXPECT_EQ(codec_error, ProgramCodecError::None);
+        const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+        ProgramResponse response;
+        EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+        return response;
+    };
+    auto body_of = [](const ProgramResponse& response) {
+        return nlohmann::json::from_cbor(response.payload, true, true);
+    };
+
+    /* 10 ms × 10 050 mẫu = 100,5 s: vượt sức chứa 10 000 Ô (1 biến) ⇒ ring ghi đè
+     * 50 mẫu cũ nhất. */
+    const nlohmann::json start_body = nlohmann::json::array(
+        {"session-f18", 10u, 600000u, nlohmann::json::array({nlohmann::json::array({"P_ahu", "x"})})});
+    ASSERT_EQ(send(ProgramAction::TraceStart, start_body).result, ProgramResult::Accepted);
+    ASSERT_EQ(trace.status().effective_sample_period_ms, 10u);
+    const uint64_t t0 = 1'000'000;
+    for (uint64_t k = 0; k < 300; ++k) trace.on_boundary(scheduler, t0 + k * 10'000'000ull);
+    ASSERT_EQ(trace.sample_count(), 300u);
+    EXPECT_EQ(trace.first_sequence(), 1u);
+    EXPECT_EQ(trace.next_sequence(), 301u);
+
+    /* Đường cũ `[sessionId]`: đúng 3 phần tử, tối đa 200 mẫu MỚI NHẤT — dưới
+     * trần 256 phần tử của web, và mẫu cuối là mẫu vừa ghi. */
+    const nlohmann::json legacy = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18"})));
+    ASSERT_EQ(legacy.size(), 3u);
+    ASSERT_EQ(legacy[2].size(), 200u);
+    EXPECT_EQ(legacy[2][199][0].get<uint64_t>(), t0 + 299ull * 10'000'000ull);
+
+    /* Đọc tăng dần: lô 1..200, rồi 201..300, rồi rỗng. */
+    const nlohmann::json first = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 1u})));
+    ASSERT_EQ(first.size(), 5u);
+    ASSERT_EQ(first[2].size(), 200u);
+    EXPECT_EQ(first[3].get<uint64_t>(), 1u);
+    EXPECT_EQ(first[4].get<uint64_t>(), 301u);
+    EXPECT_EQ(first[2][0][0].get<uint64_t>(), t0);
+    const nlohmann::json second = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 201u})));
+    ASSERT_EQ(second[2].size(), 100u);
+    EXPECT_EQ(second[3].get<uint64_t>(), 201u);
+    EXPECT_EQ(second[2][0][0].get<uint64_t>(), t0 + 200ull * 10'000'000ull);
+    const nlohmann::json empty = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 301u})));
+    EXPECT_EQ(empty[2].size(), 0u);
+    EXPECT_EQ(empty[3].get<uint64_t>(), 301u);
+
+    /* Ghi tiếp tới 10 050 mẫu: 50 mẫu đầu bị ghi đè. Người đọc dừng ở 301 vẫn
+     * đọc tiếp đúng từ 301; người đọc còn ở 1 thấy `firstSequence = 51` —
+     * khoảng hụt 50 chính là số mẫu nó đã mất. */
+    for (uint64_t k = 300; k < 10050; ++k) trace.on_boundary(scheduler, t0 + k * 10'000'000ull);
+    ASSERT_EQ(trace.sample_count(), 10000u);
+    EXPECT_EQ(trace.first_sequence(), 51u);
+    const nlohmann::json resumed = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 301u})));
+    EXPECT_EQ(resumed[3].get<uint64_t>(), 301u);
+    EXPECT_EQ(resumed[2][0][0].get<uint64_t>(), t0 + 300ull * 10'000'000ull);
+    const nlohmann::json late = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 1u})));
+    EXPECT_EQ(late[3].get<uint64_t>(), 51u);
+    EXPECT_EQ(late[4].get<uint64_t>(), 10051u);
+
+    /* Phản hồi luôn dưới trần payload IPC, kể cả khi ring đầy. */
+    const ProgramResponse full = send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 1u}));
+    EXPECT_LT(full.payload.size(), 32u * 1024u);
+
+    /* `fromSequence = 0` không có nghĩa: từ chối thay vì đoán. */
+    EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 0u})).result,
+              ProgramResult::Rejected);
+}
+
 /* Không có bus trace: ba action trả UNAVAILABLE tường minh. Một `TRACE_START`
  * "thành công" mà không có nơi lấy mẫu là lời hứa suông. */
 TEST(ProgramIpcServer, TraceActionsWithoutBusAreUnavailableNotSilentlyOk)
