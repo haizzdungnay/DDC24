@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Security — F-FR-04: `install.sh` sinh `JWT_SECRET` đủ 32 byte; web từ chối secret ngắn (2026-09-27)
+
+- **Phạm vi:** `platform/packaging/install.sh`, `apps/web-api/internal/app/config.go` + `config_test.go`, `tests/integration/test_release_dryrun.py`; hồ sơ `EV-FWSOM-FOXLINX-FACTORY-20260927`; header `tools/deploy/foxlinx_factory_reset.sh`.
+- **Triệu chứng:** cài sạch Foxlinx ngày 2026-09-27 cho `JWT_SECRET` dài 2 ký tự, và web lặp restart 16 lần với `cursor secret >=16 byte là bắt buộc`. Nếu Programming tắt, web vẫn chạy và ký JWT HS256 bằng secret vài ký tự, tức ai cũng giả được token.
+- **Nguyên nhân gốc:**
+  - `head -c 32 /dev/urandom | tr -dc 'a-f0-9' | head -c 64` chỉ giữ những byte ngẫu nhiên tình cờ trùng mã ASCII của ký tự hex. Trung bình 32 byte chỉ còn 2 ký tự (năm lần đo trên bo: 3, 2, 2, 5, 2).
+  - Nhánh dự phòng `mkddc-secret-$(date +%s)` đoán được.
+  - Web chỉ kiểm `JWT_SECRET` khác rỗng.
+- **Cách sửa:**
+  - `new_jwt_secret()`: `od -An -tx1 -N32 /dev/urandom` → 64 hex; kiểm định dạng và độ dài, sai thì dừng cài. Không còn nhánh dự phòng.
+  - File env ghi dưới `umask 077`.
+  - Nâng cấp: secret < 32 byte bị thay (chỉ dòng `JWT_SECRET`, các dòng khác giữ, log `WARN … F-FR-04`); secret đủ dài giữ nguyên để không làm chết phiên đăng nhập.
+  - Web: `LoadConfig` từ chối `JWT_SECRET` < 32 byte (`minJWTSecretBytes`) và chỉ cách sinh lại.
+- **Kiểm chứng (host):**
+  - `test_release_dryrun.py` 17/17 trên cây `build-release.sh`. Trên `install.sh` cũ, 2 test mới đỏ (secret khi cài mới, thay secret yếu khi nâng cấp).
+  - `TestLoadConfigRejectsShortJWTSecret` đỏ trên `config.go` cũ.
+  - `go vet ./...` exit 0; `go test ./... -count=1` exit 0 (21 package ok).
+  - `tools/test_rotate_jwt_secret.sh` 17/17; `test_release_packaging_guard.py` 13/13; `verify-project.sh --component layout` exit 0.
+- **Target:** deploy và kiểm trên bo sau khi merge.
+
 ### Deploy — Nâng cấp bo lab Foxlinx lên `main@3cb08fbc`, đóng F-FR-01 trên target (2026-09-27)
 
 - **Phạm vi:**
