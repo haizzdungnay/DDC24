@@ -391,15 +391,28 @@ void ScanLoop::step()
     record_phase(ScanPhase::ALARMS, &phase_mark);
 
     /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
-     * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
-    d_.graph->apply_ext_writes(d_.bacnet->shm());
+     * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế.
+     *
+     * F22 (EV-PROG-FBD-ST-MB-20260925): CHỈ khi graph là producer — cùng luật
+     * "một Point Local logic không có hai producer" với `graph->execute()` ở
+     * bước 5. Graph đã chạy ở GRAPH_ONLY giữ `_setpoint` cuối của nó; sau khi
+     * Commission chuyển sang PROGRAM_ONLY mà vẫn gọi hàm này thì mỗi scan graph
+     * ghi đè lại giá trị cũ lên đúng slot EXT Program vừa ghi, `ext_cmd_seq`
+     * tăng hai lần mỗi scan và giá trị của graph thắng. */
+    if (active_mode != CutoverMode::PROGRAM_ONLY) d_.graph->apply_ext_writes(d_.bacnet->shm());
     record_phase(ScanPhase::EXT_WRITES, &phase_mark);
 
     /* 6. Resolve priority */
     OutputCmd out = d_.resolver->resolve();
 
-    /* 7. Safe-state có thể ghi đè */
-    d_.safe->apply(last_io_, *d_.table, &out);
+    /* 7. Safe-state có thể ghi đè.
+     *
+     * F21 (EV-PROG-FBD-ST-MB-20260925): truyền graph có phải producer hay
+     * không. Tham số này có ở `d594c023` nhưng mất trong merge `0a98a907`, nên
+     * SafeState luôn nhận mặc định `true`: một graph.json đã nạp (giữ để
+     * rollback) dưới PROGRAM_ONLY vẫn được coi là "đang có người điều khiển",
+     * T7 `no_ctrl` không bao giờ bật, và T6 xét input của một graph không chạy. */
+    d_.safe->apply(last_io_, *d_.table, &out, active_mode != CutoverMode::PROGRAM_ONLY);
 
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);

@@ -152,6 +152,87 @@ TEST(ScanLoop, ProgramOnlyModeSkipsGraphExecuteEntirely)
         << "PROGRAM_ONLY: graph.execute() không được chạy — không ai claim AO-01";
 }
 
+/* F21 (EV-PROG-FBD-ST-MB-20260925): graph.json đã nạp nhưng Program sở hữu
+ * Local logic (PROGRAM_ONLY) và không ai điều khiển ⇒ T7 phải bật. Trước bản vá
+ * ScanLoop gọi `SafeState::apply` thiếu `graph_is_active_producer` (mất trong
+ * merge `0a98a907`), graph đã nạp bị coi là producer và T7 không bao giờ bật. */
+TEST(ScanLoop, ProgramOnlyWithLoadedGraphAndNoControllerEntersSafeState)
+{
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    ASSERT_TRUE(graph.load_string(kAoGraph));
+    PriorityResolver resolver;
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics, -1, nullptr, nullptr, nullptr, CutoverMode::PROGRAM_ONLY});
+    shm.ts_ns += 1000000;
+    loop.step();
+    EXPECT_TRUE(safe.active())
+        << "PROGRAM_ONLY, graph chỉ được giữ để rollback, không ai claim output: T7 phải bật";
+}
+
+/* F22 (EV-PROG-FBD-ST-MB-20260925): graph đã chạy ở GRAPH_ONLY giữ `_setpoint`
+ * của node Modbus_RTU_Write; sau khi chuyển sang PROGRAM_ONLY nó KHÔNG được ghi
+ * đè slot EXT mà Program đang giữ. */
+TEST(ScanLoop, ProgramOnlyGraphDoesNotOverwriteExtCommands)
+{
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    ASSERT_TRUE(graph.load_string(R"json({
+      "schema_version": "1.0",
+      "device": { "scan_ms": 1000 },
+      "nodes": [
+        { "id": "sp_src", "type": "Setpoint", "params": { "default": 50.0 } },
+        { "id": "w0", "type": "Modbus_RTU_Write",
+          "params": { "bus": 1, "slave": 5, "fc": 6, "addr": 0, "type": "u16" } }
+      ],
+      "links": [{ "from": "sp_src.out", "to": "w0.in" }],
+      "modbus": { "rtu": [{ "bus": 1, "slave": 5, "points": [{ "node": "w0" }] }] }
+    })json"));
+    PriorityResolver resolver;
+    /* Graph đã chạy khi còn là producer: `_setpoint` = 50 nằm sẵn trong node. */
+    graph.execute(table, resolver);
+    SafeState safe(quality);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    ASSERT_TRUE(bacnet.attach());
+    kx_plc_shm_t* plc = bacnet.shm();
+    plc->ext_count = 1;
+    /* Lệnh của Program đang giữ slot: 10, seq 5. */
+    plc->ext[0].setpoint = 10.0f;
+    plc->ext[0].dirty = 1;
+    plc->ext_cmd_seq[0] = 5;
+    CoreMetrics metrics;
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics, -1, nullptr, nullptr, nullptr, CutoverMode::PROGRAM_ONLY});
+    for (int scan = 0; scan < 3; ++scan) {
+        shm.ts_ns += 1000000;
+        loop.step();
+    }
+    EXPECT_FLOAT_EQ(plc->ext[0].setpoint, 10.0f) << "graph không phải producer mà vẫn ghi EXT";
+    EXPECT_EQ(plc->ext_cmd_seq[0], 5u) << "không có lệnh mới nào được tạo khi graph không chạy";
+    bacnet.detach();
+}
+
 TEST(ScanLoop, FaultTriggersSafeOutputs)
 {
     Fixture f;
