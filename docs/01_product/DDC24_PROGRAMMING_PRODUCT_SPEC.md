@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROD-PROG-001` |
-| Phiên bản | 3.2 |
+| Phiên bản | 3.3 |
 | Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, chưa phải As-Built** |
 | Ngày hiệu lực | 2026-08-20 |
 | Ngày phê duyệt PGM-02 | 2026-08-24 |
@@ -97,7 +97,7 @@ một controller mà không cần desktop IDE riêng.
 |---|---:|
 | Program trong một Project/Revision | 32 |
 | Program có thể Enable trên một controller | 16 |
-| Chu kỳ Program | `1 s`, `5 s`, `30 s` |
+| Chu kỳ Program | `10`, `50`, `100`, `500`, `1000`, `5000`, `10000`, `50000` ms trên base step 10 ms (ADR-061; trước 2026-09-26 là `1 s`, `5 s`, `30 s`) |
 | User Function + Function Block mỗi Project | 256 |
 | Instance Function Block trong một Revision | 1024 |
 | Published Signal trong một Revision | 512 |
@@ -186,7 +186,8 @@ DISABLED → STARTING → RUNNING ↔ WAITING
 - Restart phục hồi Commissioned Revision, enable intent và RETAIN theo ba policy
   độc lập; không suy `RUNNING` chỉ vì intent trước reboot là Enabled.
 - Atomic package activation giữ enable intent của Program đã tồn tại; Program mới
-  mặc định `DISABLED`.
+  mặc định `DISABLED`, trừ khi người vận hành đã lưu intent Enable cho nó trước
+  khi kích hoạt (ADR-062: intent đã lưu đi cùng ACTIVATE, trong trần 16 Enabled).
 
 ## 5. Information Architecture
 
@@ -269,8 +270,8 @@ identity, capability và failure state phải theo contract Candidate; khi chưa
    deadline và không bị dừng ngoài dependency policy.
 2. Cùng một Function/FB chạy bằng ST và FBD cho kết quả/type/state trace tương
    đương; recursion và side effect trái phép bị từ chối.
-3. Commission Revision nhiều Program là atomic; Program mới Disabled, Program cũ
-   giữ enable intent; rollback khôi phục LKG.
+3. Commission Revision nhiều Program là atomic; Program mới Disabled (trừ Program
+   có intent Enable đã lưu, ADR-062), Program cũ giữ enable intent; rollback khôi phục LKG.
 4. Disable rút output candidate; đo physical AO/DO/DO và read-back chứng minh
    resolver/interlock/safe-state đúng.
 5. Mất Web/BE, reboot Core, corrupt RETAIN, timeout Commission và power-cut đều có
@@ -322,3 +323,4 @@ release.
 | 3.0 | 2026-08-20 | Owner chốt một Product Programming thống nhất; thêm multi-Program, FUNCTION/FUNCTION_BLOCK, Control Library, Published Signal, Enable/Disable và sáu workspace; bỏ phân chia Rev A/Rev B. |
 | 3.1-candidate | 2026-08-24 | Thêm `PC-PROG-013`, `PR-PROG-025..030` cho Target Candidate PGM-02 v2.2 theo R1 EDIT → R2 LIVE → R3 SIMULATE; ghi Owner approved WP-00 only, Architect exact revision/hash pin PENDING và code/release NO-GO; baseline 3.0 giữ nguyên hiệu lực. |
 | 3.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, mở `PLAN_READY` và ba `IMPLEMENT_READY` nhưng giữ thứ tự R1→R2→R3 cùng `RELEASE_READY=NO-GO`; chốt PROGRAM POU chưa xếp lịch chỉ hợp lệ trong Draft, Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`. |
+| 3.3 | 2026-09-27 | Đồng bộ hai quyết định đã Accepted mà bản 3.2 chưa phản ánh (lộ ra ở cổng `candidate-pin` khi tổng hợp release `DDC24-RELEASE-RECORD-2026-09-27`): **ADR-061** — chu kỳ Program thành tập {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms trên base step 10 ms, Product Owner/CTO chốt 2026-09-26, thay `1/5/30 s`; **ADR-062** — Program mới có intent Enable đã lưu được bật ngay tại boundary kích hoạt, Program mới không có intent vẫn Disabled (T59-305 không bị supersede). Không đổi trần 32/16, scope, maturity hay trạng thái nghiệm thu nào. |
