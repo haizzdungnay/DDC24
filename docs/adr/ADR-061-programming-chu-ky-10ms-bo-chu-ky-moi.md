@@ -83,17 +83,17 @@ Như `PROGRAMMING_CONTROL_SEMANTICS` §6 (F06): instance đã publish bị rút 
 - `web-ipc` ngủ trong `poll()` trên socket; khi còn lệnh chờ luồng quét hoặc còn byte chưa gửi thì thức mỗi 1 ms để trả lời ngay sau scan. Độ trễ trả lời lệnh ≤ 1 base step + 1 ms (07 §8 cho phép ≤ 2 chu kỳ); `point_snapshot` được trả ngay, không còn chờ tới scan kế.
 - Không tạo được thread thì `WebIpc` log `ERROR web_ipc.service_thread_fail` và `ScanLoop` phục vụ IPC ngay trong step như trước, qua CÙNG đường mã (`service_intake`/`service_output`). Test cũ chạy đường inline này; test mới chạy đường có thread.
 
-**`StValueTrace` (F05 còn mở).** Luồng IPC Programming (`start`/`stop`/`status`/`sample`) và luồng quét (`on_boundary`) trước đây chạm cùng dữ liệu không đồng bộ. Nay mọi trường có khoá quay ngắn; luồng quét chỉ `try_lock` và bỏ lượt khi khoá đang bị giữ (mẫu tới hạn lấy ở boundary kế với mốc thời gian thật, đếm `contended_boundary_count`), không bao giờ chờ. Tên → slot phân giải trên luồng quét ở boundary đầu tiên sau `start()`, vì chỉ luồng quét được đọc cấu trúc Program đang chạy. API đọc và layout ring giữ nguyên; `variable(i)` trả bản sao thay cho tham chiếu.
+**`StValueTrace` (F05 còn mở).** Luồng IPC Programming (`start`/`stop`/`status`/`sample`) và luồng quét (`on_boundary`) trước đây chạm cùng dữ liệu không đồng bộ. Nay mọi trường có khoá quay ngắn; luồng quét chỉ `try_lock` và bỏ lượt khi khoá đang bị giữ (mẫu tới hạn lấy ở boundary kế với mốc thời gian thật, đếm `contended_boundary_count`), không bao giờ chờ. Tên → slot phân giải trên luồng quét ở boundary đầu tiên sau `start()`, vì chỉ luồng quét được đọc cấu trúc Program đang chạy. API đọc và layout ring giữ nguyên; `variable(i)` trả bản sao thay cho tham chiếu; `first_sequence()`/`next_sequence()` của F18 cũng lấy khoá. `TRACE_READ` (`program_ipc_server.cpp`) đọc trạng thái, số thứ tự và các mẫu trong MỘT lần giữ khoá (`StValueTrace::ConsistentRead`), chỉ chép mẫu ra rồi dựng JSON sau khi nhả khoá. Nếu đọc rời từng hàm, ring có thể dịch một mẫu giữa hai lời gọi và `firstSequence` sẽ lệch khỏi `samples[0]`.
 
-**Đo.** `record_phase`/`core.step_wcet` giữ nguyên để so trước/sau trên target. Trên máy dev (x86, kernel không RT) dùng `mkddc-core-scan-bench`: 3000 step 10 ms mỗi lượt, hai lượt xen kẽ cùng binary gốc `origin/main`. Tải mô phỏng web-api: `point_snapshot` 20 lần/s, `write DO1` 5 lần/s, `alarm_list` 1 lần/s, 8 Program đang chạy.
+**Đo.** `record_phase`/`core.step_wcet` giữ nguyên để so trước/sau trên target. Trên máy dev (x86, kernel không RT) dùng `mkddc-core-scan-bench`: 3000 step 10 ms mỗi lượt, bốn lượt (hai phiên đo, trước và sau khi gộp F13/F18) xen kẽ với binary gốc `origin/main`. Tải mô phỏng web-api: `point_snapshot` 20 lần/s, `write DO1` 5 lần/s, `alarm_list` 1 lần/s, 8 Program đang chạy.
 
 | Bước | `origin/main` p50 / p99 (µs) | X19 có `web-ipc` p50 / p99 (µs) |
 |---|---|---|
-| ipc | 27,6–28,3 / 161,5–183,1 | 0,4–0,5 / 1,1–1,2 |
-| publish | 38,2–40,7 / 82,9–85,3 | 16,7 / 26,4–27,2 |
-| tổng | 95,7–103,2 / 259,2–283,4 | 37,6–38,0 / 64,7–67,8 |
+| ipc | 27,2–28,3 / 142,0–183,1 | 0,4–0,5 / 1,0–1,2 |
+| publish | 38,2–40,7 / 82,9–85,8 | 16,7–17,0 / 26,3–27,6 |
+| tổng | 95,7–103,5 / 231,1–283,4 | 37,5–38,3 / 63,0–67,8 |
 
-Đường dự phòng inline (mã mới, không có thread) cho ipc p99 141,0–156,2 µs và publish p99 91,5–98,5 µs, ngang bản gốc: hai đường cùng một mã, chỉ khác luồng chạy. Giá trị max trên máy dev (vài ms) là do máy dev bị giành CPU, không dùng để kết luận. Đo riêng từng việc còn lại ở PUBLISH (`--micro`, cache nóng, 20 000 lần): dựng snapshot 2,84 µs, điền bảng Program 0,48 µs, công bố triple buffer 0,16 µs, BACnet objtable 0,38 µs. Serialize JSON (7230 byte, nay ở `web-ipc`) tốn 4,10 µs. Số trên target chưa đo, chờ deploy; cổng nghiệm thu ghi ở hồ sơ audit, hàng X19.
+Đường dự phòng inline (mã mới, không có thread) cho ipc p99 131,7–161,8 µs và publish p99 91,5–107,5 µs, ngang bản gốc: hai đường cùng một mã, chỉ khác luồng chạy. Giá trị max trên máy dev (vài ms) là do máy dev bị giành CPU, không dùng để kết luận. Đo riêng từng việc còn lại ở PUBLISH (`--micro`, cache nóng, 20 000 lần): dựng snapshot 2,84 µs, điền bảng Program 0,48 µs, công bố triple buffer 0,16 µs, BACnet objtable 0,38 µs. Serialize JSON (7230 byte, nay ở `web-ipc`) tốn 4,10 µs. Số trên target chưa đo, chờ deploy; cổng nghiệm thu ghi ở hồ sơ audit, hàng X19.
 
 ## Hệ quả
 
