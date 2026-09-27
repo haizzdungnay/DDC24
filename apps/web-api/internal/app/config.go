@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,10 @@ import (
 )
 
 const webVersion = "0.1.0-be-b6c"
+
+// minJWTSecretBytes — 256 bit cho HMAC-SHA256; install.sh và rotate-web-jwt-secret.sh
+// sinh 32 byte ngẫu nhiên dưới dạng 64 ký tự hex.
+const minJWTSecretBytes = 32
 
 var buildVersion = webVersion
 var buildGitCommit = "unknown"
@@ -139,6 +144,14 @@ func LoadConfig() (Config, error) {
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")
+	}
+	// F-FR-04 (EV-FWSOM-FOXLINX-FACTORY-20260927): secret này ký JWT HS256 và làm
+	// cursor secret cho Programming. install.sh từng sinh nó chỉ 0–5 ký tự; khi
+	// Programming tắt, web vẫn chạy và ký token bằng secret đoán được. Từ chối
+	// khởi động là lớp chặn thứ hai, độc lập với script cài.
+	if len(cfg.JWTSecret) < minJWTSecretBytes {
+		return Config{}, fmt.Errorf("JWT_SECRET quá ngắn: %d byte, cần ít nhất %d "+
+			"(sinh lại bằng platform/packaging/rotate-web-jwt-secret.sh)", len(cfg.JWTSecret), minJWTSecretBytes)
 	}
 	cfg.deriveHistorianV2Paths()
 	cfg.deriveProgrammingPaths()

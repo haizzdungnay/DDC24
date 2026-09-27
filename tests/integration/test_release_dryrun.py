@@ -139,6 +139,21 @@ class ReleaseDryRunTest(unittest.TestCase):
                       "BE không được bật Programming: bo sẽ hiện workspace mà endpoint trả 404")
         self.assertIn("JWT_SECRET=", env)
 
+    def test_1_cai_moi_sinh_jwt_secret_du_32_byte(self) -> None:
+        """F-FR-04: bản cũ sinh JWT_SECRET 0–5 ký tự (`tr -dc` trên byte ngẫu nhiên).
+
+        Đo trên bo Foxlinx 2026-09-27: 2 ký tự. Web ký JWT bằng secret đó, và khi
+        Programming bật thì lặp restart vì cursor secret < 16 byte.
+        """
+        env_path = self.root / "etc/mkddc-web.env"
+        secrets = [l for l in env_path.read_text(encoding="utf-8").splitlines()
+                   if l.startswith("JWT_SECRET=")]
+        self.assertEqual(len(secrets), 1, "file env phải có đúng một dòng JWT_SECRET")
+        self.assertRegex(secrets[0], r"^JWT_SECRET=[0-9a-f]{64}$",
+                         "JWT_SECRET phải là 32 byte ngẫu nhiên dạng 64 hex")
+        self.assertEqual(env_path.stat().st_mode & 0o777, 0o600,
+                         "file chứa secret phải 0600")
+
     def test_1_runtime_checksums_khop_file_that(self) -> None:
         """Hồ sơ checksum phải nói đúng về chính các file vừa cài."""
         recorded = (self.root / "usr/share/mkddc/runtime-checksums.sha256").read_text(
@@ -346,3 +361,59 @@ class ReleaseDryRunTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(release_ready(), "chưa dựng build/release (chạy build-release.sh)")
+class WeakJwtSecretUpgradeTest(unittest.TestCase):
+    """F-FR-04 — nâng cấp một bo đã cài bằng install.sh cũ (secret vài ký tự).
+
+    Cây giả RIÊNG: một lần cài thêm trong `ReleaseDryRunTest` sẽ ghi đè snapshot
+    `previous` mà kịch bản rollback của class đó dựa vào.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="mkddc-weak-jwt-")
+        self.root = Path(self._tmp) / "target"
+        self.root.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _install(self) -> str:
+        env = dict(os.environ, MKDDC_INSTALL_ROOT=str(self.root))
+        done = subprocess.run(["bash", str(INSTALL), "--no-enable"],
+                              cwd=ROOT, env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return done.stdout + done.stderr
+
+    def _secret(self) -> str:
+        lines = [l for l in (self.root / "etc/mkddc-web.env").read_text(encoding="utf-8").splitlines()
+                 if l.startswith("JWT_SECRET=")]
+        self.assertEqual(len(lines), 1, "file env phải có đúng một dòng JWT_SECRET")
+        return lines[0].split("=", 1)[1]
+
+    def test_nang_cap_thay_secret_yeu_giu_cac_dong_khac(self) -> None:
+        self._install()
+        env_path = self.root / "etc/mkddc-web.env"
+        other = [l for l in env_path.read_text(encoding="utf-8").splitlines()
+                 if not l.startswith("JWT_SECRET=")]
+        # Đúng hình dạng file env mà install.sh cũ để lại trên bo Foxlinx.
+        env_path.write_text("JWT_SECRET=a3\n" + "\n".join(other) + "\n", encoding="utf-8")
+
+        log = self._install()
+
+        self.assertRegex(self._secret(), r"^[0-9a-f]{64}$", "nâng cấp phải thay secret yếu")
+        self.assertIn("F-FR-04", log, "nâng cấp phải báo đã thay secret yếu")
+        after = env_path.read_text(encoding="utf-8").splitlines()
+        for line in other:
+            self.assertIn(line, after, f"nâng cấp làm mất dòng env: {line!r}")
+        self.assertEqual(sum(1 for l in after if l.startswith("PROGRAMMING_REV_A=")), 1)
+        self.assertEqual(env_path.stat().st_mode & 0o777, 0o600, "file chứa secret phải 0600")
+        self.assertFalse((self.root / "etc/mkddc-web.env.new").exists(), "còn sót file tạm")
+
+    def test_nang_cap_giu_secret_du_dai(self) -> None:
+        self._install()
+        before = self._secret()
+        log = self._install()
+        self.assertEqual(self._secret(), before, "secret đủ dài phải được giữ: sinh lại làm chết mọi phiên")
+        self.assertNotIn("F-FR-04", log)

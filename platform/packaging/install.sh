@@ -190,9 +190,30 @@ inst -d -m 0755 "$ETCDIR/mkddc"
 [ -e "$ETCDIR/mkddc/netcfg.conf" ] || inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" "$ETCDIR/mkddc/netcfg.conf"
 [ -e "$DATADIR/config/io_config.conf" ] || inst -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" "$DATADIR/config/io_config.conf"
 [ -e "$DATADIR/config/users.conf" ] || inst -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/users.conf" "$DATADIR/config/users.conf"
+# F-FR-04 (EV-FWSOM-FOXLINX-FACTORY-20260927) — JWT_SECRET PHẢI là 32 byte ngẫu nhiên.
+#
+# Bản cũ dùng `head -c 32 /dev/urandom | tr -dc 'a-f0-9'`: lệnh đó chỉ GIỮ những
+# byte ngẫu nhiên tình cờ trùng mã ASCII của ký tự hex, nên 32 byte chỉ còn trung
+# bình 2 ký tự (đo trên bo Foxlinx 2026-09-27: 2; năm lần thử: 3, 2, 2, 5, 2). Nhánh
+# dự phòng `mkddc-secret-$(date +%s)` thì đoán được. Hậu quả: web ký JWT bằng một
+# secret vài ký tự — ai cũng giả được token — và khi Programming bật thì web lặp
+# restart vì cursor secret < 16 byte. `od` (coreutils/busybox đều có) đổi ĐỦ 32 byte
+# thành 64 ký tự hex; không đủ thì DỪNG, không bao giờ rơi về secret đoán được.
+new_jwt_secret() {
+    local secret
+    secret="$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')"
+    case "$secret" in
+        ''|*[!0-9a-f]*) echo "ERROR: không sinh được JWT_SECRET hex từ /dev/urandom" >&2; return 1 ;;
+    esac
+    [ "${#secret}" -eq 64 ] || { echo "ERROR: JWT_SECRET sinh ra dài ${#secret}, cần 64" >&2; return 1; }
+    printf '%s' "$secret"
+}
 if [ ! -s "$ETCDIR/mkddc-web.env" ]; then
-    sec="$(head -c 32 /dev/urandom | tr -dc 'a-f0-9' | head -c 64 2>/dev/null || echo "mkddc-secret-$(date +%s)")"
-    printf 'JWT_SECRET=%s\n' "$sec" > "$ETCDIR/mkddc-web.env"
+    sec="$(new_jwt_secret)" || exit 1
+    # umask 077: file chứa secret không bao giờ tồn tại với quyền rộng hơn 0600,
+    # kể cả trong khoảnh khắc trước `chmod` bên dưới.
+    ( umask 077; printf 'JWT_SECRET=%s\n' "$sec" > "$ETCDIR/mkddc-web.env" )
+    unset sec
     # REV-PLT-01: file này từng chỉ có JWT_SECRET, nên CORS_ORIGIN không bao giờ
     # được đặt trên bo và biên CORS/WebSocket chạy bằng allowlist của chế độ dev.
     # Nay mặc định là fail-closed (chỉ same-origin) và dòng dưới đây ghi sẵn để
@@ -202,6 +223,26 @@ if [ ! -s "$ETCDIR/mkddc-web.env" ]; then
     chmod 0600 "$ETCDIR/mkddc-web.env"
     [ "$DRY" -eq 1 ] || chown root:root "$ETCDIR/mkddc-web.env"
 fi
+
+# F-FR-04 — nâng cấp bo đã cài bằng bản cũ: file env đã có nên khối trên bỏ qua,
+# và secret vài ký tự sẽ ở lại mãi. Thay secret ngắn hơn 32 byte (ngưỡng web đòi,
+# xem apps/web-api/internal/app/config.go). Secret đủ dài thì GIỮ NGUYÊN: sinh lại
+# vô cớ làm mọi phiên đăng nhập chết. Chỉ đổi đúng dòng JWT_SECRET.
+current_secret="$(sed -n 's/^JWT_SECRET=//p' "$ETCDIR/mkddc-web.env" | tail -n 1)"
+if [ "${#current_secret}" -lt 32 ]; then
+    sec="$(new_jwt_secret)" || exit 1
+    (
+        umask 077
+        { grep -v '^JWT_SECRET=' "$ETCDIR/mkddc-web.env" || true
+          printf 'JWT_SECRET=%s\n' "$sec"; } > "$ETCDIR/mkddc-web.env.new"
+    )
+    mv "$ETCDIR/mkddc-web.env.new" "$ETCDIR/mkddc-web.env"
+    chmod 0600 "$ETCDIR/mkddc-web.env"
+    [ "$DRY" -eq 1 ] || chown root:root "$ETCDIR/mkddc-web.env"
+    unset sec
+    echo "WARN: JWT_SECRET cũ chỉ ${#current_secret} ký tự (< 32) — đã sinh lại 64 hex; mọi phiên đăng nhập cũ hết hiệu lực (F-FR-04)"
+fi
+unset current_secret
 
 # T59-605 — Programming BẬT mặc định trong gói phát hành.
 #
