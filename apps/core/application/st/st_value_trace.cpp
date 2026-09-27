@@ -1,10 +1,18 @@
 #include "st/st_value_trace.hpp"
 
 #include <cstring>
+#include <thread>
 
 #include "st/st_scheduler.hpp"
 
 namespace core {
+
+void StValueTrace::SpinGuard::lock() const noexcept
+{
+    /* Chỉ luồng KHÔNG RT gọi. Luồng quét giữ khoá tối đa một lần lấy mẫu
+     * (≤ 32 ô), nên quay vài vòng rồi nhường CPU là đủ. */
+    while (!try_lock()) std::this_thread::yield();
+}
 
 const char* st_trace_state_name(StTraceState state)
 {
@@ -39,12 +47,7 @@ bool StValueTrace::start(const std::string& session_id, const StScheduler& sched
         if (error) *error = message;
         return false;
     };
-    if (state_ == StTraceState::RUNNING) {
-        /* Một phiên tại một thời điểm. Nhận phiên thứ hai sẽ hoặc âm thầm huỷ
-         * phiên đang chạy của người khác, hoặc nhân ngân sách RAM lên — cả hai
-         * đều là quyết định không nên nằm ở đây. */
-        return fail("đã có phiên trace đang chạy");
-    }
+    /* Kiểm tham số TRƯỚC khi lấy khoá: không giữ khoá lâu hơn cần thiết. */
     if (session_id.empty() || session_id.size() > 64) return fail("session id không hợp lệ");
     if (variables == nullptr || variable_count == 0 || variable_count > kMaxTraceVariables)
         return fail("số biến ngoài dải 1..32");
@@ -52,32 +55,32 @@ bool StValueTrace::start(const std::string& session_id, const StScheduler& sched
         return fail("chu kỳ lấy mẫu ngoài dải");
     if (duration_ms == 0 || duration_ms > kMaxTraceDurationMs)
         return fail("thời lượng ngoài dải 1..600000 ms");
+    const uint32_t effective_period_ms =
+        st_trace_effective_sample_period_ms(sample_period_ms, scheduler.base_step_ns());
 
-    reset();
+    guard_.lock();
+    if (state_ == StTraceState::RUNNING) {
+        /* Một phiên tại một thời điểm. Nhận phiên thứ hai sẽ hoặc âm thầm huỷ
+         * phiên đang chạy của người khác, hoặc nhân ngân sách RAM lên — cả hai
+         * đều là quyết định không nên nằm ở đây. */
+        guard_.unlock();
+        return fail("đã có phiên trace đang chạy");
+    }
+
+    reset_locked();
     session_id_ = session_id;
     for (std::size_t index = 0; index < variable_count; ++index) {
-        StTraceVariable resolved = variables[index];
-        resolved.resolved = false;
-        resolved.slot = 0;
-        const StProgramInstance* instance =
-            const_cast<StScheduler&>(scheduler).find_program(resolved.instance_id);
-        if (instance != nullptr && instance->runtime.loaded()) {
-            const StLoadedProgram* program = instance->runtime.program();
-            if (program != nullptr) {
-                for (const StIrVariable& variable : program->variables) {
-                    if (variable.name != resolved.variable_name) continue;
-                    resolved.slot = variable.slot;
-                    resolved.resolved = true;
-                    break;
-                }
-            }
-        }
-        variables_[index] = std::move(resolved);
+        StTraceVariable pending = variables[index];
+        pending.resolved = false;
+        pending.slot = 0;
+        variables_[index] = std::move(pending);
     }
     variable_count_ = variable_count;
+    /* Phân giải ở boundary kế trên luồng quét — chỉ luồng đó được đọc Program
+     * đang chạy (activation cũng đổi nó tại boundary). */
+    resolve_pending_ = true;
     requested_sample_period_ms_ = sample_period_ms;
-    sample_period_ms_ =
-        st_trace_effective_sample_period_ms(sample_period_ms, scheduler.base_step_ns());
+    sample_period_ms_ = effective_period_ms;
     started_at_ns_ = now_ns;
     ends_at_ns_ = now_ns + static_cast<uint64_t>(duration_ms) * 1000000ull;
     /* Mẫu ĐẦU TIÊN lấy ngay tại boundary kế tiếp, không chờ hết một chu kỳ:
@@ -85,28 +88,67 @@ bool StValueTrace::start(const std::string& session_id, const StScheduler& sched
      * chu kỳ sau đó. */
     next_sample_ns_ = now_ns;
     state_ = StTraceState::RUNNING;
+    guard_.unlock();
     return true;
 }
 
 bool StValueTrace::stop(const std::string& session_id, std::string* error)
 {
+    guard_.lock();
     if (state_ != StTraceState::RUNNING) {
+        guard_.unlock();
         if (error) *error = "không có phiên trace đang chạy";
         return false;
     }
     if (session_id != session_id_) {
+        guard_.unlock();
         /* Dừng nhầm phiên của người khác là mất dữ liệu chẩn đoán của họ, và
          * mất một cách im lặng. */
         if (error) *error = "session id không khớp phiên đang chạy";
         return false;
     }
     state_ = StTraceState::STOPPED;
+    guard_.unlock();
     return true;
+}
+
+void StValueTrace::resolve_locked(const StScheduler& scheduler)
+{
+    for (std::size_t index = 0; index < variable_count_; ++index) {
+        StTraceVariable& variable = variables_[index];
+        variable.resolved = false;
+        variable.slot = 0;
+        const StProgramInstance* instance =
+            const_cast<StScheduler&>(scheduler).find_program(variable.instance_id);
+        if (instance == nullptr || !instance->runtime.loaded()) continue;
+        const StLoadedProgram* program = instance->runtime.program();
+        if (program == nullptr) continue;
+        for (const StIrVariable& declared : program->variables) {
+            if (declared.name != variable.variable_name) continue;
+            variable.slot = declared.slot;
+            variable.resolved = true;
+            break;
+        }
+    }
+    resolve_pending_ = false;
 }
 
 void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns)
 {
+    if (!guard_.try_lock()) {
+        /* Luồng IPC đang giữ trace (start/stop/đọc). KHÔNG chờ: bỏ lượt, mẫu
+         * tới hạn sẽ lấy ở boundary kế với mốc thời gian thật của boundary đó. */
+        contended_boundaries_.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    sample_locked(scheduler, now_ns);
+    guard_.unlock();
+}
+
+void StValueTrace::sample_locked(const StScheduler& scheduler, uint64_t now_ns)
+{
     if (state_ != StTraceState::RUNNING) return;
+    if (resolve_pending_) resolve_locked(scheduler);
     if (now_ns >= ends_at_ns_) {
         state_ = StTraceState::COMPLETED;
         return;
@@ -152,7 +194,7 @@ void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns)
     }
 }
 
-StTraceSample StValueTrace::sample(std::size_t index) const
+StTraceSample StValueTrace::sample_locked_at(std::size_t index) const
 {
     StTraceSample out;
     const std::size_t slots = capacity();
@@ -167,7 +209,7 @@ StTraceSample StValueTrace::sample(std::size_t index) const
     return out;
 }
 
-StTraceStatus StValueTrace::status() const
+StTraceStatus StValueTrace::status_locked() const
 {
     StTraceStatus out;
     out.state = state_;
@@ -178,10 +220,84 @@ StTraceStatus StValueTrace::status() const
     out.started_at_ns = started_at_ns_;
     out.requested_sample_period_ms = requested_sample_period_ms_;
     out.effective_sample_period_ms = sample_period_ms_;
+    out.contended_boundary_count = contended_boundaries_.load(std::memory_order_relaxed);
     return out;
 }
 
+StTraceStatus StValueTrace::status() const
+{
+    guard_.lock();
+    StTraceStatus out = status_locked();
+    guard_.unlock();
+    return out;
+}
+
+std::size_t StValueTrace::sample_count() const
+{
+    guard_.lock();
+    const std::size_t count = sample_count_;
+    guard_.unlock();
+    return count;
+}
+
+StTraceSample StValueTrace::sample(std::size_t index) const
+{
+    guard_.lock();
+    StTraceSample out = sample_locked_at(index);
+    guard_.unlock();
+    return out;
+}
+
+StTraceVariable StValueTrace::variable(std::size_t index) const
+{
+    guard_.lock();
+    StTraceVariable out = index < variables_.size() ? variables_[index] : StTraceVariable{};
+    guard_.unlock();
+    return out;
+}
+
+std::size_t StValueTrace::variable_count() const
+{
+    guard_.lock();
+    const std::size_t count = variable_count_;
+    guard_.unlock();
+    return count;
+}
+
+uint32_t StValueTrace::dropped_count() const
+{
+    guard_.lock();
+    const uint32_t dropped = dropped_;
+    guard_.unlock();
+    return dropped;
+}
+
+StValueTrace::ConsistentRead::ConsistentRead(const StValueTrace& trace) : trace_(trace)
+{
+    trace_.guard_.lock();
+}
+
+StValueTrace::ConsistentRead::~ConsistentRead()
+{
+    trace_.guard_.unlock();
+}
+
+StTraceStatus StValueTrace::ConsistentRead::status() const { return trace_.status_locked(); }
+std::size_t StValueTrace::ConsistentRead::sample_count() const { return trace_.sample_count_; }
+StTraceSample StValueTrace::ConsistentRead::sample(std::size_t index) const
+{
+    return trace_.sample_locked_at(index);
+}
+std::size_t StValueTrace::ConsistentRead::variable_count() const { return trace_.variable_count_; }
+
 void StValueTrace::reset()
+{
+    guard_.lock();
+    reset_locked();
+    guard_.unlock();
+}
+
+void StValueTrace::reset_locked()
 {
     session_id_.clear();
     state_ = StTraceState::IDLE;
@@ -194,6 +310,8 @@ void StValueTrace::reset()
     started_at_ns_ = 0;
     ends_at_ns_ = 0;
     next_sample_ns_ = 0;
+    resolve_pending_ = false;
+    contended_boundaries_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace core
