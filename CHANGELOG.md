@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Fixed — Bấm Kiểm tra/Build là Check chạy luôn, PASSED thì sang thẳng Mô phỏng (Programming PGM-02/PGM-05, 2026-09-27)
+
+- **Phạm vi:** `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`, `commission/CheckCommissionPage.tsx`, `simulation/SimulateWorkspace.tsx`, tooltip nút Build ở `layout/ProgrammingHeader.tsx` và `layout/ProgrammingContextStrip.tsx`; test vitest ba trang và e2e UJ-PROG-05 (`e2e/programming.spec.ts`).
+- **Triệu chứng:** trên bo Foxlinx, chủ sở hữu bấm "Build"/"Kiểm tra" trong workspace Chương trình rồi sang Mô phỏng thì vẫn bị báo chưa có bản Kiểm tra đạt và không mở được phiên, dù chương trình đã sửa đúng.
+- **Nguyên nhân gốc:** theo D-01, nút ở PGM-02 chỉ **mở** PGM-05; trang đó dừng ở "Chưa có Kiểm tra nào." chờ bấm "Kiểm tra" lần hai. Không bấm lần hai thì server không có Check mới, `latestCheck` của Project vẫn là lần FAILED cũ. Mô phỏng chỉ chạy bản Check PASSED mới nhất (ADR-053), nên tiếp tục bị khoá. Sau Check, PGM-05 cũng không có lối sang Mô phỏng.
+- **Cách sửa:**
+  - Nút Build/Kiểm tra mở PGM-05 kèm `location.state.autoCheck`. PGM-05 tự seal và chạy Check **đúng một lần** khi Project đã tải và người dùng có quyền, rồi xoá cờ khỏi history để Back/tải lại không niêm phong thêm Revision. D-01 giữ nguyên: seal/run/poll vẫn là của PGM-05. Mở PGM-05 trực tiếp thì vẫn không tự chạy.
+  - Check xong thì đọc lại Project để `latestCheck` là lần vừa chạy.
+  - Check PASSED **và** đúng là Check mới nhất của Project thì PGM-05 hiện nút "Sang Mô phỏng". Deep-link vào một Check cũ thì không hiện, vì Mô phỏng sẽ chạy bản khác.
+  - Ở Mô phỏng, khi chưa có Check PASSED, hiện nút "Kiểm tra ngay" nếu người dùng có quyền Kiểm tra và bản nháp đã lưu.
+  - Tooltip nút Build nói rõ bấm vào là niêm phong và chạy Kiểm tra.
+- **Kiểm chứng:**
+  - Vitest toàn bộ `src`: 3470/3470. Lần chạy đầu có 1 ca đỏ `LibraryPage` (không liên quan, không đổi file); chạy riêng 3 lần 45/45, chạy lại toàn bộ 3470/3470.
+  - `npm run lint` đạt; `npm run build` đạt (chunk `programming` 76,65 KiB gzip, ngân sách 165 KiB).
+  - `npx playwright test e2e/programming.spec.ts`: 110 đạt, 30 bỏ qua, gồm UJ-PROG-01..08 với luồng mới (bấm Build là thấy PASSED, không còn "Chưa có Kiểm tra nào.").
+  - Kiểm tra đột biến: bỏ tự chạy Check, hoặc bỏ đọc lại Project, thì ca `autoCheck` đỏ.
+  - `scripts/verify-project.sh --component e2e`: 195 đạt, 30 bỏ qua, exit 0. `--component layout`: exit 0.
+
 ### Added — Release record DDC-24 cho bản ứng viên `main@f86150e3` (2026-09-27)
 
 - **Phạm vi:** `docs/07_records/DDC24_RELEASE_RECORD_2026-09-27.md` (mới, Draft chờ Release Owner ký), dòng register trong `docs/00_governance/CONTROL.md`, manifest authority 1.65→1.66 (re-pin `#1`).
