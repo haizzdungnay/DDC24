@@ -150,6 +150,15 @@ function LocationProbe() {
   return <span data-testid="router-location">{`${location.pathname}${location.search}`}</span>
 }
 
+/* PGM-05 giả: in ra cờ `autoCheck` mà PGM-02 gửi kèm, để test khoá được lời hứa
+ * "bấm Kiểm tra là Check chạy luôn" (chủ sở hữu 2026-09-27) — việc chạy vẫn là
+ * của PGM-05 (D-01), PGM-02 chỉ được yêu cầu. */
+function CommissionProbe() {
+  const location = useLocation()
+  const autoCheck = (location.state as { autoCheck?: boolean } | null)?.autoCheck === true
+  return <div data-testid="commission-auto-check" data-auto-check={String(autoCheck)}>Check &amp; Commission page</div>
+}
+
 function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
@@ -158,7 +167,7 @@ function renderWorkspace(initialPath = '/eng/programming/projects/project-1/desi
         <LocationProbe />
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />
-          <Route path="/eng/programming/projects/:projectId/commission" element={<div>Check &amp; Commission page</div>} />
+          <Route path="/eng/programming/projects/:projectId/commission" element={<CommissionProbe />} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>
@@ -858,6 +867,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
 
     await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
+    // Kèm yêu cầu tự chạy Check ở PGM-05, không bắt người dùng bấm lần hai.
+    expect(screen.getByTestId('commission-auto-check')).toHaveAttribute('data-auto-check', 'true')
     // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-05 giờ.
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingRevision')).toBe(false)
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)

@@ -45,6 +45,29 @@
 - Đăng ký hai record trong `docs/README.md` và `docs/07_records/reviews/README.md`; chỉnh trạng thái chỉ mục `MBA-FW-08` theo audit sau mốc 25/09; gắn nhãn snapshot lượt 1 cho ma trận audit FBD/ST→Modbus để không hiểu các FAIL lịch sử là kết quả cuối. Không đổi runtime, authority hoặc release gate.
 - Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` PASS (0 link thiếu, 0 ID trùng, 0 lệch metadata/lịch sử); `git diff --check` PASS; liên kết cục bộ của hai record không thiếu. Không chạy build/browser/target vì chỉ sửa tài liệu.
 
+### Fixed — Bấm Kiểm tra/Build là Check chạy luôn, PASSED thì sang thẳng Mô phỏng (Programming PGM-02/PGM-05, 2026-09-27)
+
+- **Phạm vi:** `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`, `commission/CheckCommissionPage.tsx`, `simulation/SimulateWorkspace.tsx`, tooltip nút Build ở `layout/ProgrammingHeader.tsx`, `layout/ProgrammingContextStrip.tsx` và nút Kiểm tra ở `design/editor/EditorPane.tsx`; test vitest ba trang và e2e UJ-PROG-05 (`e2e/programming.spec.ts`).
+- **Triệu chứng:** trên bo Foxlinx, chủ sở hữu bấm "Build"/"Kiểm tra" trong workspace Chương trình rồi sang Mô phỏng thì vẫn bị báo chưa có bản Kiểm tra đạt và không mở được phiên, dù chương trình đã sửa đúng.
+- **Nguyên nhân gốc:** theo D-01, nút ở PGM-02 chỉ **mở** PGM-05; trang đó dừng ở "Chưa có Kiểm tra nào." chờ bấm "Kiểm tra" lần hai. Không bấm lần hai thì server không có Check mới, `latestCheck` của Project vẫn là lần FAILED cũ. Mô phỏng chỉ chạy bản Check PASSED mới nhất (ADR-053), nên tiếp tục bị khoá. Sau Check, PGM-05 cũng không có lối sang Mô phỏng.
+- **Cách sửa:**
+  - Nút Build/Kiểm tra mở PGM-05 kèm `location.state.autoCheck`. PGM-05 tự seal và chạy Check **đúng một lần** khi Project đã tải và người dùng có quyền, rồi xoá cờ khỏi history để Back/tải lại không niêm phong thêm Revision. D-01 giữ nguyên: seal/run/poll vẫn là của PGM-05. Mở PGM-05 trực tiếp thì vẫn không tự chạy.
+  - Check xong thì đọc lại Project để `latestCheck` là lần vừa chạy.
+  - Check PASSED **và** đúng là Check mới nhất của Project thì PGM-05 hiện nút "Sang Mô phỏng". Deep-link vào một Check cũ thì không hiện, vì Mô phỏng sẽ chạy bản khác.
+  - Ở Mô phỏng, khi chưa có Check PASSED, hiện nút "Kiểm tra ngay" nếu người dùng có quyền Kiểm tra và bản nháp đã lưu.
+  - Tooltip nút Build và nút Kiểm tra khi chưa chọn POU nói rõ bấm vào là niêm phong và chạy Kiểm tra.
+- **Kiểm chứng:**
+  - Vitest toàn bộ `src`: 3470/3470. Lần chạy đầu có 1 ca đỏ `LibraryPage` (không liên quan, không đổi file); chạy riêng 3 lần 45/45, chạy lại toàn bộ 3470/3470.
+  - `npm run lint` đạt; `npm run build` đạt (chunk `programming` 76,65 KiB gzip, ngân sách 165 KiB).
+  - `npx playwright test e2e/programming.spec.ts`: 110 đạt, 30 bỏ qua, gồm UJ-PROG-01..08 với luồng mới (bấm Build là thấy PASSED, không còn "Chưa có Kiểm tra nào.").
+  - Kiểm tra đột biến: bỏ tự chạy Check, hoặc bỏ đọc lại Project, thì ca `autoCheck` đỏ.
+  - `scripts/verify-project.sh --component e2e`: 195 đạt, 30 bỏ qua, exit 0. `--component layout`: exit 0.
+- **Bo Foxlinx (chỉ thay FE):** bundle `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release` của nhánh này (`index-Bru94_J2.js`) thay `/opt/mkddc-web/dist` lúc 10:27Z/10:31Z. Binary và dịch vụ không đổi (`NRestarts=0`); sao lưu `dist` cũ ở `/data/mkddc/deploy-backups/2026-09-27T1027Z-fe-simcheck/`.
+- **Kiểm chứng trên bo bằng Chrome thật (Project "CHUONG CONTROLLER"):**
+  - Bấm **Build** một lần thì sang PGM-05 và Check tự chạy: Revision `b780034d` PASSED, không lỗi. Nút "Go to Simulate" hiện ra.
+  - Bấm nút đó thì sang `mode=SIMULATE`, không còn cảnh báo chưa có bản Kiểm tra đạt. "Start simulation session" mở phiên `4fb6a1e8…` đúng Revision `b780034d`, đủ ngõ vào ảo A–F.
+  - Phiên thử đã đóng. Active của bo vẫn `null` như trước khi thử.
+
 ### Added — Release record DDC-24 cho bản ứng viên `main@f86150e3` (2026-09-27)
 
 - **Phạm vi:** `docs/07_records/DDC24_RELEASE_RECORD_2026-09-27.md` (mới, Draft chờ Release Owner ký), dòng register trong `docs/00_governance/CONTROL.md`, manifest authority 1.65→1.66 (re-pin `#1`).

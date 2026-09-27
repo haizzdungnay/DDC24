@@ -180,6 +180,7 @@ export function DesignWorkspacePage({
     workspaceMode === 'EDIT' &&
     compatibility.editingAllowed
   const canSimulate = useProgrammingActionAllowed('simulation')
+  const canCheck = useProgrammingActionAllowed('check')
   /* `DEV-PROG-024` — xem khối chú thích ở chỗ dùng, phía dưới. Sàn `24rem`
    * (384 px) cố ý NHỎ hơn ngân sách của khổ 800 px: sàn lớn hơn ngân sách chính
    * là cách `DEV-PROG-021` tạo ra tràn dọc. */
@@ -444,13 +445,29 @@ export function DesignWorkspacePage({
   const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
   const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
 
+  /* Chủ sở hữu 2026-09-27: "bấm Kiểm tra xong là bấm qua Mô phỏng được".
+   *
+   * Trước đây nút "Kiểm tra" ở đây CHỈ điều hướng sang PGM-05, và người dùng
+   * phải bấm "Kiểm tra" lần thứ hai ở đó mới thật sự niêm phong + biên dịch.
+   * Ai bấm một lần rồi quay lại Mô phỏng sẽ gặp "cần Check PASSED" vì Check
+   * server chưa từng chạy (đo trên bo Foxlinx: Project `CHUONG CONTROLLER`
+   * đã lưu bản sửa nhưng Check mới nhất vẫn là lần FAILED cũ).
+   *
+   * D-01 giữ nguyên: PGM-05 vẫn là nơi DUY NHẤT seal/run/poll Check. Ở đây chỉ
+   * gửi kèm `state.autoCheck` để PGM-05 tự chạy Check ngay khi mở — người dùng
+   * không phải bấm lần hai, và khi PASSED thì PGM-05 đưa nút sang Mô phỏng. */
+  const openCommissionAndCheck = useCallback(() => {
+    if (!projectId) return
+    navigate(`/eng/programming/projects/${projectId}/commission`, { state: { autoCheck: true } })
+  }, [navigate, projectId])
+
   /* Dùng chung cho nút "Kiểm tra" ở đây VÀ mục lệnh "Kiểm tra" của Bảng lệnh
    * nhanh (ST Editor Quick Control #2, đã duyệt) — cùng một "dirty guard"
    * D-01: không điều hướng sang Commission khi Draft còn thay đổi chưa lưu. */
   const goToCommission = useCallback(() => {
     if (!canEdit || draftDirty || !projectId) return
-    navigate(`/eng/programming/projects/${projectId}/commission`)
-  }, [canEdit, draftDirty, navigate, projectId])
+    openCommissionAndCheck()
+  }, [canEdit, draftDirty, openCommissionAndCheck, projectId])
 
   /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
    * báo — Check/Commission (PGM-05) là nơi duy nhất cập nhật giá trị này giờ
@@ -1100,6 +1117,7 @@ export function DesignWorkspacePage({
             draftDirty={draftDirty}
             draftRevisionId={simulateRevisionId}
             allowMutation={canSimulate}
+            onRequestCheck={canCheck && !draftDirty ? openCommissionAndCheck : undefined}
             onStart={startSimulation}
             onAction={simulation.act}
             onSetInput={simulation.setInput}

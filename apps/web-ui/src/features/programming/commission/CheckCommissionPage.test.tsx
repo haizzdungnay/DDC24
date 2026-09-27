@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
@@ -285,12 +285,89 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     // thành race phụ thuộc tải CPU của cả suite.
     const checkButton = screen.getByRole('button', { name: 'Kiểm tra' })
     await waitFor(() => expect(checkButton).toBeEnabled())
+    // Mở thẳng PGM-05 (không đến từ nút "Kiểm tra" của workspace) thì KHÔNG tự
+    // niêm phong — chỉ `location.state.autoCheck` mới được phép.
+    expect(client.request).not.toHaveBeenCalledWith('createProgrammingRevision', expect.anything())
     fireEvent.click(checkButton)
 
     // Sau khi seal+check xong, trang tự điều hướng vào đúng revisionId/checkId
     // (D-01) và hiện lại toàn bộ panel kết quả y hệt đường deep-link cũ.
     expect(await screen.findByText('PASSED')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
+  })
+
+  /* Chủ sở hữu 2026-09-27: "bấm Kiểm tra xong là bấm qua Mô phỏng được". Nút
+   * "Kiểm tra" của workspace mở PGM-05 kèm `state.autoCheck`: trang tự chạy
+   * seal+Check (D-01 vẫn do PGM-05 làm), đọc lại Project để `latestCheck` là
+   * Check vừa xong, và khi PASSED thì đưa nút sang Mô phỏng. */
+  function autoCheckMocks(options: { latestAfterSeal: boolean }) {
+    let sealed = false
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: 'draft-1' }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingProject') {
+        const latestCheck = sealed && options.latestAfterSeal
+          ? { checkId: CHECK_ID, revisionId: REVISION_ID, state: 'PASSED', createdAt: '2026-08-13T00:00:00Z' }
+          : { checkId: 'old-check', revisionId: 'old-revision', state: 'FAILED', createdAt: '2026-08-12T00:00:00Z' }
+        return Promise.resolve({ ...baseProject(), latestCheck })
+      }
+      if (operationId === 'createProgrammingRevision') {
+        sealed = true
+        return Promise.resolve({ resource: { projectId: 'project-1', revisionId: REVISION_ID }, etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1' })
+      }
+      if (operationId === 'createProgrammingCheck') return Promise.resolve({ checkId: CHECK_ID, statusUrl: '', state: 'QUEUED', requestHash: 'h', acceptedAt: '2026-08-13T00:00:00Z', correlationId: 'corr-2' })
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+  }
+
+  function LocationProbe() {
+    const location = useLocation()
+    return <p data-testid="location">{`${location.pathname}${location.search}`}</p>
+  }
+
+  function renderAutoCheck() {
+    return render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[{ pathname: '/eng/programming/projects/project-1/commission', state: { autoCheck: true } }]}>
+          <Routes>
+            <Route element={<ProgrammingLayout />}>
+              <Route path="/eng/programming/projects/:projectId/commission" element={<CheckCommissionPage />} />
+            </Route>
+            <Route path="*" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nProvider>
+    )
+  }
+
+  it('autoCheck: đến từ nút "Kiểm tra" thì tự chạy Check đúng một lần, PASSED thì sang được Mô phỏng', async () => {
+    autoCheckMocks({ latestAfterSeal: true })
+    renderAutoCheck()
+
+    expect(await screen.findByText('PASSED')).toBeInTheDocument()
+    expect(client.request.mock.calls.filter(([op]) => op === 'createProgrammingRevision')).toHaveLength(1)
+    expect(client.request.mock.calls.filter(([op]) => op === 'createProgrammingCheck')).toHaveLength(1)
+
+    const simulate = await screen.findByRole('button', { name: 'Sang Mô phỏng' })
+    fireEvent.click(simulate)
+    const location = await screen.findByTestId('location')
+    expect(location.textContent).toContain('mode=SIMULATE')
+    expect(location.textContent).toContain('project-1')
+  })
+
+  it('deep-link vào một Check PASSED không phải bản mới nhất thì không đưa nút Mô phỏng', async () => {
+    autoCheckMocks({ latestAfterSeal: false })
+    renderPage(true)
+
+    expect(await screen.findByText('PASSED')).toBeInTheDocument()
+    await waitFor(() => expect(client.request).toHaveBeenCalledWith('getProgrammingProject', expect.anything()))
+    expect(screen.queryByRole('button', { name: 'Sang Mô phỏng' })).not.toBeInTheDocument()
+    expect(client.request).not.toHaveBeenCalledWith('createProgrammingRevision', expect.anything())
   })
 
   it('viewer vẫn đọc được PGM-05 nhưng thấy rõ trạng thái permission và không có mutation', async () => {
