@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -144,6 +145,37 @@ type activatePayload struct {
 	StagedToken    string
 	Cutover        string
 	PlanHash       string
+}
+
+// coreFeatureActivateProgramIntents là tên tính năng Core công bố ở phần tử thứ
+// năm của payload CAPABILITIES khi nó nhận `programIntents` trong ACTIVATE
+// (ADR-062). Phải khớp `PROGRAM_IPC_FEATURE_ACTIVATE_PROGRAM_INTENTS` phía Core.
+const coreFeatureActivateProgramIntents = "ACTIVATE_PROGRAM_INTENTS"
+
+// maxActivateProgramIntents bằng trần Program của một tài nguyên
+// (`kMaxActivateProgramIntents` phía Core). Nhiều hơn thế thì không có gói hợp
+// lệ nào để mô tả.
+const maxActivateProgramIntents = 32
+
+// activateProgramIntent là một phần tử `programIntents`: intent ĐÃ LƯU của một
+// Program, chụp từ `program_runtime_intents` đúng lúc kích hoạt. Nó không phải
+// một lệnh vận hành mới và không tạo audit PROGRAM_ENABLE.
+type activateProgramIntent struct {
+	_          struct{} `cbor:",toarray"`
+	InstanceID string
+	Enabled    bool
+}
+
+// activateIntentPayload là ACTIVATE 5 phần tử (ADR-062). Chỉ gửi khi Core công
+// bố `coreFeatureActivateProgramIntents`: Core cũ đòi đúng 4 phần tử và sẽ trả
+// `IPC-PAYLOAD` cho payload này.
+type activateIntentPayload struct {
+	_              struct{} `cbor:",toarray"`
+	ExpectedActive *string
+	StagedToken    string
+	Cutover        string
+	PlanHash       string
+	ProgramIntents []activateProgramIntent
 }
 
 type runtimeImpactPayload struct {
@@ -592,10 +624,7 @@ func (s *OperationService) runtimeInstanceIDForRevision(ctx context.Context, rev
 
 func (s *OperationService) activateStaged(ctx context.Context, operation programmingstore.Operation,
 	contextValue operationContext, previous string, stageResponse coreipc.Response) error {
-	expected := nullableRevision(operation.ExpectedActiveRevisionID)
-	activate, err := coreipc.EncodePayload(activatePayload{ExpectedActive: expected,
-		StagedToken: operation.OperationID, Cutover: contextValue.Cutover,
-		PlanHash: operationPlanHash(operation.ContextJSON)})
+	activate, err := s.encodeActivatePayload(ctx, operation, contextValue.Cutover)
 	if err != nil {
 		return s.fail(operation, "ACTIVATE_PAYLOAD", err.Error())
 	}
@@ -616,6 +645,109 @@ func (s *OperationService) activateStaged(ctx context.Context, operation program
 		signalWake(s.wake)
 	}
 	return err
+}
+
+// encodeActivatePayload dựng payload ACTIVATE (ADR-062).
+//
+// F13: Program chưa chạy trong gói cũ được Core dựng ở Disabled, và intent
+// Enable chỉ tới SAU safe boundary kích hoạt, nên có một khoảng Core ở
+// safe-state `no_ctrl` (đo 1,38 s, rồi 70 ms sau `Nudge`). Mang intent đã lưu
+// vào chính lệnh ACTIVATE thì Core dựng Program ở RUNNING ngay trong boundary
+// đó.
+//
+// Đường cũ (4 phần tử) là đường mặc định an toàn. Mọi lỗi ở đây, gồm Core không
+// công bố tính năng, CAPABILITIES lỗi, hay store không đọc được, đều quay về
+// nó, vì không lỗi nào ở bước "cho nhanh hơn" được phép làm hỏng Commission hay
+// chặn Restore. Vòng reconcile theo mức (F04/F07) cộng `Nudge` vẫn là lưới an
+// toàn cho đường cũ.
+func (s *OperationService) encodeActivatePayload(ctx context.Context, operation programmingstore.Operation,
+	cutover string) ([]byte, error) {
+	expected := nullableRevision(operation.ExpectedActiveRevisionID)
+	planHash := operationPlanHash(operation.ContextJSON)
+	legacy := func() ([]byte, error) {
+		return coreipc.EncodePayload(activatePayload{ExpectedActive: expected,
+			StagedToken: operation.OperationID, Cutover: cutover, PlanHash: planHash})
+	}
+	if !s.coreSupportsActivateIntents(ctx, operation) {
+		return legacy()
+	}
+	intents, err := s.activationIntents(ctx, operation.RequestedRevisionID)
+	if err != nil {
+		log.Printf("WARN programming_activate_intents_unavailable operation=%s err=%v"+
+			" (gửi ACTIVATE 4 phần tử; reconcile F04/F07 lo phần còn lại)", operation.OperationID, err)
+		return legacy()
+	}
+	return coreipc.EncodePayload(activateIntentPayload{ExpectedActive: expected,
+		StagedToken: operation.OperationID, Cutover: cutover, PlanHash: planHash,
+		ProgramIntents: intents})
+}
+
+// coreSupportsActivateIntents hỏi Core qua CAPABILITIES. Gọi mỗi lần kích hoạt
+// chứ không nhớ kết quả: Core có thể được nâng hoặc hạ phiên bản giữa hai lần
+// Commission, và một câu trả lời cũ là đúng loại đoán mà hợp đồng cấm.
+func (s *OperationService) coreSupportsActivateIntents(ctx context.Context, operation programmingstore.Operation) bool {
+	response, err := s.call(ctx, operation, coreipc.ActionCapabilities, coreipc.EmptyPayload())
+	if err != nil || response.Result != coreipc.ResultOK {
+		return false
+	}
+	return capabilitiesHaveFeature(response.Payload, coreFeatureActivateProgramIntents)
+}
+
+// capabilitiesHaveFeature đọc phần tử thứ năm (`features`) của payload
+// CAPABILITIES. Core cũ trả 4 phần tử; payload đó, payload hỏng hay phần tử sai
+// kiểu đều nghĩa là "không có tính năng", không phải lỗi.
+func capabilitiesHaveFeature(payload []byte, feature string) bool {
+	var fields []cbor.RawMessage
+	if coreipc.DecodePayload(payload, &fields) != nil || len(fields) < 5 {
+		return false
+	}
+	var features []string
+	if cbor.Unmarshal(fields[4], &features) != nil {
+		return false
+	}
+	for _, candidate := range features {
+		if candidate == feature {
+			return true
+		}
+	}
+	return false
+}
+
+// activationIntents đọc intent đã lưu của đúng các Program thuộc Revision sắp
+// kích hoạt. Khoá là object ID của PROGRAM, vì đó là tên instance trong
+// `PROGRAM_TABLE` (`programPackageName`) và là `programId` của API intent.
+//
+// Gửi cả intent `false`: Program người vận hành đã tắt không được chạy thêm một
+// scan nào với gói mới. Program không có dòng intent thì không gửi gì, và Core
+// giữ luật T59-305/405 (Program mới Disabled).
+func (s *OperationService) activationIntents(ctx context.Context, revisionID string) ([]activateProgramIntent, error) {
+	revision, err := s.store.GetRevision(ctx, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	programs := make(map[string]struct{}, len(revision.Objects))
+	for _, object := range revision.Objects {
+		if object.Kind == "PROGRAM" && isUUID(object.ObjectID) {
+			programs[object.ObjectID] = struct{}{}
+		}
+	}
+	stored, err := s.store.ListProgramRuntimeIntents(ctx, revision.Revision.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	// Mảng rỗng chứ không phải nil: nil mã hoá thành CBOR `null`, và Core từ chối
+	// `null` để một encoder lỡ tay không biến "có danh sách" thành "không có gì".
+	intents := make([]activateProgramIntent, 0, len(stored))
+	for _, intent := range stored { // store đã sắp theo program_id: tất định
+		if _, ok := programs[intent.ProgramID]; ok {
+			intents = append(intents, activateProgramIntent{InstanceID: intent.ProgramID,
+				Enabled: intent.DesiredEnabled})
+		}
+	}
+	if len(intents) > maxActivateProgramIntents {
+		return nil, fmt.Errorf("Revision có %d intent, vượt trần %d", len(intents), maxActivateProgramIntents)
+	}
+	return intents, nil
 }
 
 // executeRetainReset (WP-12). Không có STAGE/ACTIVATE hai pha thật sự — vẫn

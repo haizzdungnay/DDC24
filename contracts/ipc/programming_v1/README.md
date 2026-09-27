@@ -65,7 +65,25 @@ Duplicate `requestId` cùng frame trả đúng response cache; cùng `requestId`
 frame trả `REJECTED/IPC-REQUEST-ID-CONFLICT`. Queue đạt 32 trả
 `BUSY/IPC-QUEUE-FULL`. Deadline hết trả `REJECTED/IPC-DEADLINE`.
 
-### 4.1 Payload Trace (`TRACE_START`, `TRACE_READ`, `TRACE_STOP`)
+### 4.1 Intent Enable đi cùng ACTIVATE (ADR-062)
+
+Payload ACTIVATE là `[expectedActive, stagedToken, cutover, planHash, programIntents?]`.
+Phần tử thứ năm `programIntents = [[instanceId, desiredEnabled], ...]` (≤ 32) là
+**tuỳ chọn**. Nó mang intent đã lưu ở `program_runtime_intents` tới đúng safe
+boundary kích hoạt gói. Nhờ vậy Program có intent Enable chạy ngay trong boundary
+đó, không scan nào rơi vào `no_ctrl` (F13).
+
+Không nâng `protocolMinor`: web cũ từ chối response có minor cao hơn hằng của nó,
+nên nâng minor ở Core sẽ cắt đứt web cũ. Core mới công bố tính năng ở phần tử
+thứ năm của payload CAPABILITIES: `features` chứa `"ACTIVATE_PROGRAM_INTENTS"`.
+Web mới gọi CAPABILITIES trước mỗi ACTIVATE và chỉ gửi 5 phần tử khi thấy tính
+năng này. Core mới vẫn nhận payload 4 phần tử của web cũ.
+
+Luật áp ở Core và bảng tương thích bốn tổ hợp phiên bản ở
+[`ADR-062`](../../../docs/adr/ADR-062-programming-intent-enable-di-cung-activate.md).
+Golden `request_activate_program_intents.hex` khoá chuỗi byte chung của Go và C++.
+
+### 4.2 Payload Trace (`TRACE_START`, `TRACE_READ`, `TRACE_STOP`)
 
 | Action | Request payload | Response payload |
 |---|---|---|

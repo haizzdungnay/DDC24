@@ -8,6 +8,38 @@
 
 ## [Unreleased]
 
+### Fixed — F13 về 0 ms: intent Enable đã lưu đi cùng ACTIVATE, Program chạy ngay tại safe boundary kích hoạt gói (ADR-062, 2026-09-26)
+
+- Phạm vi:
+  - Tài liệu: `docs/adr/ADR-062-programming-intent-enable-di-cung-activate.md` (mới), `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`, `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` (0.7), hàng F13 của `EV-PROG-FBD-ST-MB-20260925`.
+  - Hợp đồng: `contracts/ipc/programming_v1/{schema.json,README.md,golden/manifest.json,golden/request_activate_program_intents.hex}`; re-pin `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}`.
+  - Core: `apps/core/application/programming/{programming_runtime_coordinator,program_ipc_server}.{hpp,cpp}` và test mới `tests/test_programming_activate_intent.cpp`.
+  - Web: `apps/web-api/internal/programming/application/operations.go` và test.
+  - **Không** đụng `apps/core/application/runtime/scan_loop.*`, OpenAPI hay FE.
+- **Triệu chứng:** Commission/Restore sang Revision có Program chưa chạy trong gói cũ làm Core vào safe-state `no_ctrl` và ép mọi AO/DO về giá trị an toàn. Đo trên Foxlinx: 1,38 s, sau `Nudge` (`1de5373c`) còn 70 ms.
+- **Nguyên nhân gốc:** Core dựng Program mới ở Disabled (fail-closed, T59-305/405), còn intent Enable chỉ tới qua `SET_PROGRAM_ENABLED` **sau** boundary kích hoạt. Không tối ưu IPC nào xoá được một vòng.
+- **Cách sửa (ADR-062, phương án a):**
+  - ACTIVATE có thêm phần tử thứ năm tuỳ chọn `programIntents = [[instanceId, desiredEnabled], …]` (≤ 32), chụp từ `program_runtime_intents` cho đúng các Program thuộc Revision.
+  - Core áp nó lên shadow sau `COMMIT_INTENT` và trước arm. `false` đưa Program về Disabled. `true` bật Program theo thứ tự gói, trong trần 16; phần vượt trần giữ Disabled và **không** chặn kích hoạt. Program không có phần tử giữ luật cũ. Sai kiểu, id trùng/sai hoặc quá 32 phần tử trả `IPC-PAYLOAD` trước mọi thay đổi.
+  - Core log `INFO  programming.activate_intents …` làm mốc đo target.
+  - Loại phương án (b) "ghi vào gói": gói bất biến sẽ đông cứng intent cũ khi Restore và phá T59-305.
+  - **Không nâng `protocolMinor`**, vì `ValidateResponse` của web cũ từ chối response có minor cao hơn. Core mới công bố `features: ["ACTIVATE_PROGRAM_INTENTS"]` ở phần tử thứ năm của CAPABILITIES. Web mới dò trước mỗi ACTIVATE; không thấy tính năng, hoặc dò lỗi, hoặc store lỗi, thì gửi 4 phần tử như cũ.
+  - Bảng tương thích bốn tổ hợp phiên bản ở ADR-062 mục 7.
+  - Boot fail-closed, rollback, reconcile F04/F07 và `Nudge` giữ nguyên. Program bật bằng intent nay tham gia barrier chu kỳ đầu (T59-501).
+- **Sửa kèm:**
+  - `fakeOperationRuntime` chạy `coreipc.ValidateRequest` cho mọi request, như Core thật ở biên.
+  - `DECISIONS.md` bổ sung dòng bảng `ADR-061` còn thiếu.
+  - File golden `.hex` bị `*.hex` của `.gitignore` chặn, nên được thêm bằng `git add -f` như ba golden cũ.
+- **Số đo thật (2026-09-26, nền `origin/main@dc443fde`):**
+  - `cmake --fresh … MODBUS/BACNET/HMI=ON` → configure exit 0, build exit 0. `ctest --test-dir build/fw` → **1594/1594 PASS**, exit 0, 9 skip như nền (nền 1584/1584; +10 test `ProgrammingActivateIntent.*`).
+  - Test qua `ScanLoop` thật: có intent thì 0 scan `no_ctrl` và DO-01 giữ 1 từ ACTIVATE tới COMMITTED. Ca đối chứng không intent tái hiện `safe_state.enter … no_ctrl=1`.
+  - Đột biến tắt `apply_activation_intents` → 8/10 test mới đỏ; đã khôi phục.
+  - `go vet ./...` → exit 0. `go test ./... -count=1` → 20/21 package `ok`. Package còn lại `internal/app` đỏ **một** test có sẵn trên main: `TestRouteTableMatchesOpenAPI`, route `GET /api/v1/ws/simulation` do `73674477` thêm mà chưa khai OpenAPI. Chạy lại trên ảnh `git archive origin/main` cũng đỏ y hệt. Ngoài phạm vi F13, không sửa ở nhánh này (phiên chính sửa ở nhánh riêng). Các test còn lại của `internal/app` (`go test ./internal/app/ -skip TestRouteTableMatchesOpenAPI -count=1`) → `ok`.
+  - `scripts/verify-project.sh --component layout` → exit 0 (G1 10/10, PGM-02, IPC actions 12/12). `--component docs` → exit 0.
+  - `python3 -m pytest tests/integration/` → 43 passed, 14 skipped (`test_release_dryrun` cần `build/release`).
+  - FE không đổi nên không chạy.
+- **Còn mở:** F13 chỉ đóng ở mức source/host. Phải deploy **cả** Core lẫn web rồi đo target theo ADR-062 mục 8 (`programming.activate_intents … enabled=1`, không có `safe_state.enter … no_ctrl=1` quanh Restore).
+
 ### Fixed — Trace hỏng âm thầm sau 256 mẫu (F18); OpenAPI thiếu kênh `/ws/simulation` làm cổng Go đỏ trên main (2026-09-27)
 
 - Phạm vi:

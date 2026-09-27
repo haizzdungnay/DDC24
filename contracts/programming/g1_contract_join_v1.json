@@ -15,9 +15,9 @@
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "297be2e13b2df01d9d0290cec89d9c3ecec845b198a0cbd7317f1adc38b17496",
+      "sha256": "e0ee7e447019857ff434c8a55c6ad0f83d0e7c50568f0b0631141fcf74a7c08d",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "d208bb8e4b87498423e3cfc2f9bbbc9336932a7b55208ebd2c38d8dbc3ae5fcb",
+      "goldenManifestSha256": "0c9bd81846dd42c0de02882a4a52f3dfe7a4667117f1967f82f3a29226fc5eb6",
       "major": 1,
       "minor": 4,
       "version": "1.0"
