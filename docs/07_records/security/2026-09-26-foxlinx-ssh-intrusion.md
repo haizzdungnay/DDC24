@@ -4,7 +4,7 @@
 **Thiết bị:** bo lab Foxlinx OK1126B-S (`OK1126B-buildroot`, `mekong-fac.ddns.net`, SSH cổng WAN 2223). Đây là bo phát triển dùng chung, không phải sản phẩm ở hiện trường.
 **Phát hiện:** 2026-09-26 khoảng 10:20 UTC, trong lúc điều tra vi phạm C4 của soak ADR-061 (hồ sơ `EV-PROG-FBD-ST-MB-20260925`, F17).
 **Ngăn chặn:** 2026-09-26 10:24–10:45 UTC. Chủ sở hữu duyệt phương án "Ngăn chặn ngay".
-**Trạng thái:** đã ngăn chặn; **chưa khắc phục triệt để**. Kẻ tấn công đã có quyền root trong ít nhất 4 ngày, nên chỉ cài lại image mới bảo đảm bo sạch.
+**Trạng thái:** đã ngăn chặn và tăng cường bảo vệ tạm thời; **chưa khắc phục triệt để**. Kẻ tấn công đã có quyền root trong ít nhất 4 ngày, nên chỉ cài lại image từ nguồn tin cậy mới bảo đảm bo sạch.
 
 ## Tóm tắt
 
@@ -72,14 +72,40 @@ Mọi thay đổi đều đảo ngược được. Bản gốc nằm trong `/roo
 4. Chặn `87.251.69.253`, `43.110.38.5` và `130.12.180.51` bằng iptables. Unit `mkddc-incident-ipblock.service` đặt lại các luật này sau mỗi lần boot.
 5. Không đổi mật khẩu tài khoản web. Không đụng dịch vụ mkddc; Core, iobus và web không restart vì ngăn chặn.
 
+## Rà soát và xử lý bổ sung (2026-09-26 10:58–11:05 UTC)
+
+Theo yêu cầu của chủ sở hữu, đã đổi mật khẩu `root` bằng `passwd` tương tác; **không ghi mật khẩu vào hồ sơ, shell history hoặc tệp trên host**. Sau đó khoá mật khẩu tài khoản `forlinx` (tài khoản vẫn tồn tại). Thử SSH không dùng khoá cho cả hai tài khoản đều trả `Permission denied (publickey)`; phiên mới dùng khoá vẫn vào được.
+
+Rà thêm các điểm khởi động và phát hiện **ba bản sao ARM cùng SHA-256 `0ed1b127…80bf1d0`** với `/usr/lib/libgdi.so.0.8.2` đã biết: `/boot/system.pub`, `/usr/lib/system.mark`, `/etc/profile.d/bash.cfg`. Các đường gọi gồm unit giả `quotaon.service`, script init `dns-udp4`, `/etc/profile.d/bash.cfg.sh`, cùng các dòng chèn vào `S45wifi`, `fuse3`, `S90autorun.sh`. `/etc/profile.d/gateway.sh` còn định nghĩa lại `ps`, `netstat`, `ls`, `find`, `lsof` để lọc tên tiến trình/tệp của mã độc. Mốc sửa `2026-09-10` của vài tệp **chỉ là mtime, không chứng minh được thời điểm xâm nhập đầu tiên**. Chúng giải thích vì sao lượt rà đầu chưa đủ để kết luận sạch.
+
+Đã sao chép 11 tệp gốc và hash vào `/root/quarantine/2026-09-26T1100Z-second-wave/`; `sha256sum -c` bản sao kiểm tra đạt 11/11, các tệp sao chép đặt quyền `000`. Đã xoá bản chạy khỏi vị trí gốc, bỏ dòng gọi mã độc trong ba script init, tắt và mask `quotaon.service`. Tìm tham chiếu các tên IoC trong `/etc`, `/usr/lib/systemd`, `/lib/systemd` không còn kết quả; các đường dẫn thực thi đã biết đều vắng mặt. **Đây chỉ là xử lý các IoC đã tìm thấy, không chứng minh toàn bộ hệ thống sạch.** Hai thư mục quarantine được giữ để phục vụ điều tra và sẽ bị xoá khi cài lại image.
+
+Phát hiện thêm `vsftpd` đang mở TCP/21 với `anonymous_enable=YES`, `local_enable=YES`, `write_enable=YES`; `adbd` mở TCP/5555. Đã dừng, disable và mask hai service `vsftpd.service`, `usbdevice.service`. SSH nay đặt `AllowTcpForwarding no`, `AllowAgentForwarding no`, `MaxAuthTries 3`, `LogLevel VERBOSE`, `AddressFamily inet`. BSP không có bảng `ip6tables`, nên chỉ cho `sshd` lắng nghe IPv4. `sshd -t` đạt; đọc ngược `sshd -T` xác nhận mật khẩu và chuyển tiếp đều tắt. Luồng SSH tunnel phục vụ kiểm thử sẽ cần phương án nội bộ khác.
+
+Unit `mkddc-ssh-guard.service` (enabled/active) nạp lại luật `iptables` sau boot: TCP/22 chỉ nhận `192.168.1.0/24`, IP văn phòng `101.99.36.34`, và IP nhóm hiện dùng `1.53.70.62`; nguồn khác bị `DROP`. TCP/21 và 5555 bị `REJECT` thêm ở firewall. Ba IP tấn công vẫn bị chặn bởi unit trước. Đã đọc ngược `iptables -S`, chỉ còn SSH lắng nghe trong bộ cổng 21/22/5555, và SSH qua khoá từ `1.53.70.62` thành công sau khi áp luật. Nếu IP nhóm thay đổi, IT cần cập nhật allowlist tại bo qua LAN/console.
+
+**Giới hạn:** NAT WAN 2223 tại router chưa được gỡ vì phiên này không có quyền quản trị router. Allowlist trên bo hạn chế nguồn nhưng **không đồng nghĩa đã đóng SSH trên Internet**. Bo vẫn từng bị chiếm root, có thể còn tệp/tiến trình/secret đã bị thay hoặc lộ mà phép rà tại chỗ không phát hiện. Chưa reboot để kiểm tra persistence vì bo đang chạy soak và không có đường khôi phục vật lý trong phiên này. Không coi runtime hay soak từ bo này là bằng chứng trên nền tin cậy cho release.
+
+## Kiểm tra lại theo yêu cầu chủ sở hữu (2026-09-26 11:20–11:22 UTC)
+
+| Hạng mục | Kết quả quan sát trên bo |
+|---|---|
+| SSH từ 11:07:30 UTC | `PASS` theo journal còn giữ: các phiên `Accepted publickey` đều là `root` từ IP nhóm `1.53.70.62`, dùng fingerprint `SHA256:VEcAB4W2gzHJFxUqYyVFQ2olOZwrqgb40kPiJUkYI0k`; không có phiên được chấp nhận từ nguồn khác hoặc bằng mật khẩu trong cửa sổ này. Các lần `Failed publickey` cùng IP là khoá mặc định được client thử trước khoá hợp lệ. |
+| Tiến trình/kết nối | `PASS` trong snapshot: không thấy tiến trình mang tên IoC, executable đang chạy từ `/tmp`, `/var/tmp`, `/root`, `/boot`, `(deleted)` hoặc `memfd`; kết nối đã thiết lập chỉ gồm các phiên SSH và Web/API từ IP nhóm. `log-guardian` là unit trong BSP, đang ngủ theo chu kỳ 10 phút; không thấy hoạt động xoá log khi còn 4,8 GB trống. |
+| Tệp và tự khởi động | `PASS` với IoC đã biết: các đường chạy gốc vắng mặt, không còn tham chiếu tên IoC trong `/etc`, `/boot` và các thư mục unit; không thấy bản sao hash `0ed1b127…80bf1d0` ngoài quarantine. Chỉ còn một timer hệ thống `systemd-tmpfiles-clean`; root key vẫn đúng hai fingerprint đã cho phép. Mẫu trong quarantine giữ quyền `000`. |
+| Cổng mạng và dịch vụ | `PASS` trong snapshot: FTP/ADB/quotaon inactive; SSH chỉ IPv4, chỉ nhận khoá, allowlist còn hiệu lực. `mkddc-core`, `mkddc-iobus`, `mkddc-web-pi` active và `NRestarts=0`; 18 cửa sổ `core.jitter` từ 11:05 tới 11:22 UTC có `violations=0`, `missed_steps=0`. |
+
+**Kết luận của lượt kiểm tra:** không thấy dấu hiệu tái xâm nhập hoặc chương trình độc đang gây tải/ảnh hưởng vòng quét trong cửa sổ đã quan sát. Đây là snapshot và log trên **cùng bo từng bị chiếm root**, không phải chứng minh không còn backdoor. NAT WAN 2223 và yêu cầu cài lại image tin cậy ở bảng dưới vẫn mở; chủ sở hữu tự theo dõi tiếp.
+
 ## Việc còn lại
 
 | Việc | Ai quyết | Lý do |
 |---|---|---|
-| Cài lại image bo từ nguồn tin cậy, rồi cài mkddc bằng `platform/packaging/install.sh` | Chủ sở hữu hoặc IT | Có root trong ≥ 4 ngày nên không thể loại trừ thành phần chưa thấy (module kernel, binary hệ thống bị thay). Đã rà `ld.so.preload`, cron, unit, `authorized_keys`, tiến trình và file map; chưa kiểm được toàn vẹn binary hệ thống |
-| Không mở SSH ra Internet, hoặc giới hạn theo IP nguồn tại router | IT văn phòng | Cổng 2223 bị dò liên tục |
+| **Cài lại toàn bộ image bo từ nguồn tin cậy**, rồi cài mkddc bằng `platform/packaging/install.sh`; không phục hồi binary/config hệ thống từ bo cũ | Chủ sở hữu và IT tại bo | Quyết định kỹ thuật: **bắt buộc** trước khi coi bo sạch. Repo không có image đã xác minh để nạp; cần image đúng OK1126B-S, hash/nguồn tin cậy và quyền truy cập UART/USB hoặc eMMC. Flash sẽ xoá trạng thái bo, cần sao lưu chọn lọc dữ liệu dự án sau khi kiểm tra. Xem `FOXLINX_DEPLOY_CHECKLIST.md` §6.2 |
+| Gỡ chuyển tiếp WAN 2223 trên router; cấp đường quản trị LAN/VPN cho nhóm | IT văn phòng | **Chưa làm trên router.** Luật allowlist trên bo là biện pháp tạm; cổng WAN vẫn tồn tại cho các IP được phép |
 | Đồng nghiệp đăng nhập bằng mật khẩu cần gửi khoá công khai để thêm vào `authorized_keys` | Nhóm | Xác thực mật khẩu SSH đã tắt |
 | Cấu hình SSH của image sản phẩm | Chủ sở hữu sản phẩm | BSP khi giao đặt `PermitRootLogin yes` và `PermitEmptyPasswords yes`; thiết bị ở hiện trường không được mang cấu hình này |
+| Rà và đổi các bí mật đã nằm trên bo (tài khoản web, khoá/token dịch vụ) sau khi cài lại image | Chủ sở hữu và IT | Quyền root bị chiếm có thể đã đọc bí mật; đổi riêng mật khẩu root không xử lý được nguy cơ này |
 
 ## Ảnh hưởng tới số đo
 
