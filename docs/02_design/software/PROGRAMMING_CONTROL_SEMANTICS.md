@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Controls Lead + Core Lead |
@@ -194,10 +194,43 @@ Disable. Chính sách mới:
   mỗi lần Core khởi động lại, trước khi intent kịp bật Program trở lại.
 - iobus khởi động lại lấy mọi seq đang có làm mốc, kể cả slot đang ở trạng
   thái nhả, nên không phát lại một lần nhả cũ.
-- Chưa thuộc phạm vi: Program bị **bỏ khỏi gói** bởi Commission/Restore (khác
-  với Disable) vẫn để EXT ở giá trị cuối. Operator đã ack
-  `outputMappingChanges`/`writableOutputsAffected` ở bước Commission; muốn
-  đưa trường hợp này về safe thì cần một quyết định riêng.
+
+**Đổi gói: Commission, Restore và rollback chu kỳ đầu (2026-09-27,
+`EV-PROG-FBD-ST-MB-20260925` F20).** Trước bản này, instance rời gói không bị rút
+gì cả. Chỉ `st_withdraw_stale_outputs()` gọi `release_*`, và hàm đó chỉ duyệt
+Program của gói ĐANG chạy. Vì vậy AO/DO cục bộ và EXT giữ giá trị cuối của
+Active cũ vô thời hạn: không hết `holdTtl`, và T7 `no_ctrl` không bật. Quyết
+định F06 áp dụng nguyên vẹn: **instance bị loại khỏi gói là instance bị rút.**
+
+`ProgrammingRuntimeCoordinator::on_safe_boundary(resolver, writer)` gọi
+`st_withdraw_replaced_outputs()` (`st_process_image.*`) cho tập instance vừa rời
+scheduler. Lời gọi nằm tại đúng safe boundary đổi topology, sau khi owner mode
+của boundary đó đã áp dụng. Lúc này chưa Program nào của gói mới chạy, và instance
+cũ vẫn còn sống trong `previous_program_set_` (nó chỉ bị huỷ sau đó, ở luồng
+non-RT). Với từng điểm AO/DO/EXT của instance cũ:
+
+- **Gói mới cũng nắm điểm đó thì bàn giao, không nhả.** "Nắm" nghĩa là owner là
+  `PROGRAM_ONLY` và có instance `RUNNING` của topology mới khai điểm đó là output.
+  Program có intent Enable chạy ngay tại boundary kích hoạt (ADR-062), nên nó
+  publish điểm này trong chính scan đó. Kết quả là không có scan nào điểm ở trạng
+  thái đã nhả, không tạo lại khoảng `no_ctrl` của F13, và `ext_cmd_seq` chỉ tăng
+  khi giá trị thật sự đổi. Nếu nhả rồi claim lại trong cùng scan, iobus (soi seq
+  mỗi 5 ms) có thể thấy `dirty=0` và phát `safe_value` lên dây: đó là một glitch.
+  Instance mới kế thừa mốc publish của lệnh đang treo. Nhờ vậy, nếu nó không kịp
+  publish (WAITING, fault), TTL và nhánh nhả EXT vẫn tính đúng tuổi lệnh.
+- **Gói mới không nắm thì rút như Disable.** Trường hợp này gồm điểm không có
+  trong gói mới, và điểm chỉ Program Disabled của gói mới khai. AO/DO nhả mức 5 để
+  tầng dưới quyết định: manual/BMS/schedule, default mức 6, hoặc T7 khi không còn
+  ai điều khiển. EXT mà instance cũ đã publish thì về `safe_value`; điểm không khai
+  `safe_value` giữ giá trị cuối kèm `WARN modbus_master.ext_release_hold`.
+- **Rollback chu kỳ đầu** trả topology cũ và owner `GRAPH_ONLY`, nên sau đó không
+  Program nào publish. Mọi claim của gói ứng viên, kể cả claim nó vừa nhận bàn
+  giao, được nhả ở chính boundary rollback.
+- **Không đổi:** boot fail-closed (khôi phục checkpoint lúc khởi động không đi qua
+  đường này), và các nhánh Disable/TTL/F06 ở trên.
+- Mỗi lần đổi gói Core ghi đúng một dòng `INFO programming.package_swap_withdraw
+  reason=replace|rollback retired=… released_ao=… released_do=… released_ext=…
+  handed_over=… live_publishes=…`, dùng làm mốc đo trên target.
 
 ## 7. PID và anti-windup
 
@@ -551,6 +584,7 @@ thành sự kiện tương thích artifact).
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.3 | 2026-09-27 | §6 thêm trường hợp đổi gói (F20): instance rời gói khi Commission/Restore/rollback chu kỳ đầu là instance bị rút. Điểm gói mới cũng nắm được bàn giao liên tục (không nhả, không glitch EXT, không tạo lại `no_ctrl`), điểm còn lại rút như Disable (AO/DO về tầng dưới, EXT về `safe_value`). Bỏ dòng "chưa thuộc phạm vi" của F06. Host PASS; target chưa đo | Core + Controls |
 | 1.2 | 2026-09-27 | §13 theo ADR-061: `CTRL-T-001` dùng tập chu kỳ {10…50000} ms trên base step 10 ms với C1–C4; ngưỡng `VS-PROG-009` là 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s/50 s (X20, chủ sở hữu chốt 2026-09-27). Không đổi trạng thái kiểm chứng | Core + Controls |
 | 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last = **60 s đồng hồ** và đóng hàng blocker tương ứng ở §15. Ba đổi thay hành vi kèm theo: TTL đo bằng đồng hồ của tick (`output_commit_now_ns`) thay vì đếm base step; TTL đo tuổi của LỆNH nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable chứ không riêng `FAULTED`; mặc định `ScanDeps` là giá trị đã ký thay vì `0`. "Khoá theo Point class" đóng là KHÔNG làm, có lý do ở ADR. Evidence host/local `ctest` 1205/1205; target/HIL vẫn NOT TESTED | Core + Controls |
 | 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-404/405` tại `10d9ad6`: Programming UDS/coordinator, exclusive owner tại safe boundary, first-output commit mới nâng LKG, first-cycle fault rollback và restart checkpoint recovery. Host gates PASS; target/HIL/power/IOP vẫn NOT TESTED. | Core + Controls + QA |
