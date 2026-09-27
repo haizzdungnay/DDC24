@@ -170,7 +170,8 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // `1.42.0` — ADR-061: tập chu kỳ {10…50000} ms, metric C2–C4 của Task,
     // Trace `effectiveSamplePeriodMs`, freshness 10…150000 ms. Client sinh lại
     // CÙNG change-set với contract.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.42.0");
+    // `1.43.0` — khai kênh WebSocket chỉ đọc `/ws/simulation` (không thêm operation Programming).
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.43.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

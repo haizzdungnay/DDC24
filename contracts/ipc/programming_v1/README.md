@@ -83,6 +83,31 @@ Luật áp ở Core và bảng tương thích bốn tổ hợp phiên bản ở
 [`ADR-062`](../../../docs/adr/ADR-062-programming-intent-enable-di-cung-activate.md).
 Golden `request_activate_program_intents.hex` khoá chuỗi byte chung của Go và C++.
 
+### 4.2 Payload Trace (`TRACE_START`, `TRACE_READ`, `TRACE_STOP`)
+
+| Action | Request payload | Response payload |
+|---|---|---|
+| `TRACE_START` | `[sessionId, samplePeriodMs, durationMs, [[instanceId, variableName], ...]]` | `ACCEPTED` `[effectiveSamplePeriodMs]` |
+| `TRACE_READ` (từ F18) | `[sessionId, fromSequence]` | `OK` `[state, droppedCount, samples, firstSequence, nextSequence]` |
+| `TRACE_READ` (đời cũ) | `[sessionId]` | `OK` `[state, droppedCount, samples]` — tối đa một lô, các mẫu MỚI NHẤT |
+| `TRACE_STOP` | `[sessionId]` | `OK` rỗng |
+
+- Mẫu: `[timestampNs, [[valid, bits], ...]]`. `timestampNs` là CLOCK_MONOTONIC
+  của Core tại ranh giới quét; `bits` là 8 byte thô của ô.
+- Mỗi mẫu có **số thứ tự tuyệt đối** đánh từ 1 trong phiên. `TRACE_READ` trả tối
+  đa **một lô** (≤ 200 mẫu, và dưới ~28 KiB) bắt đầu từ
+  `max(fromSequence, mẫu cũ nhất còn giữ)`.
+  - `firstSequence` là số của `samples[0]`; bằng `nextSequence` khi rỗng.
+  - `nextSequence` là số mẫu kế tiếp Core sẽ ghi.
+  - `firstSequence > fromSequence` nghĩa là ring đã ghi đè phần chưa đọc: BE
+    cộng khoảng hụt vào `droppedSamples`.
+- Vì sao có trần mỗi lô: bộ giải mã CBOR của BE (`coreipc`) từ chối mảng
+  > 256 phần tử, và trần payload IPC là 32 KiB. Bản cũ trả trọn ring (tới
+  5 000 mẫu) nên hỏng sau 256 mẫu — 2,56 s ở chu kỳ 10 ms (F18,
+  `EV-PROG-FBD-ST-MB-20260925`).
+- `fromSequence = 0` bị `REJECTED/IPC-PAYLOAD`. Deploy Core và BE cùng lượt:
+  BE mới cần phản hồi 5 phần tử; Core mới vẫn phục vụ BE cũ bằng dạng 3 phần tử.
+
 ## 5. Golden corpus và deploy
 
 `golden/*.hex` chứa toàn frame, gồm 4 byte length. Go và C++ phải decode và

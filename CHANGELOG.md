@@ -40,6 +40,30 @@
   - FE không đổi nên không chạy.
 - **Còn mở:** F13 chỉ đóng ở mức source/host. Phải deploy **cả** Core lẫn web rồi đo target theo ADR-062 mục 8 (`programming.activate_intents … enabled=1`, không có `safe_state.enter … no_ctrl=1` quanh Restore).
 
+### Fixed — Trace hỏng âm thầm sau 256 mẫu (F18); OpenAPI thiếu kênh `/ws/simulation` làm cổng Go đỏ trên main (2026-09-27)
+
+- Phạm vi:
+  - Core: `apps/core/application/st/st_value_trace.{hpp,cpp}`, `apps/core/application/programming/program_ipc_server.cpp` và test `test_program_ipc_server.cpp`.
+  - Web: `apps/web-api/internal/programming/application/{trace.go,monitor_trace_test.go}`, `apps/web-api/internal/app/rbac_contract_test.go`.
+  - Hợp đồng: `contracts/openapi/openapi.yaml` 1.42.0 → 1.43.0; re-pin `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}`; `contracts/ipc/programming_v1/README.md` §4.1.
+  - FE: `apps/web-ui/src/features/programming/api/generated/{client.ts,client.test.ts}`.
+  - Khác: `apps/iobus/tests/test_output_command.cpp`; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (F18, lượt 4).
+- F18 — triệu chứng: Trace 10 ms trên Foxlinx chỉ có mẫu Core trong 2,56 s đầu. Sau đó web trộn mẫu poll monitor: mốc trùng nhau 33–45 lần mỗi giây, có lúc chạy lùi 920 ms, mà `droppedSamples` vẫn báo 0.
+- F18 — nguyên nhân: `TRACE_READ` trả trọn ring, còn bộ giải mã CBOR của web đặt `MaxArrayElements: 256`, nên từ mẫu 257 mọi lần đọc hỏng và `runTrace` rơi về poll monitor. Ring đầy còn vượt trần payload IPC 32 KiB.
+- F18 — cách sửa:
+  - `TRACE_READ` đọc tăng dần theo số thứ tự tuyệt đối (`[sessionId, fromSequence]`), mỗi lô ≤ 200 mẫu và dưới 28 KiB, trả `firstSequence`/`nextSequence`. Payload cũ `[sessionId]` vẫn được phục vụ (lô mẫu mới nhất).
+  - Web nối mẫu và cộng khoảng hụt vào `droppedSamples`. Phiên Core không bao giờ trộn mẫu monitor; đọc hỏng liên tục 3 s thì FAILED `SOURCE_UNAVAILABLE`.
+  - Mốc wall neo một lần mỗi phiên, vì tính lại mỗi lô làm mốc chạy lùi ở ranh giới lô.
+  - Web poll Core ≥ 100 ms thay vì mỗi 10 ms.
+  - Đường dự phòng bỏ mẫu trùng mốc.
+- Cổng Go đỏ sẵn trên main: route `GET /api/v1/ws/simulation` (PR #759) chạy mà không có trong OpenAPI, nên `TestRouteTableMatchesOpenAPI` đỏ. Đã khai kênh chỉ đọc này (viewer+, cùng quyền với REST observations), thêm vào danh sách ngoại lệ xác thực WebSocket của test RBAC, và re-pin sha OpenAPI trong cùng PR.
+- GCC 13.3 báo nhầm `-Wstringop-overflow` trong `test_output_command.cpp` (có sẵn trên main): tắt cục bộ kèm lý do.
+- Đo trên target (lượt 4), không dùng Trace:
+  - Release → `ext_cmd_seq` trung vị 1,5–1,7 ms; `ext_cmd_seq` → FC05 trung vị 1,1–1,2 ms, tối đa 4,5 ms: G7 PASS.
+  - Disable ⇒ `safe_value` sau 12–261 ms: F06 PASS.
+  - Active trả về `4206243c…` sau mỗi lượt.
+- Kiểm chứng: xem PR.
+
 ### Changed — Deploy `main@d2556be6` (web + FE) lên Foxlinx (2026-09-26)
 
 - Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` (lượt 4). Không đổi mã.
