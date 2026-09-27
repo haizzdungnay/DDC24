@@ -131,5 +131,13 @@ if(HMI_BUILD_TESTS)
         target_link_libraries(hmi_tests PRIVATE gtest_main)
     endif()
     include(GoogleTest)
-    gtest_discover_tests(hmi_tests)
+    # Như iobus: `gtest_discover_tests` CHẠY binary ngay sau khi link. Cross-compile
+    # aarch64 trên máy x86_64 thì binary không chạy được và build `all` đứt ở bước
+    # post-link (gặp khi dựng gói cài sạch bo lab 2026-09-27). Ở chế độ cross,
+    # đăng ký một test gộp và để board tự chạy.
+    if(CMAKE_CROSSCOMPILING)
+        add_test(NAME hmi_tests COMMAND hmi_tests)
+    else()
+        gtest_discover_tests(hmi_tests)
+    endif()
 endif()
