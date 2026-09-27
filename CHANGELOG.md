@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Changed — X19 và F19 PASS trên Foxlinx sau deploy Core `main@38978b68` (2026-09-27)
+
+- Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` lượt 4 (X19, F19). Không đổi mã.
+- Deploy Core `c507f6dd…` (PR #775); web, FE và iobus không đổi. Luồng quét FIFO trên CPU3; ba luồng phụ SCHED_OTHER trên CPU0–2.
+- Đo trên target: `ipc_us` 427–686 → 3; `publish_us` 289–531 → 54–65; WCET tổng mỗi step 959–1 307 → 338–540 µs; lệch nhịp tối đa theo phút 40,9–45,5 µs, 0 vi phạm, 0 lỡ step. F19: không còn dòng log cho mỗi kết nối, còn một dòng tổng mỗi phút.
+
 ### Changed — X19 / ADR-061 4.10 bước 2: tách việc không-RT khỏi luồng quét 10 ms của Core; F05 (khoá `StValueTrace`) và F19 (log mỗi kết nối) (2026-09-26)
 
 - Phạm vi: `apps/core/adapters/ipc/{web_ipc.hpp,web_ipc.cpp,tests/test_web_ipc.cpp}`, `apps/core/application/runtime/{scan_loop.hpp,scan_loop.cpp,thread_policy.hpp,spsc_ring.hpp,latest_value_buffer.hpp,test_rt_exchange.cpp}`, `apps/core/application/st/{st_value_trace.hpp,st_value_trace.cpp,tests/test_st_value_trace.cpp}`, `apps/core/bootstrap/main.cpp`, `apps/core/tests/scan_wcet_bench.cpp` (công cụ đo, không vào ctest), `apps/core/CMakeLists.txt`; tài liệu ADR-061 (mục "4.10 bước 2 — As-Built"), guide Core §2/§8/§8.1, hồ sơ `EV-PROG-FBD-ST-MB-20260925` (X19, F05, G3, F19 mới). Không đổi `contracts/**`, giao thức socket `core.sock` hay `plc_shm`; không đổi Go/FE. Không đụng `apps/core/application/programming/**`.
