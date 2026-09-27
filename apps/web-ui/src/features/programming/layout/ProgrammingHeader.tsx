@@ -82,7 +82,7 @@ export function ProgrammingHeader({
                 aria-label={pick('Build', 'Build')}
                 icon={<Hammer className="h-4 w-4" aria-hidden="true" />}
                 disabled={actions.checkDisabledReason !== null}
-                title={actions.checkDisabledReason ?? pick('Build gói (mở PGM-05)', 'Build package (opens PGM-05)')}
+                title={actions.checkDisabledReason ?? pick('Build gói: niêm phong và chạy Kiểm tra (PGM-05)', 'Build package: seal and run Check (PGM-05)')}
                 onClick={actions.onCheck}
               >
                 Build
