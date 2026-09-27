@@ -357,6 +357,7 @@ if(CORE_BUILD_TESTS)
       domain/priority/test_priority_resolver.cpp
       domain/safety/tests/test_safe_state.cpp domain/safety/tests/test_overrun_monitor.cpp
       application/runtime/test_scan_loop.cpp application/runtime/test_cpu_idle_check.cpp
+      application/runtime/test_rt_exchange.cpp
       application/programming/tests/test_program_ipc_server.cpp
       application/programming/tests/test_programming_runtime_coordinator.cpp
       application/programming/tests/test_programming_package_v2_stage.cpp
@@ -425,6 +426,11 @@ if(CORE_BUILD_TESTS)
       PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
       CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package)
+  # ADR-061 4.10 bước 2 — đo WCET từng bước của ScanLoop dưới tải IPC web giống
+  # web-api, để so trước/sau trên CÙNG một máy. Không vào ctest: số đo thời gian
+  # trên máy dev là để so sánh, không phải cổng pass/fail.
+  add_executable(mkddc-core-scan-bench tests/scan_wcet_bench.cpp)
+  target_link_libraries(mkddc-core-scan-bench PRIVATE st_compiler_lib)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)
   else()

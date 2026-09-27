@@ -1,11 +1,13 @@
 #include "programming/program_ipc_server.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -612,6 +614,107 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
     /* `fromSequence = 0` không có nghĩa: từ chối thay vì đoán. */
     EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 0u})).result,
               ProgramResult::Rejected);
+}
+
+/* X19 / F05 — `TRACE_READ` chạy trên luồng `prog-ipc` trong khi luồng quét ghi
+ * trace mỗi base step. Trạng thái, số thứ tự và mẫu phải đến từ CÙNG một lần
+ * giữ khoá: nếu đọc rời từng hàm, ring (đầy, đang ghi đè) có thể dịch một mẫu
+ * giữa lúc lấy `firstSequence` và lúc đọc `samples[0]`, và một số thứ tự sẽ
+ * được gán cho hai mốc thời gian khác nhau ở hai lần đọc. Test đọc chồng lấn
+ * liên tục trong lúc luồng "quét" ghi, rồi kiểm mỗi số thứ tự chỉ ứng với ĐÚNG
+ * một mốc và mốc tăng dần trong mỗi lô. */
+TEST(ProgramIpcServer, TraceReadSequencesStayBoundToTheirSamplesUnderConcurrentWrites)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_us = 199000;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    server.set_value_trace(&trace, &scheduler);
+    uint32_t seed = 0;
+    auto send = [&](ProgramAction action, const nlohmann::json& body) {
+        ProgramRequest input = request(action);
+        input.request_id = bytes(16, static_cast<uint8_t>(seed));
+        input.request_id[15] = static_cast<uint8_t>(seed >> 8);
+        input.request_id[14] = static_cast<uint8_t>(seed >> 16);
+        ++seed;
+        input.operation_id = input.request_id;
+        input.operation_id[0] ^= 0x5a;
+        input.actor_id = "admin-1";
+        input.payload = nlohmann::json::to_cbor(body);
+        crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+        ProgramCodecError codec_error = ProgramCodecError::None;
+        const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+        EXPECT_EQ(codec_error, ProgramCodecError::None);
+        const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+        ProgramResponse response;
+        EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+        return response;
+    };
+
+    /* 32 biến ⇒ ring chỉ 312 mẫu, nên luồng "quét" ghi đè liên tục. */
+    nlohmann::json variables = nlohmann::json::array();
+    for (int index = 0; index < 32; ++index) variables.push_back(nlohmann::json::array({"P_ahu", "x"}));
+    ASSERT_EQ(send(ProgramAction::TraceStart,
+                   nlohmann::json::array({"session-x19", 10u, 600000u, variables}))
+                  .result,
+              ProgramResult::Accepted);
+
+    /* Luồng "quét" ghi lại SỰ THẬT: mẫu thứ s (đánh từ 1) mang mốc nào. Một
+     * boundary bị bỏ lượt vì khoá không tạo mẫu, nên chỉ ghi khi bộ đếm bỏ lượt
+     * không đổi. */
+    constexpr std::size_t kMaxBoundaries = 40000;
+    std::vector<uint64_t> truth;
+    truth.reserve(kMaxBoundaries);
+    std::atomic<bool> stop{false};
+    std::thread scan([&] {
+        uint32_t contended_before = trace.status().contended_boundary_count;
+        for (uint64_t k = 0; k < kMaxBoundaries && !stop.load(std::memory_order_acquire); ++k) {
+            const uint64_t now = 1'000'000ull + k * 10'000'000ull;
+            trace.on_boundary(scheduler, now);
+            const StTraceStatus status = trace.status();
+            if (status.state != StTraceState::RUNNING) break;
+            if (status.contended_boundary_count == contended_before) truth.push_back(now);
+            contended_before = status.contended_boundary_count;
+        }
+    });
+
+    std::vector<std::pair<uint64_t, uint64_t>> observed;
+    uint64_t from = 1;
+    for (int read = 0; read < 300; ++read) {
+        const ProgramResponse response =
+            send(ProgramAction::TraceRead, nlohmann::json::array({"session-x19", from}));
+        ASSERT_EQ(response.result, ProgramResult::Ok);
+        const nlohmann::json body = nlohmann::json::from_cbor(response.payload, true, true);
+        ASSERT_EQ(body.size(), 5u);
+        const uint64_t first = body[3].get<uint64_t>();
+        for (std::size_t index = 0; index < body[2].size(); ++index)
+            observed.emplace_back(first + index, body[2][index][0].get<uint64_t>());
+        /* Đọc chồng lấn: lùi lại một đoạn so với chỗ Core đang ghi. */
+        const uint64_t next = body[4].get<uint64_t>();
+        from = next > 40 ? next - 40 : 1;
+    }
+    stop.store(true, std::memory_order_release);
+    scan.join();
+
+    ASSERT_FALSE(observed.empty());
+    uint64_t mismatched = 0;
+    for (const auto& [sequence, timestamp] : observed) {
+        ASSERT_GE(sequence, 1u);
+        ASSERT_LE(sequence, truth.size());
+        if (truth[sequence - 1] != timestamp) ++mismatched;
+    }
+    EXPECT_EQ(mismatched, 0u) << "số thứ tự trả về không khớp mẫu thật (" << mismatched << "/"
+                              << observed.size() << ")";
 }
 
 /* Không có bus trace: ba action trả UNAVAILABLE tường minh. Một `TRACE_START`

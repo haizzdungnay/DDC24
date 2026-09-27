@@ -90,16 +90,22 @@ struct ScanDeps {
 };
 
 /* ADR-061 4.10 — các bước của ScanLoop::step() được đo WCET riêng. Thứ tự
- * enum = thứ tự chạy trong step(); log `core.step_wcet` in đúng thứ tự này. */
+ * enum = thứ tự chạy trong step(); log `core.step_wcet` in đúng thứ tự này.
+ *
+ * Bước 2 (X19): khi luồng `web-ipc` chạy, IPC_DRAIN chỉ còn hết hạn override +
+ * lấy lệnh đã validate khỏi hàng đợi + áp lệnh; PUBLISH chỉ còn dựng snapshot
+ * (struct cố định) + chép vào bộ đệm ba ô + điền kết quả lệnh + BACnet objtable.
+ * Socket, parse JSON, dựng JSON trả lời, AUDIT và serialize snapshot nằm ở luồng
+ * kia và KHÔNG còn tính vào hai bước này. */
 enum class ScanPhase : uint8_t {
     IO_READ = 0,   /* re-attach, đọc io_shm, quality, đọc ext fieldbus */
-    IPC_DRAIN,     /* hết hạn override, drain + áp lệnh web/BACnet */
+    IPC_DRAIN,     /* hết hạn override, lấy + áp lệnh web/BACnet tại ranh giới */
     SCHEDULES,     /* ScheduleRuntime */
     LOGIC,         /* safe boundary + graph + Program Runtime (ST) */
     ALARMS,        /* AlarmRuntime */
     EXT_WRITES,    /* graph -> plc_shm.ext[].dirty */
     OUTPUT,        /* resolve priority + safe-state + ghi output */
-    PUBLISH,       /* point_snapshot, trả lời lệnh, BACnet objtable */
+    PUBLISH,       /* dựng point_snapshot, kết quả lệnh, BACnet objtable */
     COUNT
 };
 constexpr std::size_t kScanPhaseCount = static_cast<std::size_t>(ScanPhase::COUNT);
@@ -126,7 +132,7 @@ struct ScanTimeSource {
 
 class ScanLoop {
 public:
-    explicit ScanLoop(ScanDeps deps) : d_(deps) {}
+    explicit ScanLoop(ScanDeps deps);
 
     /* 1 chu kỳ scan (step 1-10 của 07 §2) — public để test không cần timer. */
     void step();
@@ -151,19 +157,17 @@ public:
     const ScanStepWcet& step_wcet() const { return wcet_; }
 
 #ifdef CORE_BUILD_TESTS
-    /* CR-007: pending_/pending_alarm_ là member pre-allocated, .clear() mỗi scan
-     * (KHÔNG giải phóng capacity) để tránh heap alloc lặp lại trong scan hot path.
-     * Test dùng capacity để verify capacity không tăng lại sau khi đã ổn định. */
-    std::size_t pending_capacity_for_test() const { return pending_.capacity(); }
-    std::size_t pending_alarm_capacity_for_test() const { return pending_alarm_.capacity(); }
+    /* CR-007 → X19: lệnh đang xử lý trong scan nằm trong mảng CỐ ĐỊNH (con trỏ
+     * tới slot của `WebIpc`), không còn vector tăng dần. */
+    std::size_t pending_capacity_for_test() const { return inflight_.size(); }
     const StIoBridgeStats& st_io_stats_for_test() const { return st_io_stats_; }
     const StSchedulerTickResult& st_tick_for_test() const { return st_tick_; }
 #endif
 
 private:
-    struct PendingResp { WebCommand cmd; bool ok; };
-
     uint64_t monotonic_now() const;
+    void apply_point_command(WebCommandSlot* slot, uint64_t command_now);
+    void complete_commands(const OutputCmd& out);
     void record_phase(ScanPhase phase, uint64_t* mark);
     void log_minute_stats();
     void log_missed_base_step(const char* cause, uint64_t late_ns, uint64_t skipped, uint64_t now_ns);
@@ -183,15 +187,18 @@ private:
     std::atomic<bool>* reload_flag_ = nullptr;
     void (*reload_fn_)(void*) = nullptr;
     void* reload_ctx_ = nullptr;
-    /* pre-allocated: tránh heap alloc mỗi scan trong SCHED_FIFO (CR-007) */
-    std::vector<PendingResp> pending_;
-    std::vector<WebCommand> pending_alarm_;
+    /* Lệnh lấy ra ở IPC_DRAIN của scan này, trả lại ở PUBLISH. Mảng cố định:
+     * không cấp phát trong SCHED_FIFO (CR-007, X19). */
+    std::array<WebCommandSlot*, kWebCommandSlots> inflight_{};
+    std::size_t inflight_count_ = 0;
     StIoBridgeStats       st_io_stats_{};
     StSchedulerTickResult st_tick_{};
     std::array<uint64_t, KX_N_AO> manual_ao_expiry_ns_{};
     std::array<uint64_t, KX_N_DO> manual_do_expiry_ns_{};
     std::array<uint64_t, KX_N_AO> manual_ao_request_id_{};
     std::array<uint64_t, KX_N_DO> manual_do_request_id_{};
+    /* Capacity đặt sẵn ở constructor (≥ trần 48 ký tự của user đã sanitize) để
+     * phép gán trên luồng quét không cấp phát. */
     std::array<std::string, KX_N_AO> manual_ao_user_{};
     std::array<std::string, KX_N_DO> manual_do_user_{};
 };

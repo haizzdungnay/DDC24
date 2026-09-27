@@ -7,12 +7,15 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include <nlohmann/json.hpp>
 
@@ -23,6 +26,7 @@
 #include "ipc/iobus_reader.hpp"
 #include "ipc/output_writer.hpp"
 #include "runtime/scan_loop.hpp"
+#include "tests/allocation_probe.hpp"
 
 using namespace core;
 
@@ -141,6 +145,30 @@ struct SendScript {
     std::deque<int> results;
     std::string bytes;
 };
+
+/* Chờ một điều kiện do luồng khác tạo ra (luồng `web-ipc`), tối đa 2 s. */
+bool wait_until(const std::function<bool()>& ready)
+{
+    for (int attempt = 0; attempt < 2000; ++attempt) {
+        if (ready()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return ready();
+}
+
+WebCommand point_write(uint64_t id, PointKind kind, int idx, float value)
+{
+    WebCommand cmd;
+    cmd.id = id;
+    cmd.kind = WebCommandKind::Point;
+    cmd.is_write = true;
+    cmd.point = {kind, idx};
+    cmd.point_name = "DO1";
+    cmd.value = value;
+    cmd.user = "t";
+    cmd.prio = PRIO_LOCAL_MANUAL;
+    return cmd;
+}
 
 ssize_t scripted_send(int, const void* data, size_t size, int, void* context)
 {
@@ -1080,33 +1108,217 @@ TEST(WebIpc, RejectsInvalidRequests)
 
 TEST(ScanLoop, PendingCommandBuffersDoNotReallocateAcrossSteadyLoad)
 {
-    /* FW SOM group 7 (no-alloc scan hot path): ScanLoop::pending_/pending_alarm_
-     * là member pre-allocated, .clear() mỗi scan (không giải phóng capacity) — lệnh
-     * qua socket thật để chứng minh capacity ổn định (không heap-grow lặp lại) khi
-     * tải lệnh mỗi scan không tăng, thay vì chỉ dựa vào đảm bảo lý thuyết của
-     * std::vector::clear(). */
+    /* FW SOM group 7 (no-alloc scan hot path). Bản trước khoá "capacity của
+     * vector pending_ không tăng lại"; từ X19 (ADR-061 4.10 bước 2) lệnh trong
+     * scan nằm trong mảng CỐ ĐỊNH trỏ vào slot của WebIpc, nên test khoá thẳng
+     * thuộc tính gốc: step() áp lệnh web (kể cả override có TTL mang user dài
+     * hơn SSO) và công bố snapshot với 0 lần cấp phát trên luồng quét. Luồng
+     * `web-ipc` có bộ đếm thread_local riêng, nên cấp phát của parse/JSON ở đó
+     * không lẫn vào số đo. */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    ASSERT_TRUE(f.web.start_service_thread("web-ipc-test"));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+    EXPECT_EQ(f.loop.pending_capacity_for_test(), kWebCommandSlots);
+
+    const std::string user = "operator.with.a.long.account@site-01:5000";
+    auto command = [&](int id, int value) {
+        return "{\"id\":" + std::to_string(id) + ",\"op\":\"write\",\"point\":\"DO1\",\"value\":" +
+               std::to_string(value) + ",\"ttlS\":60,\"source\":\"manual\",\"user\":\"" + user +
+               "\"}";
+    };
+    c.send_line(command(100, 1));
+    ASSERT_TRUE(wait_until([&] { return f.web.queued_commands_for_test() == 1; }));
+    f.scan();
+    EXPECT_NE(c.recv_line().find("\"result\":\"accepted\""), std::string::npos);
+
+    for (int i = 0; i < 20; i++) {
+        c.send_line(command(101 + i, i % 2));
+        ASSERT_TRUE(wait_until([&] { return f.web.queued_commands_for_test() == 1; })) << i;
+        std::size_t allocations = 0;
+        {
+            allocation_probe::ScopedCounter counter;
+            f.scan();
+            allocations = counter.allocations();
+        }
+        EXPECT_EQ(allocations, 0u) << "step() cấp phát khi áp lệnh web ở lần lặp " << i;
+        const std::string response = c.recv_line();
+        EXPECT_NE(response.find("\"result\":\"accepted\""), std::string::npos) << response;
+        EXPECT_EQ(f.shm.do_cmd[0], i % 2);
+        EXPECT_EQ(f.loop.pending_capacity_for_test(), kWebCommandSlots);
+    }
+}
+
+/* X19 — tràn kênh trao đổi: 64 slot đang chờ luồng quét thì lệnh thứ 65 nhận
+ * `rejected busy` NGAY (có AUDIT), không xếp hàng vô hạn và không rơi âm thầm;
+ * 64 lệnh kia được áp và trả lời đúng thứ tự nộp; gửi lại id bị "busy" sau đó
+ * được xử lý bình thường (busy không bị cache chống lặp). */
+TEST(WebIpcOffload, FullExchangeRejectsBusyExplicitlyAndKeepsOrder)
+{
     Fixture f;
     ASSERT_TRUE(f.web.open(f.sock_path));
     Client c;
     ASSERT_TRUE(c.connect(f.sock_path));
+    std::string burst;
+    for (int id = 1; id <= 65; ++id)
+        burst += "{\"id\":" + std::to_string(id) +
+                 ",\"op\":\"write\",\"point\":\"AV1\",\"value\":" + std::to_string(id) +
+                 ",\"source\":\"manual\",\"user\":\"t\"}\n";
+    c.send_all(burst);
+    usleep(50000);
 
-    EXPECT_EQ(f.loop.pending_capacity_for_test(), 0u) << "chưa có lệnh nào -> chưa cấp phát";
+    testing::internal::CaptureStderr();
+    /* 16 dòng/client mỗi lượt drain: 5 lượt đọc hết 65 dòng. Không có scan nào
+     * chạy nên không slot nào được trả. */
+    for (int round = 0; round < 5; ++round) f.web.service_intake();
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(f.web.free_slots_for_test(), 0u);
+    EXPECT_EQ(f.web.queued_commands_for_test(), kWebCommandSlots);
+    const std::string busy = c.recv_line();
+    EXPECT_NE(busy.find("\"id\":65"), std::string::npos) << busy;
+    EXPECT_NE(busy.find("\"error\":\"busy\""), std::string::npos) << busy;
+    EXPECT_NE(log.find("AUDIT web_cmd id=65 user=t point=AV1 op=write"), std::string::npos) << log;
+    EXPECT_NE(log.find("result=rejected"), std::string::npos) << log;
 
-    c.send_line(R"({"id":100,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    /* Luồng quét lấy đúng thứ tự nộp. */
+    std::vector<WebCommandSlot*> taken;
+    while (WebCommandSlot* slot = f.web.rt_next_command()) taken.push_back(slot);
+    ASSERT_EQ(taken.size(), kWebCommandSlots);
+    for (std::size_t i = 0; i < taken.size(); ++i) {
+        EXPECT_EQ(taken[i]->cmd.id, i + 1) << "thứ tự FIFO bị đảo ở " << i;
+        taken[i]->result = WebCommandResult{WebResultKind::Accepted, "manual",
+                                            static_cast<float>(i + 1), 0};
+        f.web.rt_complete(taken[i]);
+    }
+    f.web.service_output(false);
+    for (std::size_t i = 0; i < taken.size(); ++i) {
+        const std::string response = c.recv_line();
+        EXPECT_NE(response.find("\"id\":" + std::to_string(i + 1) + ","), std::string::npos)
+            << "trả lời lệch thứ tự: " << response;
+        EXPECT_NE(response.find("\"result\":\"accepted\""), std::string::npos) << response;
+    }
+    EXPECT_EQ(f.web.free_slots_for_test(), kWebCommandSlots);
+
+    c.send_line(R"({"id":65,"op":"write","point":"AV1","value":65,"source":"manual","user":"t"})");
     usleep(50000);
     f.scan();
-    c.recv_line();
-    const std::size_t capacity_after_first = f.loop.pending_capacity_for_test();
-    EXPECT_GT(capacity_after_first, 0u) << "lệnh đầu tiên phải cấp phát capacity";
+    const std::string retried = c.recv_line();
+    EXPECT_NE(retried.find("\"result\":\"accepted\""), std::string::npos) << retried;
+    EXPECT_FLOAT_EQ(f.table.get({PointKind::AV, 0}).value, 65.0f);
+}
 
-    for (int i = 0; i < 20; i++) {
-        c.send_line(R"({"id":101,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
-        usleep(50000);
-        f.scan();
-        c.recv_line();
-        EXPECT_EQ(f.loop.pending_capacity_for_test(), capacity_after_first)
-            << "cùng tải 1 lệnh/scan -> capacity KHÔNG được tăng lại ở lần lặp " << i;
+/* X19 — ngữ nghĩa ranh giới scan: lệnh tới giữa step N (ở đây: đúng bước
+ * PUBLISH, sau khi output của N đã ghi) KHÔNG được áp nửa chừng trong N; nó được
+ * áp ở đầu step N+1 và trả lời theo output THẬT của N+1. */
+TEST(WebIpcOffload, CommandArrivingMidScanAppliesAtNextBoundary)
+{
+    Fixture f;
+    struct Hook {
+        WebIpc* web;
+        bool armed = true;
+    } hook{&f.web};
+    f.web.set_rt_publish_observer_for_test(
+        [](void* context) {
+            auto* h = static_cast<Hook*>(context);
+            if (!h->armed) return;
+            h->armed = false;
+            ASSERT_TRUE(h->web->submit_for_test(point_write(7, PointKind::BO, 0, 1.0f)));
+        },
+        &hook);
+
+    f.scan();   /* step N: lệnh được nộp ở PUBLISH */
+    EXPECT_FALSE(hook.armed);
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "lệnh đến giữa scan không được áp trong chính scan đó";
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_DEFAULT);
+    EXPECT_EQ(f.web.queued_commands_for_test(), 1u);
+
+    f.scan();   /* step N+1: áp tại ranh giới, output của chính step này */
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_LOCAL_MANUAL);
+    EXPECT_EQ(f.web.queued_commands_for_test(), 0u);
+    EXPECT_EQ(f.web.free_slots_for_test(), kWebCommandSlots) << "slot phải được trả sau khi trả lời";
+}
+
+/* X19 — đường thật với luồng `web-ipc`: step() không chạm socket; lệnh vẫn áp
+ * đúng scan, trả lời mang output thật, AUDIT giữ nguyên nội dung; point_snapshot
+ * phục vụ bản của scan gần nhất. */
+TEST(WebIpcOffload, ServiceThreadAnswersWithTheScanOutputAndAuditIsUnchanged)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    ASSERT_TRUE(f.web.start_service_thread("web-ipc-test"));
+    EXPECT_TRUE(f.web.offloaded());
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    testing::internal::CaptureStderr();
+    c.send_line(R"({"id":7,"op":"write","point":"DO2","value":1,"source":"manual","user":"admin"})");
+    ASSERT_TRUE(wait_until([&] { return f.web.queued_commands_for_test() == 1; }));
+    EXPECT_EQ(f.shm.do_cmd[1], 0) << "chưa có scan thì chưa được áp";
+    f.scan();
+    EXPECT_EQ(f.shm.do_cmd[1], 1);
+    const std::string response = c.recv_line();
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_NE(response.find("\"result\":\"accepted\""), std::string::npos) << response;
+    EXPECT_NE(response.find("\"applied_value\":1"), std::string::npos) << response;
+    EXPECT_NE(response.find("\"active_source\":\"manual\""), std::string::npos) << response;
+    EXPECT_NE(log.find("AUDIT web_cmd id=7 user=admin point=DO2 op=write value=1 result=accepted"
+                       " active_source=manual"),
+              std::string::npos)
+        << log;
+
+    Client snapshot_client;
+    ASSERT_TRUE(snapshot_client.connect(f.sock_path));
+    snapshot_client.send_line(R"({"id":8,"op":"point_snapshot","user":"web"})");
+    const std::string snapshot = snapshot_client.recv_line();
+    ASSERT_FALSE(snapshot.empty());
+    const auto json = nlohmann::json::parse(snapshot);
+    EXPECT_EQ(json.at("result"), "accepted");
+    EXPECT_EQ(json.at("snapshotId"), 1u) << "snapshot phải là bản của scan vừa chạy";
+    EXPECT_EQ(json.at("points").at(21).at("id"), "DO-02");
+
+    f.web.stop_service_thread();
+    EXPECT_FALSE(f.web.offloaded());
+}
+
+/* F19 — không còn một dòng log mỗi kết nối; một dòng tổng hợp mỗi cửa sổ, đếm
+ * cả kết nối bị từ chối vì đủ `max_clients` (trước đây đóng im lặng). */
+TEST(WebIpc, ConnectionsAreLoggedAsWindowedSummaryNotPerConnection)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    std::vector<std::unique_ptr<Client>> clients;
+    for (int i = 0; i < 4; ++i) {
+        clients.push_back(std::make_unique<Client>());
+        ASSERT_TRUE(clients.back()->connect(f.sock_path));
     }
+    usleep(20000);
+
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string quiet = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(f.web.client_count_for_test(), 4u);
+    /* Kết nối thứ 5 vượt `max_clients` = 4: bị đóng, và phải được ĐẾM. */
+    clients.push_back(std::make_unique<Client>());
+    ASSERT_TRUE(clients.back()->connect(f.sock_path));
+    usleep(20000);
+    EXPECT_EQ(quiet.find("client_connected"), std::string::npos) << quiet;
+    EXPECT_EQ(quiet.find("web_ipc.connections"), std::string::npos)
+        << "chưa hết cửa sổ thì không in: " << quiet;
+
+    f.web.set_connection_log_interval_for_test(0);
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string summary = testing::internal::GetCapturedStderr();
+    EXPECT_NE(summary.find("INFO  web_ipc.connections accepted=4 refused=1"), std::string::npos)
+        << summary;
+
+    testing::internal::CaptureStderr();
+    f.web.drain();
+    const std::string idle = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(idle.find("web_ipc.connections"), std::string::npos)
+        << "cửa sổ không có kết nối thì không in: " << idle;
 }
 
 TEST(WebIpc, ExtPointWriteCommandAccepted)
