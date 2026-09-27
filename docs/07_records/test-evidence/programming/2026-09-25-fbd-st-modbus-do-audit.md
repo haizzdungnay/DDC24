@@ -2,7 +2,7 @@
 
 **ID:** EV-PROG-FBD-ST-MB-20260925  
 **Ngày:** 2026-09-25  
-**Trạng thái:** Lượt 1, 2 và 3 đã đo trên target. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07, F08, F10, F11, F12, F13, F14, F15, F16 đã sửa, deploy và kiểm trên Foxlinx; F09 kết luận không phải lỗi. F02 đóng bằng ADR-061 (base step 10 ms, tập chu kỳ {10…50000} ms; lượt 3 đo C1–C3 PASS trên target). C4 đạt trong cửa sổ 600 s trên kernel non-RT nhờ CPU3 độc quyền (F11, F14, F15, F16); soak 24 h đang chạy tới 2026-09-27 06:47Z. PREEMPT_RT (BSP Forlinx) và `isolcpus=3 rcu_nocbs=3` (kernel hỗ trợ, cần sửa bootloader và reboot bo từ xa) là dự phòng nếu soak có vi phạm. Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng.  
+**Trạng thái:** Lượt 1, 2 và 3 đã đo trên target. Theo luật của chủ sở hữu ("tìm ra lỗi là sửa, commit, deploy ngay"): F01, F04, F05, F05c, F06, F07, F08, F10, F11, F12, F13, F14, F15, F16 đã sửa, deploy và kiểm trên Foxlinx; F09 kết luận không phải lỗi. F02 đóng bằng ADR-061 (base step 10 ms, tập chu kỳ {10…50000} ms; lượt 3 đo C1–C3 PASS trên target). C4 đạt trong cửa sổ 600 s trên kernel non-RT nhờ CPU3 độc quyền (F11, F14, F15, F16); soak 24 h đang chạy tới 2026-09-27 06:47Z. PREEMPT_RT (BSP Forlinx) và `isolcpus=3 rcu_nocbs=3` (kernel hỗ trợ, cần sửa bootloader và reboot bo từ xa) là dự phòng nếu soak có vi phạm. Chỉ các mục có số đo hoặc phản hồi thật mới được coi là bằng chứng. Soak 24 h lần 3 (revision thử 8 chu kỳ thay Active) có runbook ở mục "Soak lần 3"; F20 và F21 mở khi dựng công cụ.  
 **Workspace:** bắt đầu từ `main@e8a14ff0`; binary đang chạy trên bo build từ nhánh `fix/programming-modbus-command-seq-20260925` (chưa commit): core `222dbe9e…`, iobus `2439512b…`, web `5c5861e3…`, FE `index.html` `8e86b065…`.  
 **Đích:** `OK1126B-buildroot` (Forlinx OK1126B-S, Rockchip RV1126B 4×Cortex-A53 1,296 GHz, RAM 2 GB, Linux 6.1.141 `PREEMPT_VOLUNTARY`, HZ=250), `mekong-fac.ddns.net:2223`, web `:8082`.
 
@@ -205,6 +205,13 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 - Đường dự phòng bỏ mẫu trùng mốc.
 - Test C++ (10 050 mẫu, ghi đè 50) và Go (600 mẫu qua 3 lô, `-race`) |
 
+Finding mở ra khi dựng soak lần 3 (2026-09-27). Cả hai chưa sửa: F20 cần quyết định của chủ sở hữu, F21 là thay đổi hành vi an toàn của Core nên cần PR riêng có review Safety.
+
+| ID | Mức | Mô tả | Bằng chứng | Nguyên nhân gốc | Hướng sửa |
+|---|---|---|---|---|---|
+| F20 | **P2**, cần quyết định | Commission/Restore sang gói không còn Program nào lái một AO/DO cục bộ thì đầu ra đó **giữ giá trị cuối của gói cũ vô thời hạn**: không bị rút tại safe boundary, không hết `holdTtl` 60 s, và T7 `no_ctrl` không bật. Trái ADR-051 ("trần tuyệt đối") và `PROGRAMMING_CONTROL_SEMANTICS` §6 | Host, test tạm qua `ScanLoop` thật (`ScanRig` của `test_programming_activate_intent.cpp`, không commit): P_old lái DO-01, Commission gói chỉ có P_soak không output. Sau đó P_old rời scheduler, nhưng DO-01 vẫn = 1 ở mức 5 và `safe=0 no_ctrl=0`, kể cả sau 65 s. Target, lượt 4 02:41:54: kích hoạt revision thử có hai Program Disabled, không có dòng `safe_state.enter` nào | Chỉ `st_withdraw_instance_outputs` gọi `PriorityResolver::release_ao/release_do` ở mức 5, và nó chỉ chạy từ `st_withdraw_stale_outputs` trên Program của gói **đang chạy**. `swap_prepared_program_set_at_boundary` chuyển gói cũ sang slot rollback, còn coordinator chỉ xoá sổ candidate (`PACKAGE_REPLACED`), không rút mức 5 | Chờ chủ sở hữu quyết. Đây cùng câu hỏi với phần EXT "chưa thuộc phạm vi" của F06. Trong lúc chờ, soak lần 3 dùng `start --outputs safe`: tắt intent các Program của Active trước khi đổi gói |
+| F21 | P3, cần xác nhận | `ScanLoop::step` gọi `SafeState::apply(last_io_, table, &out)` mà không truyền `graph_is_active_producer`. Tham số này mặc định `true` kể cả ở `PROGRAM_ONLY`. Nếu có `graph.json` được nạp thì dưới Programming T7 không bao giờ bật, còn T6 vẫn xét input của một graph không chạy | Đọc mã và lịch sử git: `d594c023` truyền `active_mode != CutoverMode::PROGRAM_ONLY` (kèm `runtime_task_state`). Merge `0a98a907` (2026-08-28) làm mất cả hai. `safe_state.hpp` vẫn mô tả tham số. **Chưa đo.** Lúc đo F13 trên bo T7 có bật, nên khi đó graph không được nạp | Mất khi gộp nhánh | Khôi phục đối số, thêm test `ScanLoop` cho cả `GRAPH_ONLY` và `PROGRAM_ONLY` |
+
 ## Audit lượt 2 (2026-09-25 17:08 UTC trở đi) — sau khi sửa F01
 
 | Thời điểm (UTC) | Bước | Kết quả / bằng chứng | Trạng thái |
@@ -358,6 +365,116 @@ Thứ tự bắt buộc:
 
 Việc này đổi hợp đồng sản phẩm nên đi theo quy tắc "doc trước, code sau": ADR phải được duyệt trước khi code.
 
+## Soak lần 3 — revision thử 8 chu kỳ (ADR-061 C1–C4, `VS-PROG-009`)
+
+Chủ sở hữu chốt ngày 2026-09-27: soak 24 h lần 3 chạy một revision thử có đúng 8 Program, mỗi Program một chu kỳ trong tập ADR-061. Revision này **thay Active hiện tại trong 24 h**, rồi trả về. Lý do: Active đang chạy chỉ phủ một chu kỳ, còn `VS-PROG-009` đòi đủ 8 lớp chu kỳ.
+
+- Công cụ: `scripts/programming_soak_adr061.py` (Python 3, chỉ thư viện chuẩn).
+- Test: `tests/integration/test_programming_soak_adr061.py`.
+- Công cụ này không thay harness `scripts/target_soak_10program.py` (T59-702). Harness đó dựng cho tập chu kỳ cũ 1/5/30 s và kịch bản lỗi riêng.
+
+### Revision thử
+
+- **Project riêng `SOAK-ADR061`.** API cho phép tạo thêm Project. FE phân giải Project đang chạy theo `activeRevisionId`, không theo `items[0]`. Nhờ vậy Draft của Project đang dùng không bị đụng.
+- **8 Program ST** `SOAK_P00010` … `SOAK_P50000`, chu kỳ 10, 50, 100, 500, 1000, 5000, 10000 và 50000 ms.
+  - Thân mỗi Program chỉ có `cnt := cnt + 1;`, trong đó `cnt : DINT` là biến `VAR` cục bộ.
+  - Không có `VAR_OUTPUT`, binding hay Published Signal. `prepare` dừng nếu Draft của Project thử có nội dung khác, và không tự xoá gì.
+- **Trần profile:**
+  - 8 lớp chu kỳ bằng `maxTasks` 8.
+  - 8 Program nằm trong trần 16 bật đồng thời và 32 tổng.
+  - Ngân sách theo ADR-061 4.3, kịch bản mọi Program cùng release (t = 50 s): (2000 − 1) / 8 = **249 µs** mỗi Program, tổng 1992 µs < 2000 µs.
+
+### Hành vi đầu ra của bo trong 24 h
+
+Giả định ban đầu là: revision không có output thì Core vào T7 `no_ctrl`, và mọi đầu ra về safe. Đọc mã và thử trên host cho thấy điều này **chỉ đúng khi Program của Active cũ được tắt trước**:
+
+1. T7 (`SafeState::apply`) chỉ bật khi không nguồn nào ở mức 1–5 còn active trên AO/DO **cục bộ** và graph không được nạp. Revision thử không giữ mức 5 nào.
+2. Đổi gói **không rút** mức 5 mà Program của gói cũ đã giữ (F20). Đầu ra cục bộ vì vậy giữ giá trị cuối của Active cũ, không có TTL.
+3. EXT Modbus của Program bị bỏ khỏi gói cũng giữ giá trị cuối. Đây là phần "chưa thuộc phạm vi" của F06, xem `PROGRAMMING_CONTROL_SEMANTICS` §6.
+
+Vì vậy `start` mặc định chạy `--outputs safe`. Trước khi Commission, lệnh này tắt intent của mọi Program đang chạy thuộc Active và chờ chúng về `DISABLED`, rồi mới đổi gói. Đường Disable đã đo trên target: mức 5 cục bộ được rút ngay tại safe boundary (TASK-PROG-401), còn EXT về `safe_value` (F06 PASS).
+
+| Đầu ra | `--outputs safe` (mặc định) | `--outputs hold` |
+|---|---|---|
+| AO cục bộ | T7: 0 V, hoặc 4 mA ở mode 4–20 mA | Giữ giá trị cuối của Active cũ |
+| DO cục bộ | T7: mở | Giữ giá trị cuối |
+| AO/DO Modbus mà Program đã ghi | `safe_value` của điểm. Điểm không khai `safe_value` giữ giá trị cuối, kèm `WARN modbus_master.ext_release_hold` | Giữ giá trị cuối |
+| Override thủ công/BMS (mức 1–4) | Vẫn thắng. Khi còn override thì T7 không bật, các kênh khác về default mức 6 | Như cũ |
+
+Hàng T7 của cột `safe` còn phụ thuộc F21: nếu `graph.json` được nạp, AO/DO cục bộ về default mức 6 thay vì giá trị safe. Với bo lab, trạng thái của cột `safe` là chấp nhận được theo quyết định của chủ sở hữu.
+
+`start` chụp `GET /api/v1/points` (mọi AO, DO và điểm Modbus ghi được) ở ba lúc: trước khi đổi, sau khi tắt Program, và sau Commission. `report` in các điểm đổi giá trị, kèm `safeState`/`safeStateNoControllerOnly`. Nhờ vậy xác nhận được hành vi thật trên bo mà không cần SSH.
+
+### Cách chạy
+
+Chạy từ một máy có đường HTTP tới web-api của bo, sau khi bản cuối (sau X19) đã deploy. Chỉ bước lấy journal cần vào bo.
+
+```bash
+export MKDDC_WEB_URL=http://<bo>:8082 MKDDC_WEB_USER=<tài khoản engineer/admin>
+read -rs MKDDC_WEB_PASSWORD && export MKDDC_WEB_PASSWORD
+T="python3 scripts/programming_soak_adr061.py --state soak3-state.json --http-log soak3-http.jsonl"
+$T prepare            # in REVISION_ID; không đổi runtime
+$T start              # mặc định --outputs safe; in mốc startedAt
+$T report             # bất kỳ lúc nào; không ghi gì lên bo
+# sau ít nhất 24 h (lớp 50 000 ms cần trọn 86 400 s), trên bo:
+#   journalctl -u mkddc-core --utc -o short-iso-precise --since '<startedAt>' > core-journal-soak3.txt
+$T report --journal-file core-journal-soak3.txt --json-out soak3-report.json
+$T stop
+```
+
+- **`prepare`**: tạo hoặc dùng lại Project `SOAK-ADR061`, niêm phong và Check. Nếu Draft trùng một revision đã PASSED thì dùng lại revision đó, không niêm phong mới.
+- **`start`**, theo thứ tự:
+  1. Đọc trạng thái ngay trước khi đổi: Active, LKG, intent của Project sở hữu Active, bộ đếm Task và đầu ra. Ghi tất cả vào file state (ghi nguyên tử). Không ghim cứng ID nào (bài học lượt 3, 05:37).
+  2. Ở chế độ `safe`: tắt intent các Program của Active.
+  3. Ghi intent Enable cho 8 Program thử **trước** Commission, để ACTIVATE mang theo (ADR-062).
+  4. Commission với `expectedActiveRevisionId` bằng Active vừa đọc. Khi Active thuộc Project khác, impact đọc từ `none`: đường HTTP cố ý trả 400 cho cặp khác Project (`ISS-PGUI-01`), còn đường Commission hạ về "thay mới toàn bộ" với cùng `impactRef`.
+  5. Nếu Commission không SUCCEEDED: trả mọi intent đã sửa về như cũ.
+- **`report`**: lấy hiệu bộ đếm tích luỹ của Core so với mốc `start`.
+- **`stop`**:
+  1. Đọc Active ngay trước khi trả. Nếu Active **không còn** là revision thử (có người khác đã đổi): dừng với mã thoát 3, không Restore và không đổi intent nào. Khi đã rõ ai giữ Active mới, `stop --intents-only` chỉ bật lại các intent mà `start` đã tắt.
+  2. Nếu Active vẫn là revision thử: bật lại intent đã tắt. Intent nào có `generation` khác lần tắt (tức người khác đã ghi lại) thì bỏ qua.
+  3. Restore về Active đã lưu, với `expectedActiveRevisionId` bằng revision thử. Chờ Program gốc về `RUNNING`.
+  4. Trả intent 8 Program thử về như trước `start`.
+  5. Nếu Restore bị từ chối vì bố cục slot Modbus đã đổi: đọc cảnh báo, rồi mới chạy lại với `--ack-modbus-slot-mismatch`. Xác nhận này được ghi audit.
+- **Credential:** mật khẩu và token không vào file state, log HTTP hay output. Mỗi request mutation dùng một idempotency key UUIDv4 mới.
+- **Lần `start` bị đứt giữa chừng:** lần chạy sau đọc lại operation Commission trước khi quyết định gì.
+
+### Tiêu chí và cách đọc
+
+| Mã | PASS khi (trên cả cửa sổ từ `start`) | Nguồn |
+|---|---|---|
+| C1 | `baseStepUs` = 10 000; `taskPeriodsMs` đúng 8 giá trị; mỗi Program báo đúng chu kỳ đã khai | `GET /programming/runtime`, `/capabilities`, `/projects/{id}/programs` |
+| C2 | `overrunCount` +0 | Task `main` |
+| C3 | Không tăng: `missedReleaseCount` của Task, `missedReleaseCount` của từng Program, `missedBaseStepCount`. Cả 8 Program `RUNNING` | Như trên |
+| C4 | `jitterViolationCount` +0. Với journal: mọi phút `core.jitter max_us` ≤ 100, `violations` không tăng so với mốc `start`, 0 dòng `core.base_step_missed` | Runtime và journal |
+| `VS-PROG-009` | Mỗi chu kỳ đạt ngưỡng và missed release +0 | Số base step Core đã chạy |
+
+Ngưỡng `VS-PROG-009`:
+
+- 10…5000 ms: 10 000 chu kỳ. Lớp 10 ms cần 100 s, lớp 5000 ms cần 13 h 53 ph.
+- 10 000 ms: 8 640 chu kỳ.
+- 50 000 ms: 1 728 chu kỳ, tức trọn 24 h.
+
+API không công bố bộ đếm lần chạy riêng của từng Program. Số chu kỳ vì vậy tính bằng: `runCount` của Task (một lần mỗi base step) × 10 ms ÷ chu kỳ Program. Con số này chỉ có nghĩa khi missed release của chính Program đó bằng 0, nên `report` luôn xét hai điều kiện cùng nhau.
+
+Kết luận của `report`:
+
+- **`HỎNG`**: bộ đếm Core giảm (Core đã khởi động lại), hoặc Active bị đổi giữa chừng. Soak phải chạy lại từ `start`.
+- **`ĐANG CHẠY`**: chưa có vi phạm nhưng chưa đủ điều kiện `ĐẠT`.
+- **`ĐẠT`**: cửa sổ ≥ 86 400 s, C1–C4 PASS và cả 8 chu kỳ đạt ngưỡng.
+
+### Đã kiểm trên host, chưa chạy trên bo
+
+Stack host thật, không chạm bo: `mkddc-programming-core-sim`, `mkddc-web` và compiler/packager production, build từ `main@8353fdc1`.
+
+- `prepare`: tạo Project, niêm phong, Check PASSED trong 0,51 s. Chạy lại thì dùng lại đúng revision đó.
+- `start` (cả `safe` lẫn `hold`), rồi `report`, rồi `stop`: trả đúng Active gốc, Program gốc về `RUNNING`, 8 intent thử về `false`.
+- `stop` khi một actor khác đã đổi Active: mã thoát 3, không Restore.
+- `stop --intents-only` gỡ được một lần `start` dở dang.
+- File state và log HTTP không chứa mật khẩu hay token.
+
+Simulator chạy Task 1000 ms và không công bố `baseStepUs`, nên trên host C1/C3 báo FAIL. Đó là đúng thiết kế của phép kiểm, và **không** phải bằng chứng target.
+
 ## Giải pháp tối ưu để spec sản phẩm ghi "cycle 10 ms"
 
 Nguyên tắc: làm như Siemens, **tách chu kỳ CPU khỏi thời gian cập nhật I/O truyền thông**. S7-1200 chạy cyclic interrupt 1–60 000 ms, còn PROFINET và các module Modbus có thời gian cập nhật riêng. Core không bao giờ chờ bus: đầu chu kỳ đọc process image, cuối chu kỳ ghi process image. iobus trao đổi với thiết bị mở rộng theo nhịp của bus và luôn phát giá trị mới nhất.
@@ -413,6 +530,7 @@ Bản nháp câu chữ cho spec sản phẩm, chỉ dùng sau khi G1–G5 đạt
 - `fixtures/audit-fb-toggle.st`, `fixtures/audit-st-do.st`, `fixtures/audit-fbd-do.fbd.json` — mã nguồn thử nghiệm đã Commission.
 - Trace ftrace CPU3 của F17 (6 tệp, 1,5 MB) nằm trên bo tại `/data/mkddc/f17-trap/`; bẫy và script phân tích ở `/root/f17/` (`arm.sh`, `watch.sh`, `disarm.sh`). Bẫy đã tắt, ftrace đã trả về mặc định.
 - `fixtures/foxlinx-active-do-blink-fbd.json`, `fixtures/foxlinx-active-fb-do-blink.st`, `fixtures/modbus-do-probe-st.st` — FBD/FB của Active #52 và mẫu ST host.
+- `scripts/programming_soak_adr061.py`, `tests/integration/test_programming_soak_adr061.py` — công cụ và test của soak lần 3 (mục "Soak lần 3"). File state và log HTTP của lượt chạy trên bo lưu cùng hồ sơ khi có.
 
 ## Tài liệu liên quan
 

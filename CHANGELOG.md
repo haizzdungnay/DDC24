@@ -8,6 +8,25 @@
 
 ## [Unreleased]
 
+### Added — Công cụ soak 24 h lần 3 cho ADR-061/`VS-PROG-009`: revision thử 8 chu kỳ thay Active rồi trả về (2026-09-27)
+
+- Phạm vi: `scripts/programming_soak_adr061.py` (mới), `tests/integration/test_programming_soak_adr061.py` (mới), mục "Soak lần 3" và hai finding F20/F21 trong hồ sơ `EV-PROG-FBD-ST-MB-20260925`. Không đổi mã sản phẩm, không chạm bo.
+- **Vì sao:** chủ sở hữu chốt 2026-09-27 rằng soak lần 3 chạy một revision thử 8 Program, mỗi Program một chu kỳ trong {10…50000} ms, thay Active trong 24 h. Active đang chạy chỉ phủ một chu kỳ, nên không đo được `VS-PROG-009` cho đủ 8 lớp.
+- **Revision thử:** Project riêng `SOAK-ADR061` với 8 Program ST `SOAK_P00010`…`SOAK_P50000`. Mỗi Program chỉ có `cnt := cnt + 1;`, không `VAR_OUTPUT`, không binding. Ngân sách theo ADR-061 4.3: 249 µs mỗi Program, tổng 1992 µs < 2000 µs. Nằm trong trần `maxTasks` 8 và 16 Program bật đồng thời.
+- **Bốn lệnh con:**
+  - `prepare`: tạo/cập nhật Project, niêm phong, Check, in revisionId đã PASSED.
+  - `start`: chụp Active, intent, bộ đếm và đầu ra ngay trước khi đổi; ghi intent 8 Program trước Commission (ADR-062); Commission với `expectedActiveRevisionId`.
+  - `report`: in PASS/FAIL cho C1–C4 và `VS-PROG-009` từng chu kỳ; `--journal-file` đọc bản xuất `journalctl -u mkddc-core`.
+  - `stop`: chỉ Restore khi Active vẫn là revision thử; người khác đã đổi thì dừng với mã 3, không ghi đè.
+- Credential chỉ lấy từ tham số hoặc `MKDDC_WEB_URL`/`MKDDC_WEB_USER`/`MKDDC_WEB_PASSWORD`, không bao giờ ghi ra state, log hay output. Mỗi mutation dùng một UUIDv4 idempotency key mới.
+- **Phát hiện khi dựng (F20, P2, mở, cần quyết định):** Commission/Restore sang gói không còn Program lái một AO/DO cục bộ thì đầu ra đó giữ giá trị cuối vô thời hạn. Mức 5 của gói cũ không được rút và không hết TTL, nên T7 không bật. Test tạm qua `ScanLoop` thật trên host cho DO-01 = 1 ở mức 5 sau 65 s; target lượt 4 cũng không có `safe_state.enter`. Vì vậy `start` mặc định dùng `--outputs safe`: tắt intent các Program của Active trước khi đổi gói, để AO/DO cục bộ về T7 và EXT về `safe_value` (F06).
+- **F21 (P3, mở):** `ScanLoop` không truyền `graph_is_active_producer` cho `SafeState::apply`. Dòng này mất ở merge `0a98a907`. Hệ quả: khi có `graph.json` được nạp thì T7 không bật dưới Programming. Chưa đo trên bo.
+- **Kiểm chứng:**
+  - `python3 -m pytest tests/integration/test_programming_soak_adr061.py`: 40 passed.
+  - Stack host thật (core sim, web, compiler/packager production, build từ `main@8353fdc1`): `prepare` Check PASSED 0,51 s; `start` → `report` → `stop` trả đúng Active gốc; `stop` từ chối khi Active bị đổi (mã 3).
+  - `scripts/verify-project.sh --component layout` exit 0; `python3 scripts/docs_iso_harness.py --expect` PASS.
+  - Chưa chạy trên bo; phiên chính chạy sau khi deploy bản cuối.
+
 ### Changed — Deploy `main@6471a34d` lên Foxlinx; F13 và F18 PASS trên target; soak lần 2 chốt 953 phút (2026-09-27)
 
 - Phạm vi: vận hành bo lab Foxlinx; hồ sơ `EV-PROG-FBD-ST-MB-20260925` lượt 4. Không đổi mã.
