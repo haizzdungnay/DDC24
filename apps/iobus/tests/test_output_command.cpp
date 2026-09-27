@@ -31,7 +31,18 @@ struct FakeSink : public CommandSink {
 
     IopResult send_set_do(uint8_t mask, uint8_t value) override
     {
+        /* GCC 13.3 -O3 vẫn báo `-Wstringop-overflow` ("writing 1 byte into a
+         * region of size 0") trong `_M_realloc_insert` dù đã `reserve()` ở ctor:
+         * nhánh realloc vẫn được sinh mã. Báo nhầm, chỉ ở test; tắt cục bộ để
+         * cổng build giữ 0 warning thay vì quen với cảnh báo giả. */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
         do_calls.push_back({mask, value});
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
         return next_result;
     }
     IopResult send_set_ao(const uint16_t raw[4]) override
