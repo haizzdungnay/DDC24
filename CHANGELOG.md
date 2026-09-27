@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Added — Release record DDC-24 cho bản ứng viên `main@f86150e3` (2026-09-27)
+
+- **Phạm vi:** `docs/07_records/DDC24_RELEASE_RECORD_2026-09-27.md` (mới, Draft chờ Release Owner ký), dòng register trong `docs/00_governance/CONTROL.md`, manifest authority 1.65→1.66 (re-pin `#1`).
+- **Nội dung:**
+  - Thay cho `PROG-RELEASE-RECORD-2026-08-23`. Phạm vi là 408 entry CHANGELOG từ 2026-08-24, gom theo mạch công việc.
+  - Bản ứng viên trên bo tham chiếu: sha từng binary, khoá hãng `2fb77aa42e7fe446` `RELEASE`.
+  - Cổng W7 trên `910bea95`: **9 PASS / 1 FAIL (e2e-real) / 4 NOT_RUN**. Các cổng bị ảnh hưởng chạy lại trên RC cuối `f86150e3` giữ nguyên kết quả.
+  - Lịch sử từ ứng viên đầu `4b833b38` (6/4/4) và các bản sửa: PR #787, #788, #791.
+  - Ba lỗi đã biết: Issue #786, #789, #790. Bốn ca chập chờn khi tải cao, đạt khi chạy riêng.
+  - Trạng thái bảy điều kiện mở `GO`, rủi ro còn lại (bo tham chiếu chưa nạp lại image; kernel non-RT; không có I/O vật lý), hai điều kiện mới.
+  - Số phiên bản để Release Owner đặt khi ký.
+- **Verdict đề xuất:** `NO-GO` cho phát hành hiện trường. Các Must I/O vật lý, soak 24 h, cắt nguồn không được waive và chưa có bằng chứng. Bản ứng viên đạt cho dùng nội bộ trên bo lab.
+- **Bo tham chiếu:**
+  - Nâng cấp lên `main@f86150e3` lúc 09:04Z, secret JWT và khoá thiết bị giữ nguyên.
+  - Bản sửa lưới Virtual Point đo bằng Chrome thật trên bo ở khung 1280 px: Tag/Label mỗi ô 214 px (trước 0 px).
+  - Bản sửa ETag: tạo rồi xoá ba VP liên tiếp bằng ETag của phản hồi ghi trước, đều `200`. VP tạm đã xoá; snapshot trung gian đã dọn (còn `previous`).
+- **Kiểm chứng tài liệu:** `candidate_pin_check.py` 17/17 PASS; `docs_iso_harness.py --expect` PASS; `verify-project.sh --component layout` exit 0.
+
 ### Fixed — Phản hồi ghi Virtual Point mang ETag mới; lần ghi thứ hai trong cùng phiên không còn 412 (ISS-PIO-37, 2026-09-27)
 
 - **Phạm vi:** `apps/web-api/internal/app/virtualpoint.go` (tạo, sửa, xoá), `apps/web-api/internal/app/configapi.go` (ghi cả cấu hình VP), test mới `virtualpoint_write_etag_test.go`.
