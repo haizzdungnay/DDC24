@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Fixed — iobus tự ghi pidfile; test HMI chặn cross-build; runbook cross-build thiếu khoá phát hành (2026-09-27)
+
+Cả ba lộ ra khi dựng gói cài sạch cho bo lab Foxlinx.
+
+- **iobus không ghi `/run/mkddc/iobus.pid`.**
+  - Phạm vi: `apps/iobus/adapters/platform/pid_file.hpp` (mới), `apps/iobus/bootstrap/main.cpp`, `apps/iobus/tests/test_pid_file.cpp` (mới), `apps/iobus/CMakeLists.txt`.
+  - Triệu chứng: web đọc file này cho health (check `iobus`) và SIGHUP reload iobus. Nhưng trong gói phát hành, cả binary lẫn unit đều không ghi nó. Bo lab chạy được chỉ nhờ drop-in vá tay `pidfile.conf` (`ExecStartPost=… echo $MAINPID`, 2026-08-04). Một bo cài mới bằng `install.sh` sẽ báo health iobus hỏng và không nạp lại cấu hình iobus được.
+  - Cách sửa: iobus tự ghi pidfile ngay khi khởi động (`IOBUS_PID`, mặc định `/run/mkddc/iobus.pid`): ghi file tạm rồi rename; guard RAII xoá file ở mọi đường thoát, chỉ khi file vẫn là của chính tiến trình. Cùng cách Core đã làm ở F16.
+  - Test: 5 test `PidFileTest.*`.
+- **Cross-build `all` với HMI ON bị gãy.** `hmi_tests` gọi `gtest_discover_tests`, tức chạy binary aarch64 ngay trên máy x86_64. Đã thêm nhánh `CMAKE_CROSSCOMPILING` như iobus (`apps/hmi/CMakeLists.txt`).
+- **Runbook `DEPLOY_FOXLINX.md` cross-build Core thiếu `-DMKDDC_ST_PUBLIC_KEY_HEX`.**
+  - Triệu chứng: Core deploy tay lên Foxlinx sáng 2026-09-27 báo `st_public_key mode=TEST`, trong khi bản cài chính thức 2026-09-10 là `RELEASE` (`2fb77aa42e7fe446`).
+  - Cách sửa: lệnh cross-build nay đọc `release.pub`, và thêm bước kiểm `qemu-aarch64 … --st-key-info` phải ra `mode=RELEASE`.
+- **Kiểm chứng:**
+  - `cmake --fresh` (MODBUS/BACNET/HMI ON): configure và build exit 0, 0 warning; `ctest` **1628/1628** (thêm 5 test pidfile).
+  - Cross-build aarch64 target `all` với HMI ON: exit 0, 0 warning; Core nhúng khoá `RELEASE` `2fb77aa42e7fe446`.
+
 ### Deploy — web `main@d7022923` lên Foxlinx, F23 PASS trên target (2026-09-27)
 
 - Phạm vi: bo lab Foxlinx, chỉ thay `/opt/mkddc-web/mkddc-web`; Core `01fd8708`, iobus `e4953080` và FE `6471a34d` giữ nguyên. Hồ sơ `EV-PROG-FBD-ST-MB-20260925` (nhật ký lượt 4, hàng F23).
