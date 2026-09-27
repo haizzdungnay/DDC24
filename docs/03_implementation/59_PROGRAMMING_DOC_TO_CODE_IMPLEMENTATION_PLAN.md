@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.26 |
-| Trạng thái | **Baseline Active; 74 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); increment R2 ĐÓNG (`VS-PROG-U14` PASS R2/HOST+TARGET-BROWSER) — `T59-810..813` DONE; R3 đang chạy — `T59-814`/`T59-815` DONE (HOST/LOCAL), `T59-816`/`T59-817` DONE 2026-08-28 (`T59-817` ở lớp HOST + TARGET) và **increment R3 ĐÓNG** với record `EV-PGM02-R3-CLOSEOUT-001`; `VS-PROG-U15` **PASS MỘT PHẦN** — mọi tiêu chí đạt trừ phép đo AO/DO/relay bằng thiết bị, vốn cần người và đồng hồ đo; **corrective audit 2026-08-27 `T59-818..822` DONE (HOST/LOCAL) và đã deploy bo Foxlinx**, `PGM02-V22-WP-09` DONE trọn và 16/16 WP của plan PGM-02 đóng; **74/74 task của plan nay DONE hoặc WAIVED/DEFERRED tường minh**; RELEASE_READY NO-GO** |
-| Ngày | 2026-08-27 |
+| Phiên bản | 2.29 — rà soát gate RC 2026-09-27 |
+| Trạng thái | **Baseline Active; 74 task/9 Wave. R1/R2/R3 đã đóng ở phạm vi implementation theo record riêng; `VS-PROG-U15` PASS MỘT PHẦN vì chưa đo physical AO/DO/relay. Corrective `T59-818..822` DONE tại mốc cũ. Các task W7 được DONE hoặc WAIVED/DEFERRED cho implementation, chưa đủ release. Rà soát RC mới tại §6.0; `RELEASE_READY=NO-GO`.** |
+| Ngày | 2026-09-27 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001`; corrective [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) |
 | Detailed Design | Baseline: [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md); PGM-02 exact-pinned để implement: [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) |
@@ -3299,6 +3299,28 @@ contract exact-pinned nên dùng `READY`/`ORDERED`; task scheduler không đư�
 
 ## 6. Gate release và NO-GO tự động
 
+### 6.0 Rà soát RC ngày 2026-09-27 (ưu tiên so với snapshot lịch sử bên dưới)
+
+Implementation R1/R2/R3 đã đóng theo §3 nhưng **không phải release close**. ADR-061
+đã đổi profile sang tám chu kỳ 10…50.000 ms, base step 10 ms. Soak 24 giờ đầu
+FAIL C4 (2 lần vượt, đỉnh 129,63 µs; F17 đã sửa); soak lần 2 0 vi phạm trong
+15 h 53 ph rồi dừng sớm để deploy; soak lần 3 đạt ngưỡng `VS-PROG-009` của
+`VVP-PROG-001` v2.4 (chủ sở hữu chốt 2026-09-27) trong 10 ph 08 s. **Chưa có soak
+độ bền 24 giờ trên image sạch** — điều kiện claim chu kỳ ở Product §8.1. Bo này còn
+có incident root SSH `SEC-INC-20260926-FOXLINX`, chưa cài lại image sạch. Mọi
+đo trên đó chỉ dùng điều tra/khắc phục, chưa làm bằng chứng RC tin cậy.
+
+Hai lỗi source từng **chặn release** nay đã sửa trong mã (mã finding theo
+`EV-PROG-FBD-ST-MB-20260925`): đổi package không rút resolver AO/DO/EXT của Program cũ
+(F20, PR #779, PASS target 2026-09-27; phần EXT do graph dự phòng ghi đè là F22,
+PR #778) và `ScanLoop` gọi `SafeState::apply` không truyền owner thực khi graph
+load làm backup (F21, PR #778). Phần còn chặn release là đo target/HIL/physical
+và policy khi `safe_value` thiếu. Đường sửa, test/owner và thứ tự nằm tại
+[Release Handover §8](15_RELEASE_HANDOVER_CHECKLIST.md).
+Không gán `DONE` cho `T59-701..707` từ báo cáo này; task mới cần được Manager
+đăng ký theo `WF-CLEAN-001`, trace vào đúng Issue/PR/Test rồi cập nhật §3. Các
+snapshot 2026-08 bên dưới giữ để truy nguyên, không phải current verdict.
+
 `RELEASE_READY = GO` chỉ khi:
 
 - W0..W6 DONE trên RC commit;
@@ -3346,6 +3368,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.29 | 2026-09-27 | Bổ sung §6.0: chốt sai biệt ADR-061, soak ngắn/bo từng bị xâm nhập và output khi thay package/SafeState (F20/F21/F22); liên kết kế hoạch đóng release; giữ trạng thái task lịch sử và `RELEASE_READY=NO-GO`. |
 | 2.28 | 2026-08-28 | **Đóng increment R3** với record `EV-PGM02-R3-CLOSEOUT-001`: `T59-817` `DONE (HOST + TARGET)`. Worker mô phỏng cross-build aarch64 chạy trên chính bo Foxlinx (`--sandbox-probe` 9/9 `EACCES`); phiên thật trên Revision đang điều khiển tủ không đổi Active/LKG và không đổi 8/8 ngõ ra; worker được thu hồi sạch và quota nhả; RBAC trên thiết bị 12/12 (4 mutation × viewer/operator/engineer) đều 403. Tất định: replay **100/100 hash bằng nhau** và ba tốc độ 1×/10×/60× cho cùng chuỗi lệnh. `VS-PROG-U15` = **PASS MỘT PHẦN**: vế *"physical AO/DO/relay không đổi"* ở đây đọc từ bảng điểm của Core chứ không phải từ đồng hồ đo trên đầu cực — phần ấy chặn phần cứng, cùng nhóm `T59-706`. `RELEASE_READY` giữ `NO-GO`. |
 | 2.27 | 2026-08-28 | Đóng `T59-816` `DONE (HOST/LOCAL)`: workbench dùng chung nay đọc đúng tài liệu của chế độ (trước đó luôn đọc buffer Draft kể cả ở LIVE/SIMULATE — tab Tìm kiếm trả lời về một tài liệu khác tài liệu đang chiếu), khay Watch SIMULATE đổi nhãn và đọc khung của phiên, vòng đời tài nguyên kiểm bằng tiến trình thật (STOP/TTL/crash/cross-project). Tìm ra và đóng **mâu thuẫn uỷ quyền hai tầng** do lát `WEB-RBAC-001` để lại: bảng route khai `program.edit` (engineer có) trong khi cổng application so chuỗi `"admin"`; nay ba nơi hỏi cùng `simulation.run` và ranh giới admin-only của `ADR-053` không đổi. Thêm cổng chặn được cho `x-rbac` ↔ bảng route Go, kiểm bằng đột biến. `T59-817` chuyển `READY`. |
 | 2.26 | 2026-08-27 | Đóng `T59-815` `DONE (HOST/LOCAL)`: bề mặt SIMULATE (điều khiển, ngõ vào ảo, lớp quan sát, save-required, RBAC đọc từ capability) và sửa hai lỗi của lát trước — `F-P59-RUN-NOOP-001` (RUN không chạy tick nào) và `F-P59-SIM-TRUSTED-KEY-001` (worker không tin khoá thiết bị nên mọi phiên hỏng trên bo thật). E2E backend+worker thật chứng minh RUN/PAUSE/STEP/RESET. `T59-816` chuyển `READY`; `VS-PROG-U15` vẫn `NOT_RUN`. |
