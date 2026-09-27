@@ -245,6 +245,23 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
             "unit mkddc-core không được có ExecStartPost (chạy FIFO 80 trên CPU vòng quét)",
         )
 
+    def test_kiem_binary_cu_phu_ca_hai_helper_dung_chung_binary_web(self) -> None:
+        """U-21 (REC-DDC-FIELD-USE-20260927): hai helper chạy CHUNG binary web.
+
+        `mkddc-reload-helper` và `mkddc-time-helper` là `/opt/mkddc-web/mkddc-web`
+        với tham số khác. Vòng kiểm `(deleted)` cuối install.sh từng chỉ duyệt
+        iobus/core/netcfg/web, nên helper chạy bản cũ lọt qua mà không báo gì —
+        đúng chuyện đã gặp trên Foxlinx 2026-09-27.
+        """
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        loops = [l for l in install if l.strip().startswith("for unit in") and "mkddc-web-pi" in l]
+        self.assertTrue(loops, "install.sh phải có vòng kiểm binary cũ cho các unit")
+        checked = [l for l in loops if "mkddc-reload-helper" in l and "mkddc-time-helper" in l]
+        self.assertTrue(
+            checked,
+            "vòng kiểm `(deleted)` của install.sh phải gồm mkddc-reload-helper và mkddc-time-helper",
+        )
+
     def test_programming_bat_mac_dinh_o_ca_hai_phia(self) -> None:
         """FE bật lúc build, BE bật bằng env — thiếu một nửa là 404 im lặng.
 
