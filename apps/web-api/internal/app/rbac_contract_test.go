@@ -151,7 +151,7 @@ func TestOpenAPIRBACMatchesServerRouteTable(t *testing.T) {
 /*
 Route xác thực TRONG handler thay vì ở router.
 
-Chỉ có một, và nó có lý do kỹ thuật cứng: WebSocket của trình duyệt không gửi
+Chỉ có hai kênh WebSocket, và cùng một lý do kỹ thuật cứng: WebSocket của trình duyệt không gửi
 được header `Authorization`, nên token đi qua `Sec-WebSocket-Protocol` và chỉ
 đọc được sau khi request đã tới handler. Danh sách này cố ý ngắn và phải có lý
 do viết ra — thêm một mục vào đây là bỏ một route ra khỏi cổng uỷ quyền tập
@@ -159,6 +159,10 @@ trung.
 */
 var authenticatedOnlyExceptions = map[string]string{
 	"GET /api/v1/ws/monitor": "WebSocket: token đi qua Sec-WebSocket-Protocol, uỷ quyền nằm trong requireWSAuth",
+	// Kênh chỉ đọc khung quan sát mô phỏng (viewer+, cùng quyền với REST
+	// `…/simulation/sessions/{sessionId}/observations`); điều khiển phiên vẫn
+	// đi qua REST admin-only (ADR-053).
+	"GET /api/v1/ws/simulation": "WebSocket: token đi qua Sec-WebSocket-Protocol, uỷ quyền nằm trong requireWSAuth",
 }
 
 /*
