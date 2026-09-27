@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "9492032800b45bac7b8a047dffa44105595fc9acab211721072702353567697f",
+      "sha256": "c4f18a12dad88b683a065a3dd16fb6f24c9be4b4cd7b1e0709e89b297c68357d",
       "major": 1,
-      "version": "1.43.0",
+      "version": "1.44.0",
       "operationCount": 45
     },
     {
@@ -186,5 +186,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms); error catalog 1.12.0->1.13.0 (+ST-WORKER-TOOLCHAIN: ST tool build does not match web profile) re-pinned 2026-09-26; openapi 1.42.0->1.43.0 (+/ws/simulation, route đã chạy từ PR #759 nhưng chưa khai) re-pinned 2026-09-27"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms); error catalog 1.12.0->1.13.0 (+ST-WORKER-TOOLCHAIN: ST tool build does not match web profile) re-pinned 2026-09-26; openapi 1.42.0->1.43.0 (+/ws/simulation, route đã chạy từ PR #759 nhưng chưa khai) re-pinned 2026-09-27; openapi 1.43.0->1.44.0 (+ProgrammingTrace.source, freshness LIVE cho mẫu Core; U-02/U-03) re-pinned 2026-09-27"
 }

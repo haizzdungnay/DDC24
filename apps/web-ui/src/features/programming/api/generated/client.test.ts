@@ -171,7 +171,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // Trace `effectiveSamplePeriodMs`, freshness 10…150000 ms. Client sinh lại
     // CÙNG change-set với contract.
     // `1.43.0` — khai kênh WebSocket chỉ đọc `/ws/simulation` (không thêm operation Programming).
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.43.0");
+    // `1.44.0` — `ProgrammingTrace.source` (CORE | MONITOR_POLL) và freshness LIVE
+    // cho mẫu Core (U-02/U-03); không thêm operation.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.44.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

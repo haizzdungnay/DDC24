@@ -288,6 +288,37 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.samplePeriodMs).toBe(10)
   })
 
+  /* U-02 (REC-DDC-FIELD-USE-20260927) — Core chỉ phục vụ một phiên Trace. Phiên
+   * rơi về poll monitor phải tự nói là dữ liệu xấp xỉ; phiên Core nói là từng chu
+   * kỳ. Thiếu dòng này, trên bo người dùng đã chấm một phiên 1 mẫu/0,5 s như dữ
+   * liệu 100 ms. */
+  it.each([
+    ['MONITOR_POLL' as const, 'Dữ liệu xấp xỉ'],
+    ['CORE' as const, 'nguồn Core, từng chu kỳ'],
+  ])('trace nguồn %s nói rõ nguồn mẫu', async (source, text) => {
+    state.monitor = ready(monitorPage([sample()]))
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999995', state: 'RUNNING',
+      variableIds: ['11111111-1111-4111-8111-111111111111'], durationMs: 60_000,
+      samplePeriodMs: 100, effectiveSamplePeriodMs: 100,
+      startedAt: '2026-09-27T01:02:03Z', updatedAt: '2026-09-27T01:02:04Z',
+      stopReason: null, source, droppedSamples: 0, samples: []
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0005' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    renderWatch()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+
+    expect(await screen.findByTestId('trace-source')).toHaveTextContent(text)
+  })
+
   /* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau: mất nguồn,
    * và nguồn ĐỔI THÀNH chương trình khác. Với phiên có pin, người đọc phải biết
    * vế thứ hai — nếu không họ sẽ đi tìm một sự cố kết nối không hề tồn tại. */
