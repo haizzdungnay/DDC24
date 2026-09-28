@@ -141,7 +141,7 @@ const PAGE_ROUTES: Record<string, RouteFact> = {
   '/eng/scheduler': { kind: 'nav', reached: 'Nhóm Vận hành' },
   '/eng/scheduler/runtime': { kind: 'nested', reached: 'Tab của `SchedulerLayout`' },
   '/eng/scheduler/:id': { kind: 'nested', reached: 'Bấm một lịch trong lưới Scheduler' },
-  '/eng/commissioning': { kind: 'nav', reached: 'Nhóm Vận hành' },
+  '/eng/commissioning': { kind: 'entry-elsewhere', reached: 'Trang Commissioning / chạy thử ngõ ra (ẩn khỏi thanh bên)' },
 
   '/eng/inputs': { kind: 'nav', reached: 'Nhóm Kỹ thuật' },
   '/eng/outputs': { kind: 'nav', reached: 'Nhóm Kỹ thuật' },
@@ -196,7 +196,7 @@ const PAGE_ROUTES: Record<string, RouteFact> = {
  */
 const ADR_032_GROUPS: Array<{ id: string; items: string[] }> = [
   { id: 'overview', items: ['/', '/monitor', '/alarms', '/trends', '/activity'] },
-  { id: 'operation', items: ['/eng/scheduler', '/eng/commissioning'] },
+  { id: 'operation', items: ['/eng/scheduler'] },
   {
     id: 'engineering',
     items: [

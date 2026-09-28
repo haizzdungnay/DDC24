@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, ScrollText, SlidersHorizontal, Stethoscope, TestTube2, Users, X, Zap } from 'lucide-react'
+import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, ScrollText, SlidersHorizontal, Stethoscope, Users, X, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
@@ -47,7 +47,6 @@ export const NAV_GROUPS = [
     titleKey: 'operation',
     items: [
       { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
-      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 }
     ]
   },
   {
