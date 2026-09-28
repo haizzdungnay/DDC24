@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Deploy — Bo lab Foxlinx lên `main@e3072983` (toàn bộ finding đã merge của báo cáo sử dụng thực tế) (2026-09-28)
+
+- Phạm vi: bo lab `OK1126B-buildroot`. Web `mkddc-web` (`7c58fab0…`, version `main-pr804-74d92415`; cây của head #804 trùng từng byte với `main@e3072983`), `dist` FE (`npm run build:release`, `VITE_PROGRAMS_WORKSPACE_V2=1`), `mkddc-iobus` (`dc8cad5b…`), `mkddc-st-compile` (`d3aec043…`), `mkddc-st-package`. Tool cross-build với khoá phát hành: `--st-key-info` báo `RELEASE`, fingerprint `2fb77aa42e7fe446`; GLIBCXX ≤ 3.4.29. Core giữ `9621cb52…`, vì runtime/domain/bootstrap/adapters không đổi kể từ RC `f86150e3`; profile (`1cb61fec…`) và SHM magic không đổi. Không đụng Programming (Active của người dùng `0c29f4f1…` giữ nguyên, Draft sạch).
+- Trước deploy, bo chạy bản dev của PR #804 gộp tạm #795 (`dev-u07-u18-with-pr795`) cùng tool ST bản RC. Nay bo chạy đúng bản đã merge: đóng phần "bo lệch bản phát hành" của U-21, U-01 và U-11 có hiệu lực trên bo.
+- Kiểm chứng trên bo:
+  - Cả ba unit `mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper` có `/proc/<MainPID>/exe` = `/opt/mkddc-web/mkddc-web`, sha `7c58fab0…`; `mkddc-iobus` sha `dc8cad5b…`.
+  - Health `ok` mọi check; login `admin`; Programming `targetState=READY`; log `INFO programming.toolchain ok … profile_sha256=1cb61fec…`; runtime `RUNNING`; 48/48 điểm `GOOD`.
+  - `CK508-04/05` giữ `coil_write_batch_max=8`; profile có `max_coils_per_write: 8`. Frame Monitor ở pha BLINK: mỗi giây 2 khung FC15 × 8 (mỗi module một khung, cách nhau 30 ms), `values` đảo lẻ/chẵn, 0 khung lỗi.
+  - `mkddc-st-compile --check-only` trên bo nhận `CASE m OF 0..15: …; 16..32767: …`.
+- Sao lưu: `/data/mkddc/deploy-backups/20260928T032937Z-main-e3072983/` (web, `dist`, iobus, hai tool ST, kèm `SHA256SUMS`). Rollback: chép lại các file đó, rồi khởi động lại `mkddc-iobus` và bộ ba unit web.
+- Cập nhật `REC-DDC-FIELD-USE-20260927` 1.4 và `GUIDE-PROG-ST-DO16-001` 1.5 theo trạng thái bo mới.
+
 ### Changed — Đồng bộ tài liệu sau khi #795, #796, #797, #803 merge (PR #804, 2026-09-28)
 
 - `DDD-LANG-PROG-001` 1.2 → 1.3 (`docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` §4.3): "tập nhãn bị chặn trên bởi `kMaxStatements`" đúng với parser cũ nhưng sai với U-11 đã merge ở #803; nay ghi rõ trần đếm **số nhãn**, mỗi nhãn (một giá trị hoặc một dải) nở thành tối đa hai phép so biên, dải rộng như `16..32767:` hợp lệ. Luật WCET ADR-054 giữ nguyên.
