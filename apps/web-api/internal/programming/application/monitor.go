@@ -70,6 +70,9 @@ type ProgramMetricsView struct {
 	LastFaultCode *string
 	LastFaultLine *uint32
 	FaultCount    *uint32
+	// WaitingReason — Issue #827: lý do WAITING do Core cấp. `nil` = Core đời cũ
+	// không gửi; chuỗi rỗng = Program không chờ gì.
+	WaitingReason *string
 }
 
 type MonitorPointTruth struct {

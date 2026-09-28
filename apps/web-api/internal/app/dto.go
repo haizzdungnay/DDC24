@@ -395,6 +395,10 @@ type RuntimeProgramSnapshot struct {
 	LastFaultCode *string `json:"lastFaultCode"`
 	LastFaultLine *uint32 `json:"lastFaultLine"`
 	FaultCount    *uint32 `json:"faultCount"`
+	// WaitingReason — Issue #827: LÝ DO Program đang WAITING (`StWaitingReason`
+	// của Core). Chuỗi rỗng = không chờ gì; khoá VẮNG = Core đời cũ chưa có
+	// trường này. Cùng quy ước với `LastFaultCode`.
+	WaitingReason *string `json:"waitingReason"`
 }
 
 type RuntimePointSnapshot struct {

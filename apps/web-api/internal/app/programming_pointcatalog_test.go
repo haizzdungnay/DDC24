@@ -211,6 +211,7 @@ func TestProgrammingMonitorUsesEndScanTruthOnlyForLocalPoints(t *testing.T) {
 
 func TestProgrammingMonitorKeepsProgramTruthWhenPhysicalShmUnavailable(t *testing.T) {
 	app, _ := newTestAppWithAdmin(t)
+	waitingReason := "INPUT_NOT_READY" // Issue #827
 	app.core = &programmingMonitorCore{
 		pointsCore: &pointsCore{},
 		pointsErr:  errors.New("PLC SHM chưa tồn tại"),
@@ -218,6 +219,7 @@ func TestProgrammingMonitorKeepsProgramTruthWhenPhysicalShmUnavailable(t *testin
 			SnapshotObservedAtUTC: "2026-08-24T00:00:00Z",
 			Programs: []RuntimeProgramSnapshot{{
 				InstanceID: "P_cons", State: "WAITING", Enabled: true, PeriodMS: 1000,
+				WaitingReason: &waitingReason,
 			}},
 		},
 	}
@@ -229,6 +231,9 @@ func TestProgrammingMonitorKeepsProgramTruthWhenPhysicalShmUnavailable(t *testin
 	if len(truth.Programs) != 1 || truth.Programs[0].InstanceID != "P_cons" ||
 		truth.Programs[0].State != "WAITING" {
 		t.Fatalf("Program truth bị làm mất theo lỗi SHM: %+v", truth)
+	}
+	if reason := truth.Programs[0].WaitingReason; reason == nil || *reason != "INPUT_NOT_READY" {
+		t.Fatalf("waitingReason của Core bị rơi ở adapter: %v", reason)
 	}
 	if truth.Points == nil || len(truth.Points) != 0 {
 		t.Fatalf("Point truth phải là danh sách rỗng fail-closed, nhận %#v", truth.Points)
