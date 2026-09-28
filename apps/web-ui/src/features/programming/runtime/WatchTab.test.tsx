@@ -288,6 +288,55 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.samplePeriodMs).toBe(10)
   })
 
+  /* U-09 — chọn "Khi giá trị đổi" gửi `sampleMode: ON_CHANGE`; mặc định KHÔNG gửi
+   * khoá (server cũ vẫn nhận request như trước). Phiên ON_CHANGE ghi chu kỳ Core
+   * ở cột #, vì giữa hai mẫu có thể có nhiều chu kỳ bị bỏ. */
+  it('trace chọn giữ mẫu khi đổi gửi ON_CHANGE và hiện chu kỳ Core', async () => {
+    state.monitor = ready(monitorPage([sample()]))
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999994', state: 'RUNNING',
+      variableIds: ['11111111-1111-4111-8111-111111111111'], durationMs: 60_000,
+      samplePeriodMs: 100, effectiveSamplePeriodMs: 100,
+      startedAt: '2026-09-27T01:02:03Z', updatedAt: '2026-09-27T01:02:04Z',
+      stopReason: null, source: 'CORE', sampleMode: 'ON_CHANGE', droppedSamples: 0,
+      samples: [{ sequence: 1, cycle: 42, observedAt: '2026-09-27T01:02:03.100Z', values: [{
+        variableId: '11111111-1111-4111-8111-111111111111', programValue: 21.5, actualValue: 21.5,
+        overriddenBy: null, effectivePriority: null, quality: 'GOOD', freshness: 'LIVE',
+      }] }],
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0009' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    renderWatch()
+    fireEvent.change(screen.getByLabelText('Giữ mẫu'), { target: { value: 'ON_CHANGE' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+
+    expect(await screen.findByTestId('trace-sample-mode')).toHaveTextContent('chỉ giữ mẫu khi giá trị đổi')
+    expect(screen.getByText(/chu kỳ 42/)).toBeInTheDocument()
+    const [, options] = state.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingTrace')!
+    expect(options.body.sampleMode).toBe('ON_CHANGE')
+  })
+
+  it('trace mặc định không gửi sampleMode', async () => {
+    state.monitor = ready(monitorPage([sample()]))
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') return Promise.reject(new Error('stop here'))
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+    renderWatch()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+    await screen.findByText('stop here')
+    const [, options] = state.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingTrace')!
+    expect('sampleMode' in options.body).toBe(false)
+  })
+
   /* U-02 (REC-DDC-FIELD-USE-20260927) — Core chỉ phục vụ một phiên Trace. Phiên
    * rơi về poll monitor phải tự nói là dữ liệu xấp xỉ; phiên Core nói là từng chu
    * kỳ. Thiếu dòng này, trên bo người dùng đã chấm một phiên 1 mẫu/0,5 s như dữ

@@ -502,6 +502,65 @@ TEST(StCompileCli, RejectsHostPathSourceIdWithoutPublishingArtifact)
     EXPECT_TRUE(result.at("manifest").is_null());
 }
 
+/* U-16 (REC-DDC-FIELD-USE-20260927) — `--check-only` kiểm lỗi mà không cần khoá
+ * ký và không sinh artifact. Trước bản này, người viết chương trình phải tự tạo
+ * một khoá tạm chỉ để biết mã có biên dịch được không. */
+TEST(StCompileCli, CheckOnlyNeedsNoKeyAndReportsUsageWithoutArtifact)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const CliRun run = run_cli({"--source", source, "--source-id", "check-only", "--check-only"});
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_TRUE(result.at("ok"));
+    EXPECT_TRUE(result.at("checkOnly"));
+    EXPECT_FALSE(result.contains("artifact"));
+    EXPECT_FALSE(result.at("programName").get<std::string>().empty());
+    const nlohmann::json& usage = result.at("usage");
+    EXPECT_GT(usage.at("instructions").at("used").get<std::size_t>(), 0u);
+    EXPECT_EQ(usage.at("instructions").at("limit").get<std::size_t>(),
+              core::st_profile_generated::kMaxInstructions);
+    EXPECT_EQ(usage.at("writableSlots").at("limit").get<std::size_t>(),
+              core::st_profile_generated::kMaxWritableSlots);
+    EXPECT_LE(usage.at("writableSlots").at("used").get<std::size_t>(),
+              usage.at("slots").at("used").get<std::size_t>());
+    EXPECT_EQ(usage.at("fbInstances").at("limit").get<std::size_t>(),
+              core::st_profile_generated::kMaxFunctionBlocks);
+}
+
+TEST(StCompileCli, CheckOnlyKeepsDiagnosticLocationForInvalidSource)
+{
+    const std::string source_path = temporary_path("/tmp/mkddc-cli-check-only-XXXXXX");
+    ASSERT_FALSE(source_path.empty());
+    ASSERT_TRUE(write_text(source_path,
+                           "PROGRAM BAD\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n"));
+    const CliRun run = run_cli({"--source", source_path, "--source-id", "bad-check", "--check-only"});
+    ::unlink(source_path.c_str());
+    ASSERT_EQ(run.exit_code, 1) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_EQ(result.at("diagnostics")[0].at("sourceId"), "bad-check");
+    EXPECT_GT(result.at("diagnostics")[0].at("line").get<uint32_t>(), 0u);
+}
+
+/* `--check-only` không sinh artifact, nên đi kèm `--out`/`--manifest-out`/`--key`
+ * là mâu thuẫn: từ chối ở biên tham số thay vì lặng lẽ bỏ qua. Không có
+ * `--check-only` thì profile SIGNATURE_REQUIRED vẫn đòi khoá như cũ. */
+TEST(StCompileCli, CheckOnlyRejectsOutputFlagsAndPlainCompileStillNeedsKey)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const CliRun with_out = run_cli({"--source", source, "--check-only", "--out", "/tmp/never-written.bin"});
+    EXPECT_EQ(with_out.exit_code, 2);
+    EXPECT_EQ(nlohmann::json::parse(with_out.stdout_text).at("diagnostics")[0].at("code"), "ST-CLI-ARGS");
+    const CliRun with_key = run_cli_signed({"--source", source, "--check-only"});
+    EXPECT_EQ(with_key.exit_code, 2);
+    if (std::string(core::st_profile_generated::kIntegrityMode) == "SIGNATURE_REQUIRED") {
+        const CliRun plain = run_cli({"--source", source});
+        EXPECT_EQ(plain.exit_code, 2);
+        EXPECT_EQ(nlohmann::json::parse(plain.stdout_text).at("diagnostics")[0].at("code"),
+                  "ST-CLI-KEY-REQUIRED");
+    }
+}
+
 TEST(StCompileCli, RejectsUnknownLanguageAtArgumentBoundary)
 {
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";

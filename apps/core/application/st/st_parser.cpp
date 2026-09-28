@@ -1153,7 +1153,12 @@ private:
 
         /* IEC đòi nhãn KHÔNG trùng nhau. Trùng nhãn nghĩa là một nhánh không
          * bao giờ chạy được — im lặng bỏ qua nó là giấu một lỗi logic. */
-        std::vector<int64_t> seen;
+        /* U-11 (REC-DDC-FIELD-USE-20260927): nhãn lưu dạng KHOẢNG [lo, hi]. Bản
+         * cũ bung mỗi dải thành từng giá trị rồi so với trần câu lệnh, nên nhãn
+         * hợp lệ theo IEC như `16..32767:` bị từ chối "label set is too large"
+         * và người viết phải chuyển sang IF. Dải chỉ nở thành hai phép so biên,
+         * nên độ rộng không tốn gì; trần giờ đếm theo SỐ NHÃN. */
+        std::vector<std::pair<int64_t, int64_t>> seen;
         bool has_branch = false;
 
         while (!at_kw("ELSE") && !at_kw("END_CASE")) {
@@ -1178,20 +1183,20 @@ private:
                     }
                 }
 
-                /* Dải quá rộng bị chặn ở đây: nó nở ra thành so sánh biên nên
-                 * không tốn bộ nhớ, nhưng một dải khổng lồ gần như luôn là lỗi
-                 * gõ nhầm, và bắt sớm rẻ hơn nhiều so với debug trên bo. */
-                for (int64_t value = lo; value <= hi; ++value) {
-                    if (std::find(seen.begin(), seen.end(), value) != seen.end()) {
+                /* Hai nhãn chồng nhau thì một nhánh không bao giờ chạy tới được ở
+                 * phần chồng: báo giá trị chồng đầu tiên, như bản bung từng giá
+                 * trị vẫn báo. */
+                for (const auto& [seen_lo, seen_hi] : seen) {
+                    if (std::max(seen_lo, lo) <= std::min(seen_hi, hi)) {
                         set_diag(diag, st_diag_code::kSyntaxUnexpected,
-                                 "duplicate CASE label " + std::to_string(value),
+                                 "duplicate CASE label " + std::to_string(std::max(seen_lo, lo)),
                                  label_at.line, label_at.column, label_at.length);
                         return false;
                     }
-                    seen.push_back(value);
-                    if (seen.size() > st_limits::kMaxStatements)
-                        return fail("CASE label set is too large", diag);
                 }
+                seen.emplace_back(lo, hi);
+                if (seen.size() > st_limits::kMaxStatements)
+                    return fail("CASE has too many labels", diag);
 
                 std::unique_ptr<StExpr> term;
                 if (hi == lo) {

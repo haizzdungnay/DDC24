@@ -104,7 +104,18 @@ type TraceRequest struct {
 	VariableIDs    []string `json:"variableIds"`
 	DurationMS     int      `json:"durationMs"`
 	SamplePeriodMS int      `json:"samplePeriodMs"`
+	// SampleMode — U-09 (REC-DDC-FIELD-USE-20260927). Rỗng hoặc `EVERY_SAMPLE`
+	// giữ mọi mẫu như trước. `ON_CHANGE` chỉ giữ mẫu Core khi có ít nhất một ô
+	// khác mẫu đã giữ trước đó; mỗi mẫu mang `cycle` nên người đọc biết các chu
+	// kỳ ở giữa giống hệt mẫu trước. Cùng trần 10 000 ô, phiên ghi được dài hơn
+	// nhiều: 27 biến trước chỉ đủ ≈ 37 s ở 100 ms.
+	SampleMode string `json:"sampleMode,omitempty"`
 }
+
+const (
+	traceSampleModeEvery    = "EVERY_SAMPLE"
+	traceSampleModeOnChange = "ON_CHANGE"
+)
 
 type TraceAccepted struct {
 	TraceID       string `json:"traceId"`
@@ -126,9 +137,13 @@ type TraceValueView struct {
 }
 
 type TraceSampleView struct {
-	Sequence   int64            `json:"sequence"`
-	ObservedAt string           `json:"observedAt"`
-	Values     []TraceValueView `json:"values"`
+	Sequence   int64  `json:"sequence"`
+	ObservedAt string `json:"observedAt"`
+	// Cycle — số thứ tự tuyệt đối của mẫu trong ring Core (một mẫu mỗi chu kỳ
+	// lấy mẫu hiệu lực). Chỉ có ở mẫu Core; với `ON_CHANGE`, khoảng hở giữa hai
+	// `cycle` là các chu kỳ có giá trị y hệt mẫu trước.
+	Cycle  uint64           `json:"cycle,omitempty"`
+	Values []TraceValueView `json:"values"`
 }
 
 // TracePinView — `T59-810`. Tuple Active mà phiên Trace được NEO vào lúc tạo.
@@ -161,7 +176,9 @@ type TraceView struct {
 	// `MONITOR_POLL` = Core không nhận phiên (thường vì đang phục vụ phiên khác),
 	// BE đọc snapshot monitor theo nhịp riêng nên chỉ là dữ liệu XẤP XỈ. Rỗng
 	// (không gửi khoá) trong khoảnh khắc trước khi Core trả lời TRACE_START.
-	Source         string            `json:"source,omitempty"`
+	Source string `json:"source,omitempty"`
+	// SampleMode của phiên (`EVERY_SAMPLE` | `ON_CHANGE`), luôn có.
+	SampleMode     string            `json:"sampleMode"`
 	DroppedSamples uint32            `json:"droppedSamples"`
 	Samples        []TraceSampleView `json:"samples"`
 }
@@ -270,8 +287,8 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 			// lần đọc và phiên sẽ neo vào một tuple khác tuple đã kiểm.
 			Pin:        TracePinView{RevisionID: monitor.ActiveRevisionID, Producer: monitor.Producer},
 			DurationMS: request.DurationMS, SamplePeriodMS: request.SamplePeriodMS,
-			EffectiveSamplePeriodMS: effectivePeriod,
-			StartedAt:               now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+			EffectiveSamplePeriodMS: effectivePeriod, SampleMode: traceSampleMode(request.SampleMode),
+			StartedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 			Samples: make([]TraceSampleView, 0, maxSamples),
 		},
 		actor: actor, correlationID: correlationID, requestHash: requestHash,
@@ -335,6 +352,28 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	return traceAcceptedFrom(session, correlationID), nil
 }
 
+func traceSampleMode(requested string) string {
+	if requested == traceSampleModeOnChange {
+		return traceSampleModeOnChange
+	}
+	return traceSampleModeEvery
+}
+
+// traceValuesEqual — hai mẫu Core có cùng mọi ô (giá trị, chất lượng, độ tươi).
+func traceValuesEqual(left, right []TraceValueView) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		a, b := left[index], right[index]
+		if a.VariableID != b.VariableID || a.Quality != b.Quality || a.Freshness != b.Freshness ||
+			a.ProgramValue != b.ProgramValue || a.ActualValue != b.ActualValue {
+			return false
+		}
+	}
+	return true
+}
+
 // Dải chu kỳ lấy mẫu Trace (ADR-061 mục 4.6): từ một base step 10 ms tới chu kỳ
 // chậm nhất 50 000 ms của tập — khớp OpenAPI `ProgrammingTraceRequest`.
 const (
@@ -360,6 +399,11 @@ func validateTraceRequest(request TraceRequest) error {
 	if request.SchemaVersion != "1.0" || len(request.VariableIDs) < 1 || len(request.VariableIDs) > 32 ||
 		request.DurationMS < 1000 || request.DurationMS > 600000 ||
 		request.SamplePeriodMS < traceMinSamplePeriodMS || request.SamplePeriodMS > traceMaxSamplePeriodMS {
+		return ErrInvalidRequest
+	}
+	switch request.SampleMode {
+	case "", traceSampleModeEvery, traceSampleModeOnChange:
+	default:
 		return ErrInvalidRequest
 	}
 	seen := make(map[string]struct{}, len(request.VariableIDs))
@@ -601,6 +645,7 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 		sample := TraceSampleView{
 			Sequence:   int64(len(session.view.Samples) + 1),
 			ObservedAt: s.coreSampleWallTime(session, incoming.TimestampNS).Format(time.RFC3339Nano),
+			Cycle:      sequence,
 			Values:     make([]TraceValueView, 0, len(incoming.Values)),
 		}
 		for position, cell := range incoming.Values {
@@ -623,6 +668,14 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 			}
 			value.ActualValue = value.ProgramValue
 			sample.Values = append(sample.Values, value)
+		}
+		// U-09: `ON_CHANGE` bỏ mẫu y hệt mẫu đã giữ. Không phải mẫu rơi: `cycle`
+		// của mẫu kế nói rõ các chu kỳ ở giữa có giá trị như mẫu trước.
+		if session.view.SampleMode == traceSampleModeOnChange {
+			if last := len(session.view.Samples) - 1; last >= 0 &&
+				traceValuesEqual(session.view.Samples[last].Values, sample.Values) {
+				continue
+			}
 		}
 		session.view.Samples = append(session.view.Samples, sample)
 	}

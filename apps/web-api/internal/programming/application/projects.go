@@ -258,6 +258,9 @@ func (s *ProjectService) SaveDraft(ctx context.Context, actor Actor, command Sav
 	if err != nil {
 		return MutationResult{}, err
 	}
+	if content, err = s.withInferredLibraryDependencies(ctx, command.ProjectID, content, command.Operations); err != nil {
+		return MutationResult{}, err
+	}
 	if draftOperationsContain(command.Operations, "upsertBinding") {
 		if err := s.validateDraftBindings(ctx, content, command.Operations); err != nil {
 			return MutationResult{}, err

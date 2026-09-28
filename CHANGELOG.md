@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Added — Nhóm "Sprint kế" của báo cáo sử dụng thực tế: --check-only, mkddc-st-sim, Trace ON_CHANGE, tự khai dependency thư viện, CASE dải rộng (2026-09-27)
+
+- Phạm vi: `apps/core/application/st/{st_compile_main.cpp,st_parser.cpp}`, `apps/core/application/programming/{programming_st_sim_main.cpp,simulation/sim_scenario.*}`, `apps/core/CMakeLists.txt` (target `mkddc-st-sim`, thư viện `core_sim_scenario`), `apps/web-api/internal/programming/application/{trace.go,draft.go,projects.go,library_dependency_inference.go}`, `apps/web-api/internal/app/points.go`, `contracts/openapi/openapi.yaml` (1.44.0 → 1.45.0), re-pin `openapiSha256`, FE `runtime/WatchTab.tsx`, `docs/06_operations/RUN_PROJECT_LOCAL_PROGRAMMING.md` §5; `REC-DDC-FIELD-USE-20260927` lên 1.2. PR #803, xếp chồng lên #797.
+- U-16/U-08: `mkddc-st-compile --check-only` kiểm lỗi không cần khoá ký, không sinh artifact, trả `usage` so với trần profile (trên `PRG_DO16_MODBUS`: lệnh 1576/4096, slot ghi 467/512, instance FB 43/64). Công cụ host `mkddc-st-sim` chạy package theo kịch bản JSON trên đúng `SimSession` của chế độ SIMULATE, xuất CSV mỗi lần Program release. Công cụ không cài lên bo.
+- U-11: nhãn `CASE` lưu dạng khoảng, nên `16..32767:` hợp lệ; nhãn chồng vẫn bị từ chối; trần đếm theo số nhãn (vẫn giữ luật WCET của ADR-054 §2).
+- U-15: `replaceProgramSource` (op chỉ sửa mã, giữ `locals`/`interface`) nhận `objectId` theo hợp đồng PGM-02, `programId` là alias; thêm test.
+- U-06: lưu Draft có đổi mã thì web-api tự thêm `dependencies` cho lời gọi vào khối Thư viện PROJECT (POU trùng tên thắng, chỉ thêm).
+- U-09: Trace `sampleMode = ON_CHANGE` chỉ giữ mẫu Core có ô đổi, mỗi mẫu có `cycle`; FE thêm ô "Giữ mẫu".
+- U-19: lệnh ghi VP ≥ 1 s log `WARN points.vp_write_slow` kèm phân rã lock/read/persist/core.
+- Cần thiết kế hoặc quyết định, đã mở Issue kèm bằng chứng: U-04 #798, U-08 (dùng chung slot) #799, U-10 #800 (+ #367), U-12 #801, U-13 #802, U-20 (#384).
+- Kiểm chứng: `cmake --fresh` (MODBUS/BACNET/HMI=ON) exit 0, build exit 0, ctest 1639/1639; `go vet` exit 0, `go test ./... -count=1` 21 package ok; vitest 267 file / 3478 test exit 0; `npm run lint`/`npm run build` exit 0; `verify-project.sh --component layout` exit 0; `verify_programming_sim_worker_boundary.py` PASS (tĩnh + nhị phân); guard đóng gói 14/14. Test đỏ → xanh: CASE dải rộng trên parser cũ, suy dependency khi bỏ hook. Chưa deploy lên bo.
+
 ### Fixed — Nhóm "Ngay" của báo cáo sử dụng thực tế: Trace trung thực, VP writable, lỗi 409 rõ trường, deploy helper, hướng dẫn FBD (2026-09-27)
 
 - Phạm vi: `apps/web-api/internal/programming/application/{trace.go,point_binding_facts.go,projects.go}`, `transport/http/projects.go`, `contracts/openapi/openapi.yaml` (1.43.0 → 1.44.0), `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}` (re-pin `openapiSha256`), FE `runtime/WatchTab.tsx`, `points/VirtualIoPage.tsx`, `shared/components/Toast.tsx`, `platform/packaging/install.sh`, `docs/03_implementation/DEPLOY_FOXLINX.md`, `FBD_CREATION_AND_ACTIVATION_GUIDE.md` (1.1.0); `REC-DDC-FIELD-USE-20260927` lên 1.1. PR #797.
