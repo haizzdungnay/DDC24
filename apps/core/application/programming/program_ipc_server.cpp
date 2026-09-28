@@ -617,23 +617,41 @@ bool parse_trace_start_payload(const ProgramRequest& request, std::string* sessi
     }
 }
 
-/* F18 — payload `TRACE_READ`: `[sessionId]` (đời cũ) hoặc `[sessionId, fromSequence]`.
- * `fromSequence` là số thứ tự tuyệt đối (từ 1) của mẫu đầu tiên người đọc CHƯA
- * có — xem `StValueTrace::next_sequence()`. */
+/* Issue #798 — dạng ô của `TRACE_READ`. 1 = `[valid, bits]` (mọi đời trước);
+ * 2 = `[valid, bits, reason, releaseSeq, readbackState, readbackBits,
+ * readbackAgeMs]`. BE mới xin dạng 2 bằng phần tử thứ ba của payload; BE cũ
+ * không gửi nên vẫn nhận đúng dạng nó giải mã được. */
+constexpr uint64_t kTraceCellFormatLegacy = 1;
+constexpr uint64_t kTraceCellFormatRelease = 2;
+
+/* F18 — payload `TRACE_READ`: `[sessionId]` (đời cũ), `[sessionId, fromSequence]`
+ * hoặc (Issue #798) `[sessionId, fromSequence, cellFormat]`. `fromSequence` là số
+ * thứ tự tuyệt đối (từ 1) của mẫu đầu tiên người đọc CHƯA có — xem
+ * `StValueTrace::next_sequence()`. */
 bool parse_trace_read_payload(const ProgramRequest& request, std::string* session_id,
-                              uint64_t* from_sequence, bool* incremental)
+                              uint64_t* from_sequence, bool* incremental,
+                              uint64_t* cell_format)
 {
     try {
         const json value = json::from_cbor(request.payload, true, true);
-        if (!value.is_array() || value.empty() || value.size() > 2 || !value[0].is_string())
+        if (!value.is_array() || value.empty() || value.size() > 3 || !value[0].is_string())
             return false;
         *session_id = value[0].get<std::string>();
-        *incremental = value.size() == 2;
+        *incremental = value.size() >= 2;
         *from_sequence = 1;
+        *cell_format = kTraceCellFormatLegacy;
         if (*incremental) {
             if (!value[1].is_number_unsigned()) return false;
             *from_sequence = value[1].get<uint64_t>();
             if (*from_sequence == 0) return false;
+        }
+        if (value.size() == 3) {
+            /* Dạng lạ bị từ chối thay vì rơi về dạng 1: người gửi đang chờ một
+             * cấu trúc ô mà Core không biết dựng. */
+            if (!value[2].is_number_unsigned()) return false;
+            *cell_format = value[2].get<uint64_t>();
+            if (*cell_format != kTraceCellFormatLegacy && *cell_format != kTraceCellFormatRelease)
+                return false;
         }
         return true;
     } catch (const json::exception&) {
@@ -650,9 +668,13 @@ bool parse_trace_read_payload(const ProgramRequest& request, std::string* sessio
 constexpr std::size_t kTraceReadMaxSamples = 200;
 constexpr std::size_t kTraceReadByteBudget = 28U * 1024U;
 
-std::size_t trace_read_batch_limit(std::size_t variable_count)
+std::size_t trace_read_batch_limit(std::size_t variable_count,
+                                   uint64_t cell_format = kTraceCellFormatLegacy)
 {
-    const std::size_t per_sample = 12U + 11U * (variable_count == 0 ? 1U : variable_count);
+    /* Dạng 2 (#798): thêm lý do, số release, trạng thái/bit/tuổi đọc lại — tối
+     * đa ~33 byte mỗi ô thay vì ~11. */
+    const std::size_t per_cell = cell_format == kTraceCellFormatRelease ? 33U : 11U;
+    const std::size_t per_sample = 12U + per_cell * (variable_count == 0 ? 1U : variable_count);
     const std::size_t by_bytes = kTraceReadByteBudget / per_sample;
     return by_bytes < kTraceReadMaxSamples ? by_bytes : kTraceReadMaxSamples;
 }
@@ -1043,7 +1065,8 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
     }
     uint64_t from_sequence = 1;
     bool incremental = false;
-    if (!parse_trace_read_payload(request, &session_id, &from_sequence, &incremental))
+    uint64_t cell_format = kTraceCellFormatLegacy;
+    if (!parse_trace_read_payload(request, &session_id, &from_sequence, &incremental, &cell_format))
         return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
 
     /* TRACE_READ, F18:
@@ -1075,7 +1098,7 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
         if (status.session_id == session_id) {
             const std::size_t held = view.sample_count();
             variable_count = view.variable_count();
-            const std::size_t limit = trace_read_batch_limit(variable_count);
+            const std::size_t limit = trace_read_batch_limit(variable_count, cell_format);
             first_held = view.first_sequence();
             next_sequence = view.next_sequence();
             if (incremental) {
@@ -1099,7 +1122,20 @@ ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
             /* Gửi BIT thô của ô, không gửi số đã diễn giải: kiểu của ô là dữ
              * liệu của package, và diễn giải hai lần ở hai bên là hai chỗ để
              * lệch nhau. */
-            values.push_back(json::array({sample.valid[variable], bits}));
+            if (cell_format == kTraceCellFormatLegacy) {
+                values.push_back(json::array({sample.valid[variable], bits}));
+                continue;
+            }
+            uint64_t readback_bits = 0;
+            std::memcpy(&readback_bits, &sample.readback[variable], sizeof(readback_bits));
+            values.push_back(json::array({
+                sample.valid[variable], bits,
+                static_cast<uint64_t>(sample.reason[variable]),
+                sample.release_seq[variable],
+                static_cast<uint64_t>(sample.readback_state[variable]),
+                readback_bits,
+                static_cast<uint64_t>(sample.readback_age_ms[variable]),
+            }));
         }
         samples.push_back(json::array({sample.timestamp_ns, values}));
     }

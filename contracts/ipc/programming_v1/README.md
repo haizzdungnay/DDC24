@@ -88,12 +88,31 @@ Golden `request_activate_program_intents.hex` khoá chuỗi byte chung của Go 
 | Action | Request payload | Response payload |
 |---|---|---|
 | `TRACE_START` | `[sessionId, samplePeriodMs, durationMs, [[instanceId, variableName], ...]]` | `ACCEPTED` `[effectiveSamplePeriodMs]` |
+| `TRACE_READ` (từ #798) | `[sessionId, fromSequence, cellFormat]` | như dòng dưới; `cellFormat = 2` đổi dạng ô (xem dưới), `1` giữ dạng cũ, giá trị khác bị `REJECTED/IPC-PAYLOAD` |
 | `TRACE_READ` (từ F18) | `[sessionId, fromSequence]` | `OK` `[state, droppedCount, samples, firstSequence, nextSequence]` |
 | `TRACE_READ` (đời cũ) | `[sessionId]` | `OK` `[state, droppedCount, samples]` — tối đa một lô, các mẫu MỚI NHẤT |
 | `TRACE_STOP` | `[sessionId]` | `OK` rỗng |
 
 - Mẫu: `[timestampNs, [[valid, bits], ...]]`. `timestampNs` là CLOCK_MONOTONIC
   của Core tại ranh giới quét; `bits` là 8 byte thô của ô.
+- **Issue #798 — lấy mẫu tại release.** Core chỉ lấy mẫu ở ranh giới mà ít nhất
+  một Program được theo dõi vừa chạy (sau output commit), nên mọi cặp (đầu vào,
+  đầu ra) trong mẫu đến từ đúng một lần chạy. Ô của Program không chạy ở ranh giới
+  đó có `valid=false`. Không Program nào còn được dispatch thì lấy mẫu ngay; chờ
+  quá 50 s (chu kỳ dài nhất của profile) cũng lấy mẫu.
+- **Ô dạng 2** (`cellFormat = 2`): `[valid, bits, reason, releaseSeq,
+  readbackState, readbackBits, readbackAgeMs]`.
+  - `reason`: `0` OK, `1` UNRESOLVED (biến/Program không có), `2` NOT_RELEASED
+    (Program không chạy ở ranh giới của mẫu).
+  - `releaseSeq`: số lần chạy của Program nguồn (`run_count`, u32); `0` khi
+    UNRESOLVED. Hai mẫu liền nhau cách > 1 là có lần chạy không được lấy mẫu.
+  - `readbackState`: `0` NONE (biến không gắn điểm đầu ra), `1` VALID, `2`
+    UNAVAILABLE (điểm không GOOD / không đổi được về kiểu). `readbackBits` là 8
+    byte thô của giá trị đọc lại theo kiểu biến; `readbackAgeMs` là tuổi mẫu
+    điểm tại ranh giới (bão hoà u32).
+  - Trần lô dạng 2 tính ~33 byte mỗi ô (dạng 1 ~11 byte), vẫn dưới 28 KiB.
+  - BE mới gửi `cellFormat = 2`; gặp Core cũ trả `IPC-PAYLOAD` thì BE nhớ lại và
+    đọc tiếp bằng `[sessionId, fromSequence]`.
 - Mỗi mẫu có **số thứ tự tuyệt đối** đánh từ 1 trong phiên. `TRACE_READ` trả tối
   đa **một lô** (≤ 200 mẫu, và dưới ~28 KiB) bắt đầu từ
   `max(fromSequence, mẫu cũ nhất còn giữ)`.
