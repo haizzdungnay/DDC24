@@ -214,6 +214,7 @@ Drawer "Sửa thiết bị MTR-01"
 | `timeout_ms` | 20..5000 và `< poll_interval_ms` | "Timeout phải nhỏ hơn poll interval." |
 | `retry_count` | 0..3; nhãn **"Số lần phát lại"**, `0` hợp lệ | "Số lần phát lại phải trong 0–3. Đặt 0 nghĩa là không phát lại, báo lỗi ngay." |
 | `offline_after_errors` | 1..10; nhãn **"Chuyển OFFLINE sau N lượt poll lỗi"** | "Phải trong 1–10 lượt." |
+| `coil_write_batch_max` | ô bật **"Ghi nhiều coil một lần (FC15)"**, mặc định TẮT; bật thì hiện ô số "Tối đa coil mỗi lệnh" 2–16 (mặc định 8, `required`, `min=2`). Lời giải thích nằm ngay dưới ô: chỉ bật khi datasheet có FC15 (0x0F), thiết bị không hỗ trợ sẽ từ chối mọi lệnh ghi đã gom; điểm bật xác nhận sau khi ghi vẫn được ghi riêng từng coil. Bảng thiết bị hiện `FC15×N` khi bật (U-07) | BE: "phải trong 0..16 (0 hoặc 1 = tắt gom FC15)" (`OUT_OF_RANGE`) |
 | `stale_after_ms` | `≥ poll + timeout` | "Stale phải ≥ poll + timeout (1300 ms)." |
 | `offline_after_ms` | `> stale_after_ms` | "Offline phải lớn hơn stale." |
 
@@ -537,7 +538,7 @@ ModbusDiagnosticsPage
     ├── LimitsNote                    (nội tuyến — hai giới hạn, luôn hiện khi có dữ liệu)
     ├── ErrorAlert                    (`role="alert"` — giữ nguyên văn lý do từ iobus)
     ├── EmptyNote                     (nội tuyến — KHÔNG có viền cảnh báo)
-    └── FrameTable                    (mới — overflow-x-auto, min-width 720)
+    └── FrameTable                    (mới — overflow-x-auto, min-width 840 từ khi có cột Giá trị ghi)
 ```
 
 Theo dõi liên tục poll **2 giây**, và **mặc định TẮT**. Một panel chẩn đoán tự
@@ -553,6 +554,7 @@ poll ngầm sẽ giữ tải lên iobus ngay cả khi không ai nhìn màn hình
 | KẾT QUẢ | `ok`, `reason` | như trên | — | — | viewer | — | `crc` ≠ `timeout` ≠ `error`; **không** gộp thành "lỗi" |
 | THỜI LƯỢNG | `elapsedUs` | như trên | — | — | viewer | — | hiện theo ms, một chữ số thập phân |
 | LẦN PHÁT | `attempt` | như trên | — | — | viewer | — | `> 1` tô `--c-warn-fg` |
+| GIÁ TRỊ GHI | `values` (chỉ khung ghi) | như trên | `—` | — | viewer | — | U-18: coil hiện từng bit cách nhau dấu cách (bit đầu là `addr`), thanh ghi hiện word thập phân; khung đọc hiện `—` |
 | Dải giới hạn | `volatile`, `rawBytes` | như trên | — | — | viewer | — | luôn hiện khi có dữ liệu |
 
 #### 6.5.5 Ba luật của khối
@@ -663,3 +665,4 @@ quyết định cuối. FE không được nới lỏng hơn server (ADR-021).
 | 0.1 | 2026-08-04 | In Review | Tạo UI/UX spec 5 page, wireframe, validation, state, quyền và gap FE |
 | 0.2 | 2026-08-05 | In Review | Đồng bộ Đ-01/Đ-04/Đ-05/Đ-06 và đối chiếu lại với `eade4e5`. **Thay thế:** (a) §1.1 `G-UX-01` phần quyền đã đóng; (b) §2 Overview render thẻ bus từ `GET /modbus/buses`, Rev A một thẻ, bỏ wireframe hai bus; (c) §3 Device Manager bỏ tab/radio chọn RS485-1/RS485-2, đổi nhãn `Retry` → "Số lần phát lại" và thêm trường "Chuyển OFFLINE sau N lượt" (Đ-05); (d) §3.2 thêm ràng buộc `rs485_port` chọn từ capability, `retry_count` cho phép 0; (e) §6.1 bỏ bộ lọc hai bus; (f) §7 ma trận quyền bốn vai trò → **ba** vai trò (Đ-04) kèm cảnh báo Operator hiện bị gộp vào Viewer ở FE; (g) §9 tách 9.1/9.2: đóng G-UX-08/G-UX-09, hạ G-UX-01 xuống P1, thêm G-UX-11/12/13 |
 | 0.3 | 2026-08-19 | Active | Thêm §6.5 `MBR-FRM-01` — khối "Khung truyền gần nhất" trên Page E (`T57-3.9`, `ADR-046` **bản sửa 2026-08-19**) kèm **2 asset SVG** desktop + mobile, mở cổng Detailed Design theo `DOC_GOVERNANCE` §2.2. Ghi rõ Rev A **không có byte thô** (libmodbus không lộ bộ đệm wire) và ranh giới CHỈ-ĐỌC tách khối này khỏi `T57-3.8` (quét bus, hoãn Rev B). Thêm AC-E6…AC-E10 |
+| 0.3 (+U-07/U-18) | 2026-09-27 | Active | §3 thêm ô bật "Ghi nhiều coil một lần (FC15)" (`coil_write_batch_max`); §6.5.4 thêm cột "Giá trị ghi" (`values`) của Frame Monitor. Không đổi hành vi đã duyệt |

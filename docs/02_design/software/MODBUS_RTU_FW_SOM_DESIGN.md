@@ -184,6 +184,27 @@ Gộp các Point cùng `(device, function code)` có dải register **liền k�
   worker ngay; lệnh không chờ trần ngủ. Ghi được ưu tiên hơn lượt đọc tới hạn
   nhưng có trần `kMaxWritesBeforeRead` (§4.1), nên đọc không bị bỏ đói khi
   Program đảo output nhanh hơn nhịp bus.
+- **Gom coil liền kề thành FC15, theo thiết bị** (U-07, `REC-DDC-FIELD-USE-20260927`,
+  2026-09-27). **As-Built ✅.** Profile khai `max_coils_per_write` (BE sinh từ
+  `devices[].coil_write_batch_max`, chỉ ghi khi > 1; vắng ⇒ 1 = TẮT, trần 16).
+  Bật thì mỗi lượt `flush_pending` lập kế hoạch bằng hàm thuần
+  `plan_write_transactions` (`coil_write_batch.hpp`): các lệnh ghi coil (FC05/FC15)
+  liền kề tuyệt đối trong cùng một đoạn hàng đợi thành **một** `modbus_write_bits`.
+  Không gom: lệnh cần readback (cờ request hoặc `verify_after_write` theo điểm),
+  lệnh đã quá TTL, và mọi địa chỉ xuất hiện hơn một lần (giữ thứ tự cũ → mới,
+  `MBA-FW-04`); mục không gom được là rào giữ thứ tự với lệnh thanh ghi. Trần
+  `kMaxWritesBeforeRead` đếm theo **giao dịch**, nên một FC15 × 8 chỉ tốn một suất.
+  Bookkeeping vẫn theo từng mục: `attempts`, bỏ sau `kMaxWriteAttempts`, kết quả
+  cho từng `request_id`, counter `write_failed`/`write_dropped` của thiết bị tăng
+  theo từng mục như khi đi riêng, còn `record_bus_transaction` chỉ một lần cho cả
+  khung. Slave trả exception 0x01 (ILLEGAL FUNCTION) cho khung gom thì log WARN
+  gợi ý tắt `coil_write_batch_max` cho thiết bị đó. `drain_ext_writes` xếp các lệnh
+  của một lượt quét Core vào hàng đợi trong **một** vùng khoá (`enqueue_writes`)
+  để worker không phát lệnh đầu một mình. Tắt thì kế hoạch là "mỗi mục một giao
+  dịch, đúng thứ tự hàng đợi" — không lệch một khung so với trước.
+- **Khung ghi mang giá trị trên dây** (U-18, 2026-09-27). **As-Built ✅.**
+  `FrameRecord.values` (tối đa 16 word): coil 0/1 từng bit, thanh ghi word 16-bit
+  như đã phát; khung đọc không có trường này. Frame Monitor hiện cột "Giá trị ghi".
 - **Một lệnh ghi phải có vòng đời hữu hạn.** Bỏ hẳn khi vượt `kMaxWriteAttempts`
   (3 lần phát) **hoặc** quá `kWriteTtlMs` (30 s kể từ lúc enqueue), kèm log ERROR
   có `slave/fc/reg/value/attempts` và tăng counter `write_dropped`. **As-Built ✅**
@@ -455,6 +476,7 @@ duy nhất cho việc đếm slot; fieldbus chạy priority thường và không
 | F-FW-06 / F-FW-15 request/result, readback | có mã, không nối | **MỞ** (`MBA-GAP-01`) |
 | F-FW-17 `deadline_miss`/`poll_duration` | chưa có | **MỞ** (`MBA-GAP-04`) |
 | Đồng thời `FieldbusMetrics` | không khoá — test abort 3/3 | ĐÓNG (`MBA-FW-03`) |
+| §4.3 gom FC15 theo module (G7, hoãn vì "cần xác nhận thiết bị hỗ trợ") | mỗi lệnh ghi coil một giao dịch; 16 DO = 16 FC05 trải 0,43–0,46 s trên bo (`REC-DDC-FIELD-USE-20260927` U-07) | ĐÓNG (U-07): bật theo thiết bị qua `coil_write_batch_max`, mặc định tắt. Đo target trên hai CK-508 (`coil_write_batch_max = 8`): 16 DO = 2 giao dịch FC15 × 8 coil, lệch hai module 30 ms, 0 lỗi — [`EV-MB-FC15-20260927`](../../07_records/test-evidence/modbus/2026-09-27-fc15-coil-batch-target.md) |
 | §4.1 `control_wakeup`, §8 độ trễ lệnh ghi (G7, audit `EV-PROG-FBD-ST-MB-20260925`) | cầu nối lệnh EXT quét 100 ms trong `fb-publish`; worker `sleep_for` trần 200 ms; ghi đi sau đọc — Core → FC05 ~377 ms trên bo | ĐÓNG trong mã, chờ đo target: `mb-extcmd` soi 5 ms, worker thức theo sự kiện, ghi trước đọc có trần 4 |
 
 ## 13. Test FW-SOM bắt buộc
@@ -494,3 +516,4 @@ Host/simulator pass **không** đóng gate phần cứng thật (`VR-MBRTU-011`)
 | 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5` sau Track A. **Thay thế:** (a) §2 hai BusWorker → Rev A một worker, giữ kiến trúc *n* worker (Đ-01); (b) §4.1 thêm nhãn As-Built cho EDF/probe/retry và §4.1a tách `retry_count` khỏi `offline_after_errors` (Đ-05); (c) §4.3 thêm luật vòng đời write hữu hạn 3 lần/30 s và hai counter `write_failed`/`write_dropped`; (d) §11 capacity: 1 bus, mục tiêu ≥256 Point kèm bảng tác động ABI (Đ-07), bỏ tham chiếu sai board RK3566; (e) §12 tách thành 12.1 gap còn lại và 12.2 bảy nhóm đã đóng — hạ F-FW-01 xuống P2, hạ F-FW-07 xuống P1 (đóng một phần), thêm F-FW-17..F-FW-20; (f) §13 gắn từng TW-MBRTU với test thật trong repo, thêm TW-MBRTU-18/19 |
 | 0.2 (+§12.3) | 2026-09-25 | Active | Thêm §12.3 đối chiếu As-Built theo audit Modbus 2026-09-25; không đổi nội dung thiết kế đã duyệt |
 | 0.2 (+G7) | 2026-09-26 | Active | Thêm ghi chú As-Built G7 ở §2 (thread `mb-extcmd`, `fb-publish`), §4.1 (ghi trước đọc có trần 4, worker thức theo sự kiện, trần 200 ms thành lưới an toàn), §4.3, §8 và một dòng §12.3. Không đổi nội dung thiết kế đã duyệt |
+| 0.2 (+U-07/U-18) | 2026-09-27 | Active | Thêm ghi chú As-Built ở §4.3 (gom coil liền kề thành FC15 theo thiết bị, mặc định tắt; khung ghi mang `values`) và một dòng §12.3. Không đổi nội dung thiết kế đã duyệt |

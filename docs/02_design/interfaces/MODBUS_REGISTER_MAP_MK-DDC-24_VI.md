@@ -2,7 +2,7 @@
 ## Interface Control Document — D-2 (cập nhật ARCH-R010)
 
 > **Document ID:** ICD-MODBUS-MK-DDC-24-VI
-> **Phiên bản:** 2.0 | 2026-05-30
+> **Phiên bản:** 2.3 | 2026-09-27 (U-07: trường profile `max_coils_per_write`) · 2.0 | 2026-05-30
 > **Trạng thái:** **SUPERSEDED MỘT PHẦN 2026-08-04** (trước đó: Approved Owner 2026-06-08)
 
 > ## ⚠ SUPERSEDED một phần — 2026-08-04
@@ -96,6 +96,11 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 | `bacnet_object_type` | `"AV"` (float commandable), `"BV"` (bool commandable), `"AI"` (float read-only) — bắt buộc khi `expose_bacnet: true` |
 | `bacnet_instance` | instance number trong BACnet; phải unique trong cùng `bacnet_object_type`; conflict → log ERROR + skip |
 
+**Trường cấp profile (thiết bị), tuỳ chọn:**
+| Trường | Ý nghĩa |
+|--------|---------|
+| `max_coils_per_write` | U-07 (2026-09-27): số coil tối đa iobus gom vào **một** FC15 khi các coil liền kề đổi cùng lúc. Vắng hoặc `1` = tắt (mỗi coil một giao dịch); nhỏ hơn 1 bị bỏ qua kèm WARN; lớn hơn 16 bị kẹp về 16 kèm WARN. `mkddc-web` sinh khoá này từ `devices[].coil_write_batch_max` và chỉ ghi khi lớn hơn 1. Lệnh cần đọc lại xác nhận (`verify_after_write`) không bao giờ được gom. Xem [DDD-FW-MBRTU-001 §4.3](../software/MODBUS_RTU_FW_SOM_DESIGN.md) |
+
 > **Quyết định FB-Q-002 (2026-06-16):** Expose ext points lên BACnet là cấu hình per-point, không tự động. Xem chi tiết: [SW_FIELDBUS_DESIGN §9](../software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 ## 4. Cấu hình bus & slave (`fieldbus.conf` — xem [D-5](CONFIG_SCHEMA_MK-DDC-24_VI.md))
@@ -150,6 +155,7 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 2.3 | 2026-09-27 | Dev SOM | §3: thêm trường cấp profile `max_coils_per_write` (U-07, gom coil liền kề thành FC15, mặc định tắt). |
 | 2.2 | 2026-06-17 | Dev SOM | §4: thêm `rs485.device` bắt buộc vào fieldbus.conf — gap serial port path closed. |
 | 2.1 | 2026-06-16 | Dev SOM | Thêm 3 field profile BACnet expose; cập nhật §6 ext IPC API. |
 | 2.0 | 2026-05-30 | SW Lead | **Viết lại theo ARCH-R010:** DDC Modbus RTU master / expansion bus với device profile. |
