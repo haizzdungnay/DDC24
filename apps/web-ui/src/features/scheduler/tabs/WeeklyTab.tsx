@@ -5,9 +5,9 @@ import { Modal } from '../../../shared/components/Modal'
 import type { ScheduleDayKey, ScheduleObject, ScheduleTimeValue, ScheduleValue } from '../../../shared/types'
 import { cn } from '../../../shared/utils'
 import {
-  DAY_KEYS, DAY_LABELS, EM_DASH, activeValue, applySpanToWeekly, blockToTimeValues,
+  DAY_KEYS, DAY_LABELS, EM_DASH, applySpanToWeekly,
   dayToBlocks, findOvernightSpan, formatValue, getNextDay, getPrevDay, isActiveValue,
-  oppositeValue, removeBlockFromDay, removePiecesFromWeekly, secondsToTime, shortTime,
+  oppositeValue, removePiecesFromWeekly, secondsToTime, shortTime,
   sortTimeValues, timeToSeconds, type DayPiece, type OvernightSpan, type TimeBlock
 } from '../shared'
 
@@ -513,7 +513,7 @@ type DragAction =
     }
 
 function WeekGrid({
-  draft, canEdit, selected, onValue, defaultValue, onSelect, onDayFocus,
+  draft, canEdit, selected, defaultValue, onSelect, onDayFocus,
   onAddBlock, onAddSpan, onRemoveSpan, onMoveSpan, onResizeSpan, onOpenEditModal, onOpenContextMenu
 }: {
   draft: ScheduleObject
