@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
@@ -16,7 +16,7 @@
 - Một Program ST điều khiển 16 relay Modbus với **8 kiểu chạy** và chế độ **AUTO** tự chạy lần lượt cả 8, chọn bằng một Virtual Point multistate: OFF, MANUAL, STAGGER, CHASE, BLINK, STAGING, TEST, PULSE, AUTO.
 - Logic tách thành **10 khối người dùng** (5 FUNCTION, 5 FUNCTION_BLOCK) và dùng **17 mục của thư viện hệ thống**: 6 khối `TON`, `TP`, `R_TRIG`, `F_TRIG`, `CTU`, `HYSTERESIS` và 11 hàm `LIMIT`, `SEL`, `MIN`, `MAX`, `SCALE`, `DEADBAND`, `REAL_TO_TIME`, `REAL_TO_UINT`, `REAL_TO_INT`, `INT_TO_REAL`, `DINT_TO_REAL`.
 - An toàn: mất tín hiệu cho phép (`InPermit`) thì tắt ngay; khoá từng kênh để bảo trì; đổi chế độ thì tắt hết và nghỉ 2 s; relay tải thật có thời gian đóng/nghỉ tối thiểu 10 s; các phép trong mã có thể gây lỗi runtime (tràn số, ép kiểu, cận đảo) đều được chặn trước.
-- Mọi đoạn mã ở §4 là **bản đang chạy trên bo** (§9). Quá trình kiểm đã tìm và sửa 9 lỗi của mã đề xuất (7 trên host, 2 trên bo) và 1 lỗi của sản phẩm (Check từ chối VP `integer`/`multistate`, PR #795).
+- Mọi đoạn mã ở §4 là **bản đang chạy trên bo** (§9), **trừ** `FB_MASK_SPLIT` (§4.6) và khối `VAR CONSTANT` của Program: từ phiên bản 1.7 hai chỗ này dùng toán tử bit trên `UINT` và `VAR CONSTANT` (Issue #800), nên cần tool ST có #800. Bo đang chạy bản trước (`MOD 2` / `/ 2` và số trần); mô phỏng 3 001 chu kỳ cho hai bản kết quả **giống hệt từng byte** (§9.1). Quá trình kiểm đã tìm và sửa 9 lỗi của mã đề xuất (7 trên host, 2 trên bo) và 1 lỗi của sản phẩm (Check từ chối VP `integer`/`multistate`, PR #795).
 - Làm theo §5 → §6 → §7. Chu kỳ Program: **100 ms**.
 
 ## 1. Kiểu chạy
@@ -67,12 +67,12 @@ Mỗi dòng dưới đây đã đối chiếu mã nguồn ở `main@0f5d46f3`. D
 | # | Ràng buộc | Nguồn | Thiết kế xử lý thế nào |
 |---|---|---|---|
 | 1 | Không có `FOR`/`WHILE`/`REPEAT`/`EXIT`/`RETURN` | `contracts/programming/st_language_profile_v1.json` (ADR-054) | 16 kênh viết tường minh; FUNCTION gán kết quả qua tên hàm |
-| 2 | Chưa có `ARRAY`, `STRUCT`, `VAR_IN_OUT`; không có `SHL`/`SHR` | như trên (`plannedAdditions`, `deliberateExclusions`) | 16 kênh gói trong một số `UINT` 16 bit; `FB_MASK_SPLIT` tách bit bằng `MOD 2` và `/ 2` |
-| 3 | Khai báo **không** có giá trị khởi tạo (`x : INT := 5;` là sai cú pháp). Mọi biến bắt đầu bằng 0 / FALSE / `T#0s` | ngữ pháp `var_decl` | Tham số lấy từ Virtual Point và luôn được kẹp giới hạn |
+| 2 | Chưa có `ARRAY`, `STRUCT`, `VAR_IN_OUT`. Từ Issue #800: `AND`/`OR`/`XOR`/`NOT` trên `UINT` là phép theo bit, có `SHL`/`SHR` (số bước ≥ 16 cho 0); số có dấu không nhận toán tử bit | như trên (`plannedAdditions`, `deliberateExclusions`) | 16 kênh gói trong một số `UINT` 16 bit; `FB_MASK_SPLIT` tách bit bằng `Mask AND 2^k` |
+| 3 | Từ Issue #800: khai báo có giá trị khởi tạo (`x : INT := 5;`, trừ `VAR_INPUT`) và `VAR CONSTANT` (bắt buộc `:=`, chỉ literal/hằng khai trước/toán tử). Tool ST cũ hơn #800 vẫn báo `ST-SYN-001` | ngữ pháp `var_decl` | Tham số vẫn lấy từ Virtual Point và luôn được kẹp giới hạn; mặt nạ cố định đặt tên bằng `VAR CONSTANT` (`MASK_ODD` …) |
 | 4 | Tên không phân biệt hoa thường và không được trùng từ khoá: `tOn` chính là `TON` | `st_parser.cpp` | Đặt tên `TmrOn`, `TmrOff`, `TimeOn`, `TimeOff` |
 | 5 | Mỗi instance FB chỉ được gọi **một lần mỗi chu kỳ** (`ST-SEM-010`) | `apps/core/application/st/samples/err_fb_called_twice.st` | Mục 3 của Program gọi mọi instance vô điều kiện; `CASE` chỉ đọc output |
 | 6 | FUNCTION phải thuần: không instance FB, không `VAR_OUTPUT`, không `VAR RETAIN`, không Published Signal (`ST-POU-002`). Gọi FUNCTION theo **vị trí** đối số (thứ tự `VAR_INPUT`), gọi FB theo **tên** cổng | `st_pou_registry.cpp` | 5 FUNCTION chỉ tính toán, trạng thái nằm trong FB |
-| 7 | FB/FUNCTION người dùng được **inline** vào Program: dùng chung trần 4096 lệnh IR, 512 slot ghi được, 64 instance FB chuẩn (tính cả `TON` nằm trong FB người dùng) | `st_compile.cpp`, `st_profile_generated.hpp` | Đo thật ở §9: 1463 lệnh, 453 slot, 42 instance |
+| 7 | FB/FUNCTION người dùng được **inline** vào Program: dùng chung trần 4096 lệnh IR, 512 slot ghi được, 64 instance FB chuẩn (tính cả `TON` nằm trong FB người dùng) | `st_compile.cpp`, `st_profile_generated.hpp` | Đo thật ở §9.1: bản trên bo 1 576 lệnh, 467 slot ghi, 43 instance; bản 1.7 với compiler có #799/#800: 1 525 lệnh, 431 slot ghi |
 | 8 | Nhãn `CASE` dạng dải: từ compiler có U-11 (PR #803) dải rộng như `16..32767:` **hợp lệ** (trần đếm theo số nhãn). Tool ST trên bo lab đã lên bản có U-11 từ 2026-09-28 (`main@e3072983`); bo chạy bản cũ hơn thì vẫn từ chối (`CASE label set is too large`) | `st_parser.cpp`; `DDD-LANG-PROG-001` §4.3 | Nhánh "từ 16 trở lên" viết bằng `IF`: chạy được ở cả hai bản, nên giữ nguyên |
 | 9 | Lỗi runtime làm Program **FAULTED** và phải reset tay: tràn số nguyên (không quấn vòng), chia 0, ép kiểu ngoài miền, `TIME` âm, `LIMIT` có cận đảo, `HYSTERESIS` có `LOW ≥ HIGH`, số thực không hữu hạn | `st_exec.cpp`, `st_scheduler.cpp` | Chặn trần bộ đếm, kẹp trước khi đổi kiểu, sắp lại cận trong `FN_SEC_TO_TIME` |
 | 10 | `PID` mang nhãn `REVIEW_REQUIRED`: Check từ chối mọi Program dùng nó. Đây là trạng thái **chờ quyết định** của Controls/Safety + Product (Issue #802, phiếu [`REC-PID-DECISION-REQUEST-20260928`](../07_records/reviews/PID_REVIEW_DECISION_REQUEST_2026-09-28.md)), không phải giới hạn vĩnh viễn | `st_profile_generated.hpp` | Không dùng `PID` |
@@ -109,7 +109,7 @@ flowchart LR
 | `FN_NEXT_STEP` | FUNCTION → `INT` | `LIMIT` | Bước kế tiếp xuôi/ngược, tự quay vòng |
 | `FN_SEC_TO_TIME` | FUNCTION → `TIME` | `MIN`, `MAX`, `LIMIT`, `REAL_TO_TIME` | Giây (REAL) → `TIME`, kẹp dải, chống cận đảo và số âm |
 | `FN_MASK_FROM_REAL` | FUNCTION → `UINT` | `LIMIT`, `REAL_TO_UINT` | REAL từ VP → mặt nạ `UINT` an toàn |
-| `FB_MASK_SPLIT` | FUNCTION_BLOCK | `MOD` | Mặt nạ 16 bit → 16 cờ `B01…B16` |
+| `FB_MASK_SPLIT` | FUNCTION_BLOCK | toán tử `AND` trên `UINT` (Issue #800) | Mặt nạ 16 bit → 16 cờ `B01…B16` |
 | `FB_DO_CHANNEL` | FUNCTION_BLOCK | 2 × `TON` | Bảo vệ một relay: đóng/nghỉ tối thiểu, cưỡng bức tắt, đếm số lần đóng |
 | `FB_STEP_TIMER` | FUNCTION_BLOCK | `TON` | Nhịp bước không trôi |
 | `FB_BLINK` | FUNCTION_BLOCK | `TON` | Xung vuông không trôi |
@@ -280,8 +280,9 @@ END_FUNCTION
 ### 4.6 `FB_MASK_SPLIT` — FUNCTION_BLOCK
 
 ```pascal
-(* Tách mặt nạ 16 bit thành 16 cờ BOOL. Không có SHR/ARRAY trong Rev A nên
-   dùng MOD 2 rồi chia 2 lặp lại - 32 lệnh, không vòng lặp. *)
+(* Tách mặt nạ 16 bit thành 16 cờ BOOL bằng AND theo bit trên UINT (Issue #800).
+   Bản trước (không có toán tử bit) phải dùng MOD 2 rồi chia 2 lặp lại, 32 lệnh
+   và một biến tạm M. *)
 FUNCTION_BLOCK FB_MASK_SPLIT
 VAR_INPUT
     Mask : UINT;
@@ -304,26 +305,22 @@ VAR_OUTPUT
     B15 : BOOL;
     B16 : BOOL;
 END_VAR
-VAR
-    M : UINT;
-END_VAR
-    M := Mask;
-    B01 := (M MOD 2) = 1;  M := M / 2;
-    B02 := (M MOD 2) = 1;  M := M / 2;
-    B03 := (M MOD 2) = 1;  M := M / 2;
-    B04 := (M MOD 2) = 1;  M := M / 2;
-    B05 := (M MOD 2) = 1;  M := M / 2;
-    B06 := (M MOD 2) = 1;  M := M / 2;
-    B07 := (M MOD 2) = 1;  M := M / 2;
-    B08 := (M MOD 2) = 1;  M := M / 2;
-    B09 := (M MOD 2) = 1;  M := M / 2;
-    B10 := (M MOD 2) = 1;  M := M / 2;
-    B11 := (M MOD 2) = 1;  M := M / 2;
-    B12 := (M MOD 2) = 1;  M := M / 2;
-    B13 := (M MOD 2) = 1;  M := M / 2;
-    B14 := (M MOD 2) = 1;  M := M / 2;
-    B15 := (M MOD 2) = 1;  M := M / 2;
-    B16 := (M MOD 2) = 1;
+    B01 := (Mask AND 1) <> 0;
+    B02 := (Mask AND 2) <> 0;
+    B03 := (Mask AND 4) <> 0;
+    B04 := (Mask AND 8) <> 0;
+    B05 := (Mask AND 16) <> 0;
+    B06 := (Mask AND 32) <> 0;
+    B07 := (Mask AND 64) <> 0;
+    B08 := (Mask AND 128) <> 0;
+    B09 := (Mask AND 256) <> 0;
+    B10 := (Mask AND 512) <> 0;
+    B11 := (Mask AND 1024) <> 0;
+    B12 := (Mask AND 2048) <> 0;
+    B13 := (Mask AND 4096) <> 0;
+    B14 := (Mask AND 8192) <> 0;
+    B15 := (Mask AND 16384) <> 0;
+    B16 := (Mask AND 32768) <> 0;
 END_FUNCTION_BLOCK
 ```
 
@@ -601,6 +598,12 @@ VAR RETAIN
     TripCount   : DINT;
     TotalCycles : DINT;
 END_VAR
+VAR CONSTANT
+    MASK_ODD          : UINT := 21845;              (* 0x5555: DO01, DO03, ..., DO15 *)
+    MASK_EVEN         : UINT := NOT MASK_ODD;       (* 0xAAAA: DO02, DO04, ..., DO16 *)
+    MASK_LOW_NIBBLES  : UINT := 3855;               (* 0x0F0F *)
+    MASK_HIGH_NIBBLES : UINT := NOT MASK_LOW_NIBBLES; (* 0xF0F0 *)
+END_VAR
 
     (* ===== 1. Chuẩn hoá đầu vào ===== *)
     Mode := CmdMode;
@@ -683,7 +686,7 @@ END_VAR
     LoadMode := FALSE;
     CASE Mode OF
         1:  IF AutoOn THEN
-                Mask := SEL(AutoTmr.ET < T#4s, 61680, 3855);   (* 0x0F0F rồi 0xF0F0 *)
+                Mask := SEL(AutoTmr.ET < T#4s, MASK_HIGH_NIBBLES, MASK_LOW_NIBBLES);   (* 0x0F0F rồi 0xF0F0 *)
             ELSE
                 Mask := FN_MASK_FROM_REAL(CmdManualMask);
             END_IF;
@@ -703,7 +706,7 @@ END_VAR
                 END_IF;
             END_IF;
             Mask := FN_ONE_HOT(Step);
-        4:  Mask := SEL(Blinker.Q, 43690, 21845);    (* 21845 = kênh lẻ, 43690 = kênh chẵn *)
+        4:  Mask := SEL(Blinker.Q, MASK_EVEN, MASK_ODD);
         5:  LoadMode := TRUE;
             Mask := FN_FIRST_N(Stager.Stages);
         6:  IF TestTrig.Q AND Settled THEN
@@ -1002,6 +1005,8 @@ Build lại `mkddc-st-compile` từ `build/fw` (không có gì thay đổi, targ
 
 Slot ghi được là tài nguyên eo hẹp nhất (AUTO tốn thêm 14 slot): mỗi `FB_DO_CHANNEL` tốn 15 slot. Thêm kênh vào chính Program này sẽ nhanh chóng vượt 512. Xem §11.
 
+**Bản 1.7 (2026-09-28, host).** Cùng Program nhưng `FB_MASK_SPLIT` dùng `AND` theo bit và mặt nạ đặt tên bằng `VAR CONSTANT` (Issue #800), biên dịch bằng compiler có #799 (khung FUNCTION dùng chung) và #800: **1 525 lệnh, 431 slot ghi, 517 slot, 86 hằng, 43 instance**. Chạy `mkddc-st-sim` 300 s ảo (3 001 chu kỳ, 163 lần đổi DO; AUTO → khoá kênh → đảo chiều → STAGING → MANUAL → mất `InPermit`) cho CSV **giống hệt từng byte** bản đang chạy trên bo biên dịch bằng compiler cũ.
+
 ### 9.2 Lỗi tìm thấy và đã sửa trong lúc kiểm
 
 | # | Phát hiện bởi | Triệu chứng | Nguyên nhân | Đã sửa |
@@ -1101,7 +1106,8 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 |---|---|---|
 | `ST-SYN-001 … is a keyword` | Tên biến trùng từ khoá, kể cả khác hoa thường (`tOn`, `Tp`, `Ctu`) | Đổi tên |
 | `ST-SYN-001 CASE label set is too large` | Tool ST cũ hơn U-11 (PR #803), như bản RC trên bo lab, bung dải nhãn `CASE` thành từng giá trị | Tách nhánh lớn ra `IF`, hoặc deploy tool ST từ `main` có U-11 (dải rộng như `16..32767:` hợp lệ). Trần mới đếm theo số nhãn: vượt thì báo `CASE has too many labels` |
-| `ST-SYN-001 expected ';' after variable declaration` | Viết giá trị khởi tạo trong khối `VAR` (`x : INT := 5;`) | Bỏ `:= …`; gán trong thân hoặc lấy từ VP |
+| `ST-SYN-001 expected ';' after variable declaration` | Tool ST cũ hơn Issue #800 gặp giá trị khởi tạo (`x : INT := 5;`) | Deploy tool ST có #800, hoặc bỏ `:= …` và gán trong thân |
+| `ST-SYN-001 … requires ':= <constant expression>'` / `VAR_INPUT … cannot have an initial value` | Hằng thiếu giá trị, hoặc `VAR_INPUT` có giá trị khởi tạo | Thêm `:=` cho hằng; bỏ giá trị khởi tạo ở `VAR_INPUT` (giá trị đến từ binding) |
 | `ST-SEM-010` | Gọi một instance FB hai lần trong một chu kỳ | Mỗi instance gọi đúng một lần, ngoài `IF`/`CASE` |
 | `ST-SEM-013 'X' is not an output of …` | Đọc cổng không tồn tại của FB (ví dụ `Ch01.QX`) | Sửa tên cổng |
 | `ST-POU-001` | Tên POU khác tên trong mã, hoặc sai số đối số khi gọi FUNCTION | Đặt trùng tên; gọi FUNCTION đủ đối số theo thứ tự `VAR_INPUT` |
@@ -1138,3 +1144,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.4 | 2026-09-28 | Ràng buộc 16 và §8: tuỳ chọn FC15 theo thiết bị (PR #804, U-07), mặc định tắt, kèm số đo trên bo (`EV-MB-FC15-20260927`); §7.2 nhắc cột "Giá trị ghi" (U-18). Ràng buộc 8, §9.2 và §10: dải `CASE` rộng hợp lệ từ compiler có U-11 (PR #803), tool ST RC trên bo vẫn từ chối tới khi deploy lại. Mã chương trình không đổi |
 | 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu, ràng buộc 8 và dòng Trạng thái (Active hiện là `0c29f4f1…`) |
 | 1.6 | 2026-09-28 | Ràng buộc 10: `PID` là trạng thái chờ quyết định (Issue #802), trỏ tới phiếu `REC-PID-DECISION-REQUEST-20260928`. Mã chương trình không đổi |
+| 1.7 | 2026-09-28 | Issue #800: `FB_MASK_SPLIT` viết lại bằng `AND` theo bit trên `UINT`; mặt nạ `MASK_ODD`/`MASK_EVEN`/`MASK_LOW_NIBBLES`/`MASK_HIGH_NIBBLES` bằng `VAR CONSTANT`; ràng buộc 2, 3, 7 và §10 theo ngôn ngữ mới; §9.1 số đo bản 1.7 và mô phỏng 3 001 chu kỳ giống hệt bản trên bo. Bo vẫn chạy bản trước |

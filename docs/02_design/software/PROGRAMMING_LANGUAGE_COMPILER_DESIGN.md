@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **Active — IMPLEMENT_READY; user POU/library semantics đã khóa** |
 | Ngày | 2026-09-28 |
 | Chủ quản | Compiler Lead + Controls Lead |
@@ -146,6 +146,23 @@ không được thay bằng unitless.
 - `SIGNAL_PUBLISH(name, value)` chỉ hợp lệ với signal do Program hiện tại sở hữu;
   type/unit phải exact. Publish được stage trong cycle và chỉ xuất hiện ở signal
   bank committed tại boundary; lỗi Program hủy toàn bộ publish đang chờ.
+
+### 4.4 Bổ sung Issue #800 (U-10) — chủ dự án duyệt 2026-09-28
+
+Duyệt theo đề xuất `SW-ST-BITWISE-CONST-INIT-MK-DDC-24-VI` (Q1–Q4), hiện thực cùng ngày:
+
+| Mục | Luật | IR / artifact |
+|---|---|---|
+| `AND`/`OR`/`XOR`/`NOT` trên `UINT` | Theo bit; chỉ `UINT` (không `INT`/`DINT`, không trộn `BOOL`) | Opcode cũ `0x40..0x43` nhận thêm kiểu `UINT` |
+| `SHL`/`SHR` | `(UINT, UINT) → UINT`; `N ≥ 16` cho 0 | Opcode mới `0x44`/`0x45`; entry registry `rev-a.5` |
+| `TIME × số`, `TIME ÷ số` | Số `INT`/`DINT`/`UINT`/`REAL`; `TIME` luôn chuẩn hoá về vế trái; tràn/âm/chia 0 là fault | Opcode mới `TMUL 0x26`/`TDIV 0x27`, kiểu lệnh = kiểu của số |
+| Giá trị khởi tạo | `:=` biểu thức hằng trong `VAR`/`VAR_OUTPUT`/`VAR RETAIN`; cấm `VAR_INPUT` | Trường `init` sẵn có của bảng biến; FUNCTION: `MOV` giá trị khởi tạo mỗi lời gọi |
+| `VAR CONSTANT` | Chỉ đọc, bắt buộc `:=`, không `RETAIN`; gập lúc biên dịch | Không slot ghi, không mục bảng biến; đọc = slot hằng |
+
+**Q4 (ABI) — quyết định hiện thực:** **không** bump `targetAbi` (3841). Opcode mới là bổ
+sung; loader cũ gặp opcode lạ trả `unknown opcode` và từ chối nạp (fail-closed), nên không
+có đường nào chạy sai nghĩa. Bump ABI sẽ làm mọi artifact đã ký trên bo không nạp được nữa
+dù chúng không dùng tính năng mới — cái giá đó không mua thêm được an toàn nào.
 
 ## 5. FBD canonical model
 
@@ -448,6 +465,7 @@ không có semantic riêng ở FE.
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
+| 1.4 | 2026-09-28 | §4.4: Issue #800 (U-10) — toán tử bit trên `UINT`, `SHL`/`SHR`, `TIME × số`, giá trị khởi tạo, `VAR CONSTANT`; opcode `TMUL`/`TDIV`/`SHL`/`SHR`; không bump `targetAbi` (lý do ở §4.4). Chủ dự án duyệt. | Compiler |
 | 1.3 | 2026-09-28 | §4.3 làm rõ câu chữ luật WCET của `CASE` theo hành vi U-11 đã merge (PR #803, `REC-DDC-FIELD-USE-20260927`): trần `kMaxStatements` đếm **số nhãn**, mỗi nhãn (một giá trị hoặc một dải) nở thành tối đa hai phép so biên, nên dải rộng như `16..32767:` hợp lệ. Không đổi luật WCET, IR hay diagnostic; không đổi Product/SRS/VVP/Trace/Risk. | Compiler |
 | 1.1 | 2026-08-24 | Đồng bộ corrective As-Built: ba POU kind, CLI POU/library/signal manifests, IR `MKDDCIR1/schema 1`, signal opcode `0x71/0x72`, section `0x0009`, FBD lowerer 1.1.0 và ranh giới package `MKDDCIR2/layout 2`; giữ trạng thái chưa merge/full-gate/target. | Compiler + Core + System Engineering |
 | 0.1 | 2026-08-09 | Thiết kế ST/FBD, pipeline, diagnostics, determinism, limits và source mapping | System Engineering |
