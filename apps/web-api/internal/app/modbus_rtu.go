@@ -547,6 +547,14 @@ type modbusBusInfo struct {
 	PortReopens   uint64   `json:"port_reopens"`
 	Utilization   *float64 `json:"bus_utilization_percent"`
 	EstimatedLoad float64  `json:"estimated_load_percent"`
+	// T63-003 (PERF-SYS-04/PERF-API-04) — chỉ THÊM. `poll_latency_p50_ms`/`p95`
+	// ở trên giữ nghĩa cũ: cửa sổ 128 giao dịch TRỘN đọc lẫn ghi. Ở đây latency
+	// đọc và ghi RIÊNG kèm `sample_count`/`window_size`, và `since_epoch` để
+	// consumer phân biệt counter reset (iobus restart hoặc apply_config) với
+	// counter giảm. Lấy từ op `status` của kênh điều khiển iobus, không qua SHM.
+	// nil = iobus không trả lời, hoặc là bản trước T63-003: KHÔNG BIẾT, không
+	// phải 0.
+	Telemetry *webModbus.BusTelemetryView `json:"telemetry"`
 }
 
 type modbusEventItem struct {
@@ -675,6 +683,15 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 	for _, load := range webModbus.EstimateBusLoad(cfg, a.modbusValidateOptions()) {
 		loadByBus[load.BusID] = load.EstimatedPct
 	}
+	// T63-003: telemetry có nhãn đi qua kênh điều khiển iobus. Timeout NGẮN, khác
+	// 5 s của đường apply_config: trang Cổng poll định kỳ, và một iobus đang bận
+	// áp cấu hình không được giữ GET này lại — hết hạn thì `telemetry` là null.
+	const busTelemetryTimeout = 300 * time.Millisecond
+	labeled := map[int]webModbus.BusTelemetryView{}
+	control := webModbus.ControlClient{SocketPath: a.cfg.IobusControlSock, Timeout: busTelemetryTimeout}
+	if status, statusErr := control.Status(); statusErr == nil && status.Result == "ok" {
+		labeled = webModbus.BusTelemetryByID(status)
+	}
 
 	out := make([]modbusBusInfo, 0, len(buses))
 	for _, bus := range buses {
@@ -720,6 +737,9 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 			// theo slave; tổng của dây đi riêng ở `total_errors` (REV-BE-10).
 			info.TotalErrors = measured.TotalErrors
 			info.PortReopens = measured.PortReopens
+		}
+		if view, seen := labeled[bus.NumericID()]; seen {
+			info.Telemetry = &view
 		}
 		out = append(out, info)
 	}

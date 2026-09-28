@@ -5,6 +5,8 @@
 #ifndef IOBUS_FIELDBUS_METRICS_HPP
 #define IOBUS_FIELDBUS_METRICS_HPP
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 
@@ -13,6 +15,32 @@
 #include <vector>
 
 namespace iobus::fieldbus {
+
+/* T63-003 (PERF-SYS-04): loại giao dịch trên dây. Latency đọc và ghi công bố
+ * RIÊNG — một lệnh ghi FC06 có readback và một lượt đọc FC03 16 thanh ghi có
+ * phân bố thời gian khác hẳn nhau, gộp chung thì p95 không nói được điều gì
+ * về đường nào đang chậm. */
+enum class TransactionKind : uint8_t { Read = 0, Write = 1 };
+constexpr std::size_t kTransactionKinds = 2;
+
+/* Số mẫu latency giữ cho một bus (mỗi cửa sổ). 128 giao dịch ở nhịp poll
+ * thường dùng phủ khoảng vài chục giây — đủ để p95 phản ánh tình trạng HIỆN
+ * TẠI của dây chứ không phải trung bình từ lúc khởi động. */
+constexpr std::size_t kLatencyWindow = 128;
+
+/* T63-003 (PERF-SYS-04/PERF-API-04): latency MỘT loại giao dịch kèm nhãn cửa
+ * sổ. p50/p95/max tính trên CÙNG một cửa sổ `sample_count` mẫu gần nhất (tối đa
+ * `window_size`), nên người đọc biết con số đại diện cho bao nhiêu giao dịch:
+ * p95 của 3 mẫu không phải p95 của 128 mẫu. `total` là tổng giao dịch loại này
+ * kể từ epoch counter bus (xem `bus_counters_epoch`). */
+struct LatencyWindowStats {
+    uint32_t p50_us = 0;
+    uint32_t p95_us = 0;
+    uint32_t max_us = 0;
+    uint32_t sample_count = 0;
+    uint32_t window_size = 0;
+    uint64_t total = 0;
+};
 
 /* MBR-B110: counter là uint64.
  *
@@ -81,10 +109,16 @@ struct BusMetrics {
     uint64_t    timeout_errors     = 0;
     uint64_t    crc_errors         = 0;
     uint64_t    port_reopens       = 0;
-    /* Độ trễ giao dịch đo THẬT trên dây, tính từ mẫu gần đây (cửa sổ trượt). */
+    /* Độ trễ giao dịch đo THẬT trên dây, tính từ mẫu gần đây (cửa sổ trượt).
+     * NGHĨA CŨ GIỮ NGUYÊN (SHM `kx_bus_metrics_t`, API `/modbus/buses`): p50/p95
+     * trộn đọc lẫn ghi trên 128 giao dịch gần nhất; `latency_max_us` là max kể
+     * từ epoch counter bus, KHÔNG theo cửa sổ. Số tách theo loại ở dưới. */
     uint32_t    latency_p50_us     = 0;
     uint32_t    latency_p95_us     = 0;
     uint32_t    latency_max_us     = 0;
+    /* T63-003: latency tách riêng đọc/ghi, kèm nhãn cửa sổ. */
+    LatencyWindowStats read_latency{};
+    LatencyWindowStats write_latency{};
     /* Thời gian chiếm dây / thời gian trôi qua, ×100 để tránh float trong SHM. */
     uint16_t    utilization_pct_x100 = 0;
     uint64_t    busy_us_window      = 0;
@@ -149,14 +183,48 @@ public:
     uint64_t producer_boot_id() const { std::lock_guard<std::mutex> lock(mu_); return producer_boot_id_; }
     uint64_t counters_since_ms() const { std::lock_guard<std::mutex> lock(mu_); return counters_since_ms_; }
 
-    /* Bus metrics — index theo thứ tự khai báo trong config. */
-    void init_buses(const std::vector<BusMetrics>& buses)
+    /* Bus metrics — index theo thứ tự khai báo trong config.
+     *
+     * T63-003 (PERF-API-04): mỗi lần gọi là một lần counter bus VỀ 0 — kể cả
+     * `apply_config` giữa chừng, khi `producer_boot_id`/`counters_since_ms`
+     * KHÔNG đổi. Trước bản này consumer không phân biệt được "counter vừa reset
+     * vì áp cấu hình" với "counter giảm", nên delta của FE/historian ra số âm.
+     * `bus_counters_epoch` tăng mỗi lần reset; consumer so cặp
+     * (`producer_boot_id`, `bus_counters_epoch`) trước khi tính delta. */
+    void init_buses(const std::vector<BusMetrics>& buses);
+    void init_buses(const std::vector<BusMetrics>& buses, uint64_t now_ms)
     {
         std::lock_guard<std::mutex> lock(mu_);
         buses_ = buses;
+        for (auto& bus : buses_) {
+            bus.read_latency = LatencyWindowStats{};
+            bus.write_latency = LatencyWindowStats{};
+            bus.read_latency.window_size = static_cast<uint32_t>(kLatencyWindow);
+            bus.write_latency.window_size = static_cast<uint32_t>(kLatencyWindow);
+        }
         latency_window_.assign(buses_.size(), {});
+        /* Cấp trước sức chứa cửa sổ trộn: `record_bus_transaction` (luồng
+         * BusWorker) không phải lớn dần vector 1→2→4…→128 lúc đang chạy. */
+        for (auto& window : latency_window_) window.reserve(kLatencyWindow);
+        kind_windows_.assign(buses_.size(), {});
+        ++bus_counters_epoch_;
+        bus_counters_since_ms_ = now_ms;
     }
     size_t bus_count() const { std::lock_guard<std::mutex> lock(mu_); return buses_.size(); }
+
+    /* T63-003: ảnh chụp NHẤT QUÁN mọi bus cùng epoch counter — một lần khoá, để
+     * `apply_config` chen giữa không làm người đọc ghép số của epoch mới với
+     * nhãn của epoch cũ. */
+    struct BusSnapshot {
+        uint64_t bus_counters_epoch = 0;
+        uint64_t bus_counters_since_ms = 0;
+        std::vector<BusMetrics> buses;
+    };
+    BusSnapshot bus_snapshot() const
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        return BusSnapshot{bus_counters_epoch_, bus_counters_since_ms_, buses_};
+    }
     /* Bản SAO có khoá. `i` ngoài dải ⇒ bản rỗng thay vì chạm ngoài vector: tập
      * bus có thể vừa bị `apply_config` thay giữa hai lần gọi của người đọc. */
     BusMetrics bus(size_t i) const
@@ -164,8 +232,11 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         return i < buses_.size() ? buses_[i] : BusMetrics{};
     }
-    /* Ghi nhận một giao dịch đã xong trên bus: thời gian chiếm dây thật. */
-    void record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok);
+    /* Ghi nhận một giao dịch đã xong trên bus: thời gian chiếm dây thật.
+     * T63-003: `kind` BẮT BUỘC — không có giá trị mặc định, để một đường phát
+     * mới không lặng lẽ bị tính nhầm loại. Mẫu vào ring cố định, không cấp phát. */
+    void record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok,
+                                TransactionKind kind);
     void set_bus_state(uint8_t bus_id, const char* state);
     void record_bus_reopen(uint8_t bus_id);
     /* Chốt cửa sổ latency/utilization; gọi ở nhịp publish. */
@@ -212,10 +283,21 @@ private:
 
     std::vector<SlaveMetrics> metrics_;
     std::vector<BusMetrics>   buses_;
-    /* Cửa sổ latency thô cho từng bus (µs), giữ tối đa kLatencyWindow mẫu. */
+    /* Cửa sổ latency thô cho từng bus (µs), giữ tối đa kLatencyWindow mẫu —
+     * cửa sổ TRỘN đọc/ghi của `latency_p50_us`/`latency_p95_us` (nghĩa cũ). */
     std::vector<std::vector<uint32_t>> latency_window_;
+    /* T63-003: ring cố định theo (bus, loại giao dịch). Kích thước cấp một lần ở
+     * `init_buses`; ghi mẫu chỉ chép vào mảng, không cấp phát. */
+    struct LatencyRing {
+        std::array<uint32_t, kLatencyWindow> samples{};
+        uint32_t next = 0;
+        uint32_t count = 0;
+    };
+    std::vector<std::array<LatencyRing, kTransactionKinds>> kind_windows_;
     uint64_t producer_boot_id_  = 0;
     uint64_t counters_since_ms_ = 0;
+    uint64_t bus_counters_epoch_ = 0;
+    uint64_t bus_counters_since_ms_ = 0;
 };
 
 } // namespace iobus::fieldbus

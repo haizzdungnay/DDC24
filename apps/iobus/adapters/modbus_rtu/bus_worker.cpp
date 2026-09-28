@@ -594,7 +594,7 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
             const int saved_errno = errno;
             const uint32_t elapsed_us =
                 static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
-            metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0);
+            metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0, TransactionKind::Read);
 
             /* `T57-3.9` (`ADR-046` bản sửa 2026-08-19): ghi lại giao dịch VỪA
                XONG. Đây là lượt phát mà chu kỳ poll bình thường đã thực hiện —
@@ -1166,7 +1166,7 @@ void BusWorker::write_single(BusSlaveBinding& binding, PendingWrite& w, uint64_t
     }
     const int saved_errno = errno;
     const uint32_t write_elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
-    metrics.record_bus_transaction(bus_.id, write_elapsed_us, rc >= 0);
+    metrics.record_bus_transaction(bus_.id, write_elapsed_us, rc >= 0, TransactionKind::Write);
 
     w.attempts++;
     record_write_frame(w.fc, w.reg_addr, (w.fc == 16) ? 2u : 1u, w.attempts, wire, wire_count,
@@ -1297,7 +1297,7 @@ void BusWorker::write_coil_group(BusSlaveBinding& binding, std::vector<PendingWr
     const uint32_t elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
     /* MỘT giao dịch trên dây ⇒ MỘT mẫu thời lượng/độ chiếm dây. Đếm n lần sẽ
      * thổi phồng mức sử dụng bus đúng ở chỗ bản sửa này làm nó giảm. */
-    metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0);
+    metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0, TransactionKind::Write);
 
     uint8_t attempt = 0;
     for (size_t k = 0; k < n; k++) {

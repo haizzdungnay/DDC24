@@ -31,6 +31,7 @@
 #include "config/iobus_config.hpp"
 #include "diagnostics/alarm_publisher.hpp"
 #include "diagnostics/iobus_metrics.hpp"
+#include "diagnostics/poll_loop_timing.hpp"
 #include "io/io_cache.hpp"
 #include "io/io_conditioning.hpp"
 #include "io/io_scaling.hpp"
@@ -40,6 +41,7 @@
 #include "modbus_rtu/fieldbus_config.hpp"
 #include "modbus_rtu/fieldbus_metrics.hpp"
 #include "modbus_rtu/control_channel.hpp"
+#include "modbus_rtu/control_status.hpp"
 #include "modbus_rtu/bus_worker.hpp"
 #include "modbus_rtu/modbus_master.hpp"
 #include "modbus_rtu/modbus_tcp.hpp"
@@ -532,38 +534,26 @@ int main(int argc, char** argv)
             return fieldbus_metrics.frames().to_json(bus_filter, limit);
         };
         handlers.status_fields = [&]() {
-            char buf[512];
-            std::string buses;
-            for (size_t i = 0; i < fieldbus_metrics.bus_count(); i++) {
-                const auto& bus = fieldbus_metrics.bus(i);
-                char one[256];
-                std::snprintf(one, sizeof(one),
-                              "%s{\"id\":%u,\"name\":\"%s\",\"device\":\"%s\","
-                              "\"state\":\"%s\",\"latency_p50_us\":%u,\"latency_p95_us\":%u,"
-                              "\"utilization_pct_x100\":%u,\"timeout_errors\":%llu,"
-                              "\"crc_errors\":%llu,\"port_reopens\":%llu}",
-                              buses.empty() ? "" : ",", bus.id,
-                              fieldbus::json_escape(bus.name).c_str(),
-                              fieldbus::json_escape(bus.device).c_str(),
-                              fieldbus::json_escape(bus.state).c_str(),
-                              bus.latency_p50_us, bus.latency_p95_us,
-                              bus.utilization_pct_x100,
-                              static_cast<unsigned long long>(bus.timeout_errors),
-                              static_cast<unsigned long long>(bus.crc_errors),
-                              static_cast<unsigned long long>(bus.port_reopens));
-                buses += one;
-            }
-            std::snprintf(buf, sizeof(buf),
-                          "\"generation\":%llu,\"config_revision\":%llu,"
-                          "\"producer_boot_id\":%llu,\"counters_since_ms\":%llu,"
-                          "\"ext_count\":%u,\"sequence\":%llu",
-                          static_cast<unsigned long long>(modbus.provenance().generation),
-                          static_cast<unsigned long long>(modbus.provenance().config_revision),
-                          static_cast<unsigned long long>(fieldbus_metrics.producer_boot_id()),
-                          static_cast<unsigned long long>(fieldbus_metrics.counters_since_ms()),
-                          ext_cache.count(),
-                          static_cast<unsigned long long>(ext_cache.sequence()));
-            return std::string(buf) + ",\"buses\":[" + buses + "]";
+            /* T63-003: nội dung dựng ở `control_status.cpp` (test được từng byte);
+             * chạy trên luồng kênh điều khiển, không chạm luồng poll RT — counter
+             * IOP chỉ được ĐỌC (atomic relaxed). */
+            fieldbus::ControlStatusIdentity identity;
+            identity.generation        = modbus.provenance().generation;
+            identity.config_revision   = modbus.provenance().config_revision;
+            identity.producer_boot_id  = fieldbus_metrics.producer_boot_id();
+            identity.counters_since_ms = fieldbus_metrics.counters_since_ms();
+            identity.ext_count         = ext_cache.count();
+            identity.sequence          = ext_cache.sequence();
+            const IobusMetrics::Snapshot counters = metrics.snapshot();
+            fieldbus::IopCounterSnapshot iop;
+            iop.rx         = counters.rx;
+            iop.tx         = counters.tx;
+            iop.crc_errors = counters.crc_err;
+            iop.seq_errors = counters.seq_err;
+            iop.timeouts   = counters.timeout;
+            iop.retries    = counters.retry;
+            iop.nacks      = counters.nack;
+            return fieldbus::control_status_fields(identity, fieldbus_metrics.bus_snapshot(), iop);
         };
         handlers.apply_config = [&](uint64_t revision, const std::string& checksum,
                                     const std::string& path, std::string* reason,
@@ -888,8 +878,17 @@ int main(int argc, char** argv)
     int64_t max_jitter_ns = 0;
     int64_t min_jitter_ns = -1;
     int64_t sum_jitter_ns = 0;
-    uint32_t overrun_count = 0;
+    /* `overruns` của `iobus.jitter` là bộ đếm TÍCH LUỸ, không reset theo phút.
+     * Ở mức quá tải audit 28/09 đo được (~26k/phút) bản `uint32_t` cũ tràn sau
+     * ~113 ngày và delta last−first của probe ra âm. 64 bit: định dạng dòng
+     * không đổi khi giá trị < 2^32. */
+    uint64_t overrun_count = 0;
+    static_assert(sizeof(overrun_count) == 8, "iobus.jitter overruns phải 64 bit (T63-004)");
     uint64_t last_stats_print = expected_ns;
+    /* T63-004 (PERF-SYS-05/07): tách thời gian vòng thành độ trễ đánh thức,
+     * thời gian làm việc, khoảng IO_RESP, SỰ KIỆN trễ và số vòng chạy bù — xem
+     * diagnostics/poll_loop_timing.hpp. Không cấp phát, không khoá. */
+    PollLoopTiming loop_timing;
     constexpr int MAX_UI_FILTER_SAMPLES = 100;
     float ui_filter_buf[KX_N_UI][MAX_UI_FILTER_SAMPLES] = {};
     uint8_t ui_filter_pos[KX_N_UI] = {};
@@ -914,16 +913,26 @@ int main(int argc, char** argv)
         }
 
         if (actual_ns - last_stats_print > 60000000000ull) {
-            std::fprintf(stderr, "INFO  iobus.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%lu\n",
+            /* Dòng `iobus.jitter` giữ nguyên từng khoá (tooling đọc theo tên
+             * khoá; `overruns` vẫn đếm từng vòng lệch > 1 chu kỳ). Dòng
+             * `iobus.loop_timing` của T63-004 đi CÙNG lời gọi fprintf này: không
+             * thêm lần khoá FILE hay syscall nào vào vòng poll. */
+            char timing_line[PollLoopTiming::kLineCapacity];
+            PollLoopTiming::format_line(timing_line, sizeof(timing_line),
+                                        loop_timing.minute_at(actual_ns), poll_period_ns);
+            std::fprintf(stderr, "INFO  iobus.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%llu count=%lu\n"
+                                 "INFO  %s\n",
                          min_jitter_ns / 1000.0, max_jitter_ns / 1000.0,
                          (sum_jitter_ns / (double)jitter_count) / 1000.0,
-                         overrun_count, jitter_count);
+                         static_cast<unsigned long long>(overrun_count), jitter_count, timing_line);
             last_stats_print = actual_ns;
             max_jitter_ns = 0;
             min_jitter_ns = -1;
             sum_jitter_ns = 0;
             jitter_count = 0;
+            loop_timing.reset_minute();
         }
+        loop_timing.on_wake(expected_ns, actual_ns);
         if (g_reload.load()) {
             g_reload.store(false);
             std::fprintf(stderr, "INFO  iobus.reload SIGHUP (ranh giới scan)\n");
@@ -1011,6 +1020,7 @@ int main(int argc, char** argv)
             IopIoResp resp;
             const IopResult r = client.get_io(&resp);
             if (r.ok()) {
+                loop_timing.on_io_resp(client.last_io_resp_ns());
                 if (st == IopStatus::SAFE_STATE) {
                     /* nhận IO_RESP hợp lệ → RECONNECT (handshake lại) — 05 §13 */
                     client.set_status(IopStatus::RECONNECT);
@@ -1166,6 +1176,7 @@ int main(int argc, char** argv)
             }
         }
 
+        loop_timing.on_work_end(now_ns(), poll_period_ns);
         sleep_until(&next, poll_period_ns);
         expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
     }

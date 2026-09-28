@@ -3,6 +3,7 @@
  * @brief MOD-008: fieldbus metrics + alarm E302/E303.
  */
 #include "fieldbus_metrics.hpp"
+#include "fieldbus_time.hpp"
 
 #include <algorithm>
 
@@ -14,10 +15,41 @@ static constexpr float E303_THRESHOLD = 0.10f;   /* 10% error rate */
  * chu kỳ poll thường dùng. */
 static constexpr uint32_t E303_WINDOW = 20;
 
-/* Số mẫu latency giữ cho một bus. 128 giao dịch ở nhịp poll thường dùng phủ
- * khoảng vài chục giây — đủ để p95 phản ánh tình trạng HIỆN TẠI của dây chứ
- * không phải trung bình từ lúc khởi động. */
-static constexpr size_t kLatencyWindow = 128;
+namespace {
+
+/* p95 theo "nearest rank": chỉ số ceil(0.95·N) − 1 — cùng quy ước với cửa sổ
+ * trộn cũ, để hai con số so được với nhau. */
+std::size_t p95_index(std::size_t n)
+{
+    const std::size_t rank = (n * 95 + 99) / 100;
+    return (rank == 0 ? 1 : rank) - 1;
+}
+
+/* T63-003: thống kê một ring theo loại. Sắp trên bản sao TRÊN STACK (512 byte),
+ * không cấp phát; gọi ở nhịp publish 100 ms, không ở luồng RT. */
+template <typename Ring>
+LatencyWindowStats window_stats(const Ring& ring, uint64_t total)
+{
+    LatencyWindowStats out;
+    out.window_size = static_cast<uint32_t>(kLatencyWindow);
+    out.sample_count = ring.count;
+    out.total = total;
+    if (ring.count == 0) return out;
+    std::array<uint32_t, kLatencyWindow> sorted{};
+    std::copy(ring.samples.begin(), ring.samples.begin() + ring.count, sorted.begin());
+    std::sort(sorted.begin(), sorted.begin() + ring.count);
+    out.p50_us = sorted[ring.count / 2];
+    out.p95_us = sorted[p95_index(ring.count)];
+    out.max_us = sorted[ring.count - 1];
+    return out;
+}
+
+} // namespace
+
+void FieldbusMetrics::init_buses(const std::vector<BusMetrics>& buses)
+{
+    init_buses(buses, monotonic_ms());
+}
 
 void FieldbusMetrics::init(const std::vector<std::string>& names,
                             const std::vector<uint8_t>& addrs)
@@ -45,7 +77,8 @@ BusMetrics* FieldbusMetrics::find_bus(uint8_t bus_id)
     return nullptr;
 }
 
-void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok)
+void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok,
+                                             TransactionKind kind)
 {
     std::lock_guard<std::mutex> lock(mu_);
     BusMetrics* bus = find_bus(bus_id);
@@ -54,13 +87,20 @@ void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us
     if (!ok) bus->total_errors++;
     bus->busy_us_window += elapsed_us;
     if (elapsed_us > bus->latency_max_us) bus->latency_max_us = elapsed_us;
+    if (kind == TransactionKind::Write) bus->write_latency.total++;
+    else bus->read_latency.total++;
 
     if (latency_window_.size() < buses_.size()) latency_window_.resize(buses_.size());
+    if (kind_windows_.size() < buses_.size()) kind_windows_.resize(buses_.size());
     for (size_t i = 0; i < buses_.size(); i++) {
         if (buses_[i].id != bus_id) continue;
         auto& window = latency_window_[i];
         if (window.size() >= kLatencyWindow) window.erase(window.begin());
         window.push_back(elapsed_us);
+        LatencyRing& ring = kind_windows_[i][static_cast<std::size_t>(kind)];
+        ring.samples[ring.next] = elapsed_us;
+        ring.next = static_cast<uint32_t>((ring.next + 1u) % kLatencyWindow);
+        if (ring.count < kLatencyWindow) ring.count++;
         break;
     }
 }
@@ -90,8 +130,15 @@ void FieldbusMetrics::roll_bus_window(uint8_t bus_id, uint64_t window_us)
             bus.latency_p50_us = sorted[sorted.size() / 2];
             /* p95 theo "nearest rank": chỉ số ceil(0.95·N) − 1. Với N nhỏ, cách
              * này trả về phần tử có thật thay vì một số nội suy không tồn tại. */
-            const size_t rank = (sorted.size() * 95 + 99) / 100;
-            bus.latency_p95_us = sorted[(rank == 0 ? 1 : rank) - 1];
+            bus.latency_p95_us = sorted[p95_index(sorted.size())];
+        }
+        /* T63-003: latency tách loại, cùng nhịp chốt với cửa sổ trộn. */
+        if (i < kind_windows_.size()) {
+            const auto& rings = kind_windows_[i];
+            bus.read_latency = window_stats(
+                rings[static_cast<std::size_t>(TransactionKind::Read)], bus.read_latency.total);
+            bus.write_latency = window_stats(
+                rings[static_cast<std::size_t>(TransactionKind::Write)], bus.write_latency.total);
         }
         /* Utilization = thời gian THẬT SỰ chiếm dây / thời gian trôi qua.
          * Không ước lượng từ baud và số điểm: con số ước lượng không phát hiện

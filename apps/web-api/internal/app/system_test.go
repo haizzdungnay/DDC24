@@ -41,6 +41,8 @@ func TestSystemStatusHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
+	// T63-103: số đo đến từ collector nền, không từ lần gọi trong handler.
+	startOSMetricsCollector(t, app)
 
 	token, _, err := app.auth.Authenticate("admin", "admin123", "test")
 	if err != nil {

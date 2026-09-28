@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PERF-FORLINX-063` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **Approved — cổng G0 duyệt 2026-09-28 (chủ sở hữu dự án); READY để implement qua Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809). Cổng G-D1…G-D4 còn chờ** |
 | Ngày | 2026-09-28 |
 | Chủ quản | Tech Lead (điều phối) — owner từng task ghi ở §4 là vai trò đề xuất |
@@ -79,8 +79,8 @@ mã đã sửa, chờ read-back trên bo để đóng · **CLOSED** không còn 
 
 | Finding | Trạng thái | Bằng chứng trong mã | Task |
 |---|---|---|---|
-| `PERF-SYS-05` IOBus chạy bù | **OPEN, xác nhận** | `sleep_until` cộng một chu kỳ vào mốc cũ, không kiểm mốc đã qua ([iobus main.cpp:85-93](../../apps/iobus/bootstrap/main.cpp#L85-L93), gọi ở [dòng 1169](../../apps/iobus/bootstrap/main.cpp#L1169)). Core đã có chính sách đúng trong `BaseStepPacer`, IOBus không dùng | T63-004/201 |
-| `PERF-SYS-07` (mới) biên thời gian IOP | **OPEN** | Giao dịch IOP ≈1,4 ms trong chu kỳ 2 ms; `IOP_RESP_TIMEOUT_MS=3` dài hơn chu kỳ ([iop_protocol.h:49](../../contracts/iop/iop_protocol.h#L49)). Bộ đếm overrun tăng ở **mỗi vòng** chạy bù ([main.cpp:912-914](../../apps/iobus/bootstrap/main.cpp#L912-L914)), nên một lần kẹt 16 ms bị đếm khoảng 7 lần | T63-004/202 |
+| `PERF-SYS-05` IOBus chạy bù | **OPEN, xác nhận** | `sleep_until` cộng một chu kỳ vào mốc cũ, không kiểm mốc đã qua ([iobus main.cpp:86-94](../../apps/iobus/bootstrap/main.cpp#L86-L94), gọi ở [dòng 1191](../../apps/iobus/bootstrap/main.cpp#L1191); số dòng sau T63-004, tại `cb690dfb` là 85-93 và 1169). Core đã có chính sách đúng trong `BaseStepPacer`, IOBus không dùng | T63-004/201 |
+| `PERF-SYS-07` (mới) biên thời gian IOP | **OPEN** | Giao dịch IOP ≈1,4 ms trong chu kỳ 2 ms; `IOP_RESP_TIMEOUT_MS=3` dài hơn chu kỳ ([iop_protocol.h:49](../../contracts/iop/iop_protocol.h#L49)). Bộ đếm overrun tăng ở **mỗi vòng** chạy bù ([main.cpp:922-924](../../apps/iobus/bootstrap/main.cpp#L922-L924); tại `cb690dfb` là 912-914), nên một lần kẹt 16 ms bị đếm khoảng 7 lần | T63-004/202 |
 | `PERF-SYS-01` Core jitter C4 | **OPEN** | 9 lần >100 µs trước audit (không do audit). 5 lần thêm rơi đúng phút thu journal nên không dùng làm bằng chứng nguyên nhân | T63-005/204 |
 | `PERF-API-01` `/points` 503 | **OPEN, xác nhận** | Reader thử 5 vòng liền; gặp seq lẻ là thử lại ngay, không nhường CPU ([shm_reader.go:155-173](../../apps/web-api/internal/app/shm_reader.go#L155-L173)). Core ([iobus_reader.cpp:59](../../apps/core/adapters/ipc/iobus_reader.cpp#L59)) và HMI ([shm_reader.cpp:79](../../apps/hmi/data/shm_reader.cpp#L79)) dùng cùng con số 5 | T63-101/102 |
 | `PERF-API-02` chờ 100 ms lấy CPU | **OPEN, xác nhận** | [system.go:230-246](../../apps/web-api/internal/app/system.go#L230-L246) | T63-103 |
@@ -411,10 +411,10 @@ Phương án cho D02 là **A — retry có deadline** (T63-101/102). Phương á
 
 | Metric | Nguồn |
 |---|---|
-| Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core |
-| Core `seqlock_fail` | Metric Core |
-| IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus |
-| IOP timeout, seq error, CRC | Snapshot API, delta theo epoch |
+| Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core; histogram là dòng `core.wake_hist le25…gt500` — ô rời, theo phút (cộng `sum`), `sum(le200+le500+gt500)` phải bằng delta `core.jitter violations` |
+| Core `seqlock_fail` | Log phút `core.jitter`, khoá `seqlock_fail` (tích luỹ theo tiến trình, lấy delta) — công bố từ T63-005 |
+| IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus `iobus.loop_timing` — khoá theo phút: cộng `sum` cho `late_events`/`catchup_iterations`, lấy `max` cho `*_max_us`; `period_us` xác nhận chu kỳ hiệu lực |
+| IOP timeout, seq error, CRC | Snapshot API, delta theo epoch: `GET /system/status` → `iop.counters` (64 bit, `since_epoch.producer_boot_id`) từ op `status` kênh điều khiển iobus (T63-003); bus Modbus: `GET /modbus/buses` → `telemetry.since_epoch` (`bus_counters_epoch`) |
 | `/points` 200/503, p95 server | Log Web tổng hợp (T63-105) sau cửa sổ |
 | Program/Task missed release, overrun | `/api/v1/programming/runtime` |
 | CPU/RSS từng process, MemAvailable | `/proc` mỗi 5 s |
@@ -433,27 +433,27 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 
 | Finding | Mức | Task | Kiểm chứng chính | Cổng | Trạng thái | Evidence |
 |---|---|---|---|---|---|---|
-| `F-PRG-PERF-001` | P0 | T63-301, T63-302, T63-303 | Tái hiện 16 Program @10 ms trên bo; test budget từng Program | G-D2 | TODO | |
-| `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | TODO | |
+| `F-PRG-PERF-001` | P0 | T63-301, T63-302, T63-303 | Tái hiện 16 Program @10 ms trên bo; test budget từng Program | G-D2 | T63-301 IN-PROGRESS — HOST: 16 × 4.095 @10 ms bị Check từ chối `ST-WORKER-CRASH` sau 61,8 s vì kết quả Check trần 1 MiB (finding [#815](https://github.com/Mekong-HCM/MK-DDC-24/issues/815)), không phải nhờ admission; lớn nhất còn qua 16 × 301, `budgetUs` 124, thực thi p95 63,4 µs; Active khôi phục đúng; TARGET NOT_RUN. T63-302 DONE — CR [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) Proposed (khuyến nghị B2 quy lỗi + C2 cảnh báo admission), chờ G-D2. T63-303 BLOCKED(G-D2) | [evidence §6](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) · [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) |
+| `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | IN-PROGRESS — `state.snap` ghi trên worker `core-snapshot` (SCHED_OTHER, rời CPU quét); luồng quét chỉ bàn giao qua triple buffer (0 cấp phát sau prewarm); SIGHUP mang persist state trong bộ nhớ; worker kẹt không chặn quét, bản mới thay bản chưa ghi; chi phí luồng quét p50 ≈ 10–16 µs (trước: save 0,36–0,98 ms p50, max 9,6 ms) [HOST]; ctest 1697/1697; đo 2 × 30 phút TARGET NOT_RUN. Còn lại ngoài AC: parse cấu hình khi SIGHUP vẫn trên luồng quét (finding riêng) | `apps/core/adapters/persistence/test_state_snapshot_worker.cpp` |
 | `F-PRG-PERF-003` | — | — | Giữ `SEQUENTIAL` | — | N/A(NO-ACTION) | §2.1 |
 | `F-PRG-PERF-004` | P2 | T63-304 | Check 32 Program lần đầu/lặp; jitter không xấu hơn | — | TODO | |
-| `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | TODO | |
-| `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | TODO | |
+| `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
+| `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
 | `F-PRG-PERF-007` | — | — | Bo cài sạch 27/09 | — | N/A(CLOSED) | §2.1 |
-| `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | TODO | |
-| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | TODO | |
-| `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | TODO | |
-| `PERF-API-01` | P1 | T63-101, T63-102 | 0 × 503 trong 30 phút; p95 ≤ 20 ms | — | TODO | |
-| `PERF-API-02` | P2 | T63-103 | p95 status < 20 ms, overview < 50 ms | — | TODO | |
+| `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | IN-PROGRESS — T63-004 HOST PASS: log phút `iobus.loop_timing`; kẹt 16 ms (đồng hồ giả) ⇒ `late_events=1`, `catchup_iterations=24` (luật `overruns` cũ đếm 21); 0 cấp phát trong vòng poll; đo 30 phút TARGET NOT_RUN; T63-201 BLOCKED(G-D1) | `apps/iobus/tests/test_poll_loop_timing.cpp` |
+| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | IN-PROGRESS — T63-004 tách `work_max_us`/`io_resp_gap_max_us`/`period_us`; T63-202 khuyến nghị **giữ** hằng số IOP, điều kiện mở ADR ở Phụ lục A.4; phân bố `work` trên bo NOT_RUN; finding [#816](https://github.com/Mekong-HCM/MK-DDC-24/issues/816) | `apps/iobus/application/diagnostics/poll_loop_timing.hpp` · [Phụ lục A](#12-phụ-lục-a--biên-thời-gian-iop-t63-202-perf-sys-07) |
+| `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | IN-PROGRESS — T63-005 HOST PASS: log phút `core.wake_hist le25…gt500` (ô rời, theo phút; tổng = `count`, ba ô trên 100 µs = vi phạm C4) và `seqlock_fail` tích luỹ ở cuối `core.jitter`; 0 cấp phát; overhead ≈ +2 ns/base step, `step()` không đổi; đo sạch 2 × 30 phút TARGET NOT_RUN ⇒ chưa quyết T63-204 N/A hay mở G-D4 | `apps/core/application/runtime/test_scan_loop.cpp` (`T63_005_*`) |
+| `PERF-API-01` | P1 | T63-101, T63-102 | 0 × 503 trong 30 phút; p95 ≤ 20 ms | — | T63-101 IN-PROGRESS — reader Web thử lại theo deadline 1 ms, nhường CPU (Gosched rồi `nanosleep` 50 µs), hết hạn vẫn 503; counter `shm_reader` ở `/api/v1/system/status` (OpenAPI 1.48.0); HOST: giữ lẻ 50/200 µs ⇒ đọc được (p95 180/323 µs), giữ lẻ vô hạn ⇒ lỗi ở p50 1,03 ms, reader cũ FAIL 3/3; đo 30 phút TARGET NOT_RUN. T63-102 IN-PROGRESS — HMI retry theo deadline 1 ms + nhường CPU + fence acquire, counter công bố ở log phút `hmi.shm_reader` (writer giữ lẻ 50/200 µs: 1000/1000 và 998/1000 lượt đọc được, bản cũ 3/1000 và 1/1000) [HOST]; Core giữ nguyên retry vì `seqlock_fail` trên bo chưa đo, `seqlock_fail` 64 bit; patch retry ≤ 20 µs chuẩn bị sẵn cho nhánh "> 0"; finding [#821](https://github.com/Mekong-HCM/MK-DDC-24/issues/821) (fence seqlock aarch64) | `apps/web-api/internal/app/shm_reader_deadline_test.go`, `shm_reader_metrics_test.go`; `apps/hmi/tests/test_shm_reader.cpp` (`ShmReaderT63102.*`), `apps/core/adapters/diagnostics/tests/test_core_metrics.cpp` |
+| `PERF-API-02` | P2 | T63-103 | p95 status < 20 ms, overview < 50 ms | — | IN-PROGRESS — collector nền 1 s dùng chung; `osMetrics{state,sampledAt,ageMs}` (OpenAPI 1.49.0); unknown/stale không phát số; HOST p95 status 103,5 → 1,11 ms, overview 103,2 → 1,12 ms; đo TARGET NOT_RUN (rủi ro `/overview` < 50 ms trên bo do round-trip web_ipc `currentAlarms`/`overlayOverrideState`, ngoài T63-103) | `apps/web-api/internal/app/osmetrics_collector_test.go`, `osmetrics_latency_test.go` |
 | `PERF-API-03` | P2 | T63-105, T63-108 | Log −80%; GET −50%; freshness ≤ 1 s | G-D3 | TODO | |
 | `PERF-SYS-03` | P2 | T63-106 | Audit read gộp; audit mutation 100% | G-D3 | TODO | |
 | `PERF-SYS-02` | P2 | T63-107 | RTW log −90%; Wi-Fi ổn định | G-D3 | TODO | |
-| `PERF-SYS-06` | P2 | T63-110 | Bảng nguồn ghi eMMC 24 giờ | — | TODO | |
-| `PERF-FE-01` | P2 | T63-104 | Transfer cold load trước/sau; test header | — | TODO | |
-| `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
-| `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | TODO | |
-| `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
-| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | TODO | |
+| `PERF-SYS-06` | P2 | T63-110 | Bảng nguồn ghi eMMC 24 giờ | — | IN-PROGRESS — lệnh `emmc`/`summarize-emmc` của probe (diskstats + `write_bytes` từng tiến trình 60 s, định danh chip/`life_time`, journald); selftest HOST PASS; đo 24 giờ và đối chiếu datasheet TARGET NOT_RUN | [evidence §7](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
+| `PERF-FE-01` | P2 | T63-104 | Transfer cold load trước/sau; test header | — | IN-PROGRESS — build nén sẵn 26 JS/CSS (2.582,4 → 700,9 KiB, verify giải nén); server chọn `.gz` khi nhận gzip và không `Range`, Vary + ETag theo biến thể; HOST Playwright/Chromium 1194 cold `/login` 1.295.308 → 351.462 B (−72,9 %), 0 lỗi console; `verify-project.sh --component browser` PASS 7/7 (sau khi dựng `x11-utils` + shim Chromium); TARGET NOT_RUN | `apps/web-api/internal/app/static_gzip_test.go`, [t63-104-host](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/t63-104-host/) |
+| `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | IN-PROGRESS — recharts chỉ còn trong chunk động `TrendChartPlot` (nạp qua `import()`, shell đã xác thực preload); bỏ nhóm `manualChunks` `charts` vì nó kéo lõi React theo nên mọi trang modulepreload; cổng build `check-login-chunks` (bản build trước sửa → exit 1) + contract vitest; HOST cold `/login` 351.462 → 248.218 B (−29,4 %), `charts` 0/5 lượt, 0 lỗi console; tới biểu đồ đầu tiên median +0,4 % (+0,8 % khi bóp băng thông); layout + browser PASS; TARGET NOT_RUN | `apps/web-ui/scripts/check-login-chunks.mjs`, `src/app/trend-chart-lazy.contract.test.ts` |
+| `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | IN-PROGRESS — `artifact-manifest.json` từng artifact + `deploy-record` + `readback`; selftest HOST 64/64 (gồm e2e `/proc` thật), `test_release_packaging_guard` 14/14; read-back TARGET NOT_RUN (container implementer không có TCP ra bo) | `python3 scripts/artifact_manifest.py selftest`; DEPLOY_FOXLINX bước 6b/7b |
+| `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | IN-PROGRESS — op `status` iobus: `latency_read`/`latency_write` {p50,p95,max,sample_count,window_size,total}, `bus_counters_epoch` (tăng cả khi apply_config), `iop` 64 bit; HTTP `GET /modbus/buses` thêm `telemetry`, `GET /system/status` thêm `iop.counters` (null khi iobus không trả lời, trần 300 ms); OpenAPI 1.50.0; không đổi SHM; HOST ctest 1682/1682, go test 21 package ok; đọc lại trên bo NOT_RUN; finding #819 | `apps/iobus/adapters/modbus_rtu/tests/test_control_status.cpp`, `apps/web-api/internal/modbusrtu/telemetry_window_test.go`, `apps/web-api/internal/app/{modbus_rtu_telemetry,system_iop_counters}_test.go` |
+| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core nay được công bố ở `core.jitter` (T63-005), số trên bo NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 
 ---
 
@@ -478,7 +478,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 |---|---|
 | PR rất lớn, khó review, dễ xung đột | Commit theo task, checkpoint mỗi wave trên Issue, rebase theo wave |
 | Bỏ mốc IOBus làm giảm số giao dịch, dữ liệu cũ hơn | G-D1 chốt freshness; counter `missed_ticks`; test Fake MCU trễ |
-| Worker snapshot làm mất trạng thái khi mất điện | Giữ trình tự ghi nguyên tử và flush khi SIGTERM; ghi rõ cửa sổ mất dữ liệu tối đa |
+| Worker snapshot làm mất trạng thái khi mất điện | Giữ trình tự ghi nguyên tử và flush khi SIGTERM; ghi rõ cửa sổ mất dữ liệu tối đa. **Số của T63-203:** khi mất điện, phần mất là tiến triển counter (giờ chạy `RuntimeCounter`, xung `PulseCounter`) kể từ lần ghi xong gần nhất: tối đa ≈ 60 s nhịp snapshot (như trước) + độ trễ đánh thức worker (tức thời khi có `notify`, ≤ 1 s nếu lỡ tín hiệu) + thời gian ghi; tức chỉ thêm tối đa ≈ 1 s. eMMC treo thì không dồn hàng, chỉ bản mới nhất được ghi. SIGTERM: `stop_and_flush` rồi ghi đồng bộ bản cuối. Rollback: revert commit T63-203, định dạng `state.snap` không đổi |
 | Giảm log làm mất dấu vết điều tra | G-D3; giữ 100% lỗi/mutation/security; dòng tổng hợp có số đếm |
 | Nén sẵn sai `Range`/`ETag` | Chỉ phục vụ `.gz` khi không có `Range`; test header; client không nén nhận identity |
 | CR budget đổi ngữ nghĩa runtime | G-D2; không code trước khi duyệt |
@@ -520,9 +520,84 @@ read-back sha256 và `/api/v1/points`.
 
 ---
 
-## 12. Lịch sử sửa đổi
+## 12. Phụ lục A — Biên thời gian IOP (T63-202, `PERF-SYS-07`)
+
+Chỉ phân tích và khuyến nghị. Plan này **không** đổi hằng số nào trong
+`contracts/iop/iop_protocol.h` (§11).
+
+### A.1 Ngân sách một giao dịch GET_IO theo thiết kế
+
+| Thành phần | Giá trị | Nguồn |
+|---|---:|---|
+| Tốc độ dây | 921.600 baud, 8N1 = 92.160 B/s | `iop_protocol.h:41-47` |
+| `GET_IO` 6 B | 65 µs | như trên |
+| `IO_RESP` 80 B (4 + 74 + 2) | 868 µs | như trên, `IOP_IO_RESP_LEN = 74` |
+| MCU xử lý (SPI DMA 2× ADS131M08 + dựng frame) | ≈ 500 µs, **ước lượng thiết kế** | như trên |
+| **Tổng một giao dịch** | **≈ 1.430 µs** | con số "≈ 1,4 ms" ở record §14 là ước lượng này, không phải số đo |
+| Chu kỳ poll `IOP_GET_IO_PERIOD_MS` | 2.000 µs, dư ≈ 570 µs (28,5%) | `iop_protocol.h:48` |
+| `IOP_RESP_TIMEOUT_MS` | 3.000 µs, **dài hơn chu kỳ** | `iop_protocol.h:49` |
+| Chặn tối đa một giao dịch lỗi | `(IOP_MAX_RETRY + 1) × timeout` = 4 × 3 = **12 ms** = 6 chu kỳ | `iop_client.cpp:168-197` |
+| `IOP_FAULT_TIMEOUT_MS` / `IOP_SAFE_TIMEOUT_MS` | 20 ms / 200 ms | `iop_protocol.h:51,54` |
+
+Lệnh output (`SET_DO`/`SET_AO`, mỗi lệnh chờ `ACK`) chạy trong cùng vòng poll nên
+cộng thêm thời gian dây và độ trễ ACK của MCU. Vòng có output có thể vượt 2 ms mà
+không cần lỗi nào.
+
+### A.2 Số đo hiện có
+
+| Nguồn | Mức | Số đo |
+|---|---|---|
+| Audit 28/09 (record §13.3) | TARGET, Fake MCU qua PTY | late-wake max 16,345 ms; p95/p99 max theo phút 14,007/15,972 ms; +510 overrun/150.004 wake; IOP timeout 161→163 (+2), **seq error 20.117→20.244 (+127)**, CRC 0; khoảng IO_RESP lớn nhất (lifetime) 22,17 ms |
+| T63-004 `iobus.loop_timing` với `fake_mcu` qua PTY, 2 phút | HOST, container không RT | `work_max_us` 6.819–8.445, `io_resp_gap_max_us` 9.586–10.250 theo phút; **không đại diện** cho bo |
+| T63-004 trên bo, 30 phút | TARGET | **NOT_RUN** — cần đường tới bo (evidence §3) |
+
+Giới hạn mức bằng chứng: bo lab chạy IOBus với Fake MCU qua PTY (drop-in
+`nomcu`), không qua dây UART 921.600 baud. Số TARGET vì vậy đo **đường phần mềm +
+PTY**, không đo thời gian dây và xử lý của MCU thật. Muốn đo hai thứ đó cần HIL
+(#624, ngoài phạm vi).
+
+### A.3 Phân tích
+
+1. Khi không có lỗi và không có output, dư 28,5% mỗi chu kỳ là đủ nhưng hẹp.
+2. Timeout 3 ms dài hơn chu kỳ 2 ms, nên **một** lần timeout chắc chắn làm lỡ ít nhất
+   một mốc. Có retry thì vòng poll bị chặn tới 12 ms (6 mốc). Với chính sách chạy bù
+   hiện hành (§2.2 `PERF-SYS-05`), sau đó là một loạt `GET_IO` liên tiếp không
+   nghỉ.
+3. Giả thuyết cho seq error (+127) lớn hơn nhiều timeout (+2): frame trả lời của lần
+   thử trước tới muộn, rơi vào lần thử sau hoặc vòng chạy bù kế tiếp, và bị đếm là
+   lệch `SEQ` (`iop_client.cpp:84-85`). Kiểm chứng giả thuyết: so seq error/giờ trước
+   và sau T63-201 (bỏ chạy bù) trên cùng bo, cùng tải §6.2.
+4. Ở hằng số hợp đồng, chặn tối đa 12 ms vẫn < `IOP_FAULT_TIMEOUT_MS` 20 ms, còn safe
+   200 ms của MCU cách xa. Nhưng gói release đóng `io_config.conf` với poll 10 ms và
+   timeout 10 ms, nên chặn tối đa là 40 ms > 20 ms (finding
+   [#816](https://github.com/Mekong-HCM/MK-DDC-24/issues/816), `state:triage`). Khoá
+   `period_us` của T63-004 cho biết bo đang chạy chu kỳ nào.
+
+### A.4 Khuyến nghị
+
+1. **Giữ nguyên** mọi hằng số IOP: chu kỳ 2 ms, timeout 3 ms, retry 3, fault 20 ms,
+   safe 200 ms. Chưa có số đo nào đòi đổi, và đổi là đổi hợp đồng.
+2. Sửa cơ chế chạy bù trước (T63-201 sau G-D1), rồi đo lại seq error và
+   `catchup_iterations` theo §6.
+3. Điều kiện mở **Issue + ADR riêng** để đổi hằng số IOP, xét sau khi có T63-004 và
+   T63-201 trên bo, đo sạch 2 × 30 phút:
+   - `work_max_us` > 2.000 µs ở hơn 1% số phút; **hoặc**
+   - seq error vẫn tăng sau T63-201; **hoặc**
+   - `io_resp_gap_max_us` ≥ 20.000 µs ở bất kỳ phút nào.
+
+   Phương án khi đó phải cân nhắc trong ADR: timeout ≤ chu kỳ, chu kỳ dài hơn, hoặc
+   tách lệnh output khỏi lượt `GET_IO`.
+4. Chốt giá trị gói release cho `io_config.conf` qua #816. Không làm trong Plan này.
+
+| AC T63-202 | Trạng thái |
+|---|---|
+| Phân bố `work` thực đo so với 2 ms và `IOP_RESP_TIMEOUT_MS=3` | Công cụ đo có (T63-004); số TARGET **NOT_RUN** |
+| Khuyến nghị giữ hay đổi; đổi thì mở Issue + ADR riêng | **Xong**: giữ, kèm điều kiện mở ADR ở A.4 |
+
+## 13. Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-28 | Tạo plan từ record hiệu năng §6/§13/§14 và báo cáo PM D01–D07: đối chiếu 21 finding (19 gốc + 2 mới) với mã tại `main@cb690dfb`, 25 task/5 wave, 5 cổng quyết định, giao thức đo, ma trận truy xuất; thi hành bằng một Issue #809 và một PR |
 | 1.1 | 2026-09-28 | Chủ sở hữu dự án duyệt cổng G0 và cho bắt đầu implement; Plan đưa thẳng lên `main` theo yêu cầu, nhánh thi hành tách từ `main`; thêm mục "bắt đầu ngay được việc gì"; G-D1…G-D4 vẫn chờ |
+| 1.2 | 2026-09-28 | Thi hành Issue #809 (PR #813): cập nhật tracker §7 theo từng commit task; thêm Phụ lục A §12 — biên thời gian IOP (T63-202); §6.3 ghi nguồn log `iobus.loop_timing` (T63-004) |

@@ -27,6 +27,7 @@
 #include "st/st_ir.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
+#include "tests/allocation_probe.hpp"
 
 using namespace core;
 
@@ -572,6 +573,141 @@ TEST(BaseStepPacer, Adr061_JitterMaxIsWindowedToSixtySecondsButCountersAccumulat
     pacer.on_wake(deadline + 100001);
     EXPECT_EQ(pacer.snapshot().jitter_violation_count, 2u);
     EXPECT_EQ(pacer.snapshot().jitter_max_us, 101u) << "µs làm tròn LÊN";
+}
+
+/* T63-005 (PERF-SYS-01): biên từng ô histogram lệch đánh thức. Ô rời nhau, biên
+ * trên BAO GỒM, so theo ns cùng phép so của C4 (`> kJitterLimitNs` là vi phạm). */
+TEST(BaseStepPacer, T63_005_WakeHistBinEdgesAreInclusiveUpperBounds)
+{
+    EXPECT_EQ(wake_hist_bin(0), 0u);
+    EXPECT_EQ(wake_hist_bin(25000), 0u);
+    EXPECT_EQ(wake_hist_bin(25001), 1u);
+    EXPECT_EQ(wake_hist_bin(50000), 1u);
+    EXPECT_EQ(wake_hist_bin(50001), 2u);
+    EXPECT_EQ(wake_hist_bin(100000), 2u) << "đúng 100 µs vẫn đạt C4 ⇒ ô le100";
+    EXPECT_EQ(wake_hist_bin(100001), 3u) << "100,001 µs là vi phạm ⇒ ô le200";
+    EXPECT_EQ(wake_hist_bin(200000), 3u);
+    EXPECT_EQ(wake_hist_bin(200001), 4u);
+    EXPECT_EQ(wake_hist_bin(500000), 4u);
+    EXPECT_EQ(wake_hist_bin(500001), 5u);
+    EXPECT_EQ(wake_hist_bin(UINT64_MAX), 5u);
+    EXPECT_STREQ(kWakeHistKeys[0], "le25");
+    EXPECT_STREQ(kWakeHistKeys[5], "gt500");
+}
+
+/* Mỗi lần thức rơi vào đúng một ô: tổng 6 ô = `count` của phút, và ba ô trên
+ * 100 µs = số vi phạm C4 tăng thêm trong phút. `reset_minute` xoá histogram
+ * nhưng không đụng bộ đếm tích luỹ. */
+TEST(BaseStepPacer, T63_005_WakeHistSumsToCountAndMatchesViolations)
+{
+    constexpr uint64_t kStep = 10 * kScanMs;
+    BaseStepPacer pacer;
+    pacer.start(kStep, 0);
+    pacer.on_wake(0);                                  /* 0 µs ⇒ le25 */
+    const uint64_t lateness_ns[] = {10000, 25000, 30000, 100000, 100001, 150000,
+                                    200001, 499999, 500001, 900000, 20000, 60000};
+    uint64_t deadline = pacer.advance(0);
+    for (uint64_t late : lateness_ns) {
+        pacer.on_wake(deadline + late);
+        deadline = pacer.advance(deadline + late);
+    }
+    const BaseStepJitterMinute& minute = pacer.minute();
+    const std::array<uint64_t, kWakeHistBins> expected = {4, 1, 2, 2, 2, 2};
+    EXPECT_EQ(minute.wake_hist, expected);
+    uint64_t sum = 0;
+    for (uint64_t bin : minute.wake_hist) sum += bin;
+    EXPECT_EQ(sum, minute.count);
+    EXPECT_EQ(minute.wake_hist[3] + minute.wake_hist[4] + minute.wake_hist[5],
+              pacer.snapshot().jitter_violation_count);
+
+    pacer.reset_minute();
+    const std::array<uint64_t, kWakeHistBins> zero{};
+    EXPECT_EQ(pacer.minute().wake_hist, zero);
+    EXPECT_EQ(pacer.snapshot().jitter_violation_count, 6u) << "tích luỹ không reset theo phút";
+    pacer.on_wake(deadline + 40000);
+    EXPECT_EQ(pacer.minute().wake_hist[1], 1u);
+    EXPECT_EQ(pacer.minute().count, 1u);
+}
+
+/* AC T63-005: histogram là mảng tĩnh, ghi ở luồng RT mỗi base step ⇒ 0 cấp phát. */
+TEST(BaseStepPacer, T63_005_WakeHistRecordingDoesNotAllocate)
+{
+    constexpr uint64_t kStep = 10 * kScanMs;
+    BaseStepPacer pacer;
+    pacer.start(kStep, 0);
+    std::size_t allocations = 0;
+    {
+        allocation_probe::ScopedCounter counter;
+        uint64_t now = 0;
+        for (int step = 0; step < 20000; ++step) {
+            pacer.on_wake(now);
+            const uint64_t deadline = pacer.advance(now);
+            now = deadline + static_cast<uint64_t>(step % 7) * 90000u;
+            if (step % 6000 == 5999) pacer.reset_minute();
+        }
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u);
+    EXPECT_GT(pacer.minute().wake_hist[5], 0u) << "vòng thử phải phủ tới ô > 500 µs";
+}
+
+/* T63-005: log phút của vòng quét THẬT (đồng hồ tiêm). `core.jitter` giữ mọi khoá
+ * cũ và nối `seqlock_fail` (tích luỹ) ở cuối; `core.wake_hist` đi ngay sau nó
+ * trong cùng lời gọi fprintf. Writer iobus treo giữa chừng suốt lượt chạy nên
+ * mọi `step()` đọc hỏng seqlock. */
+TEST(ScanLoop, T63_005_MinuteLogCarriesSeqlockFailAndWakeHist)
+{
+    Fixture f;
+    KX_WRITE_BEGIN(&f.shm);
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 5;
+    /* Thức 0: 0 µs (le25) — rồi 50 µs (le50), 150 µs (le200), 0 (le25), 61 s
+     * (gt500). Lần thức 61 s đẩy đồng hồ qua mốc log phút. */
+    time.wake_delay_ns = {50000, 150000, 0, 61000 * kScanMs};
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, nullptr, nullptr);
+    const std::string log = testing::internal::GetCapturedStderr();
+    KX_WRITE_END(&f.shm);
+
+    EXPECT_EQ(count_occurrences(log, "INFO  core.jitter "), 1u) << log;
+    EXPECT_EQ(count_occurrences(log, "INFO  core.wake_hist "), 1u) << log;
+    /* Log phút in ở đầu vòng thứ 5, TRƯỚC step() của vòng đó: 4 step đã đọc hỏng. */
+    EXPECT_NE(log.find(" count=5 window_max_us=61000000 violations=2 missed_steps=6100"
+                       " base_step_us=10000 seqlock_fail=4\n"
+                       "INFO  core.wake_hist le25=2 le50=1 le100=0 le200=1 le500=0 gt500=1"
+                       " base_step_us=10000\n"),
+              std::string::npos)
+        << log;
+    EXPECT_EQ(f.metrics.seqlock_fail(), 5u) << "bộ đếm vẫn tăng sau log (tích luỹ)";
+    for (const char* key : {"min_us=", "max_us=", "avg_us=", "overruns=", "count=",
+                            "window_max_us=", "violations=", "missed_steps=", "base_step_us="})
+        EXPECT_NE(log.find(key), std::string::npos) << "khoá cũ phải còn: " << key;
+}
+
+/* T63-102: `seqlock_fail` của `core.jitter` in đủ 64 bit — cùng kịch bản log
+ * phút của T63-005 nhưng bộ đếm bắt đầu sát biên 2^32. */
+TEST(ScanLoop, T63_102_MinuteLogPrintsSeqlockFailBeyondThirtyTwoBits)
+{
+    Fixture f;
+    f.metrics.set_seqlock_fail_for_test(0xFFFFFFFFull);
+    KX_WRITE_BEGIN(&f.shm);
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 5;
+    time.wake_delay_ns = {0, 0, 0, 61000 * kScanMs};
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, nullptr, nullptr);
+    const std::string log = testing::internal::GetCapturedStderr();
+    KX_WRITE_END(&f.shm);
+    /* 4 step đọc hỏng trước log phút: 2^32 − 1 + 4 = 4294967299. */
+    EXPECT_NE(log.find(" base_step_us=10000 seqlock_fail=4294967299\n"), std::string::npos) << log;
 }
 
 TEST(ScanLoop, NoOverrunWithLightLoad)
