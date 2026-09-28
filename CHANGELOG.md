@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Changed — Plan 63: khắc phục hiệu năng và độ tin cậy nhịp Forlinx (Issue #809)
+
+- **Phạm vi:** thi hành 25 task T63-001…T63-402 của [Plan 63](docs/03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md) trong một PR `Closes #809`, mỗi task một commit; trạng thái từng task ở Plan 63 §7, evidence ở `docs/07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/`. Implementer-Run `implementer-20260928T0536Z`.
+- **T63-001** thêm `scripts/forlinx_perf_probe.py` (đọc-chỉ: tải chuẩn §6.2, mẫu `/proc` 5 s, provenance/nhiệt độ/governor/PID, snapshot API đầu–cuối, journal thu **sau** cửa sổ và tự từ chối `journalctl` trong cửa sổ); `selftest` HOST 34/34 PASS, chạy đầu–cuối với bo giả exit 0 (`journal_commands_in_window = 0`). Baseline TARGET 2 × 30 phút **NOT_RUN**: container implementer không có kết nối TCP ra `mekong-fac.ddns.net:2223` (đối chứng `github.com:22` cũng timeout). Finding: Core đếm `seqlock_fail` nhưng không công bố ra ngoài → giao T63-005.
+
 ### Changed — Trace lấy mẫu tại lần chạy Program, tách lệnh khỏi giá trị đọc lại (Issue #798, U-04, 2026-09-28)
 
 - **Phạm vi:** Core `apps/core/application/st/{st_value_trace,st_process_image,st_scheduler}.*`, `runtime/scan_loop.cpp`, `programming/{program_ipc_server,programming_core_sim_main}.cpp` + test `test_st_value_trace.cpp`, `test_program_ipc_server.cpp`; BE `internal/programming/application/trace.go` + test `trace_release_test.go`, `monitor_trace_test.go`; OpenAPI `1.46.0 → 1.47.0` + client FE sinh lại, re-pin G1/`pgm02`; FE `model/types.ts`, `runtime/WatchTab.tsx` + test; `contracts/ipc/programming_v1/README.md` §4.2; tài liệu `SW-TRACE-RELEASE-COHERENT` 0.2, `PROGRAMMING_INTERFACE_SPEC` 2.3 §3.1, `GUIDE-PROG-ST-DO16-001` 1.9, `DECISIONS.md`, `REC-DDC-FIELD-USE` 1.9.

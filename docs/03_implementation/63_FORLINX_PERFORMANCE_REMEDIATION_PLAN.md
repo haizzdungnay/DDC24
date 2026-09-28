@@ -437,8 +437,8 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | TODO | |
 | `F-PRG-PERF-003` | — | — | Giữ `SEQUENTIAL` | — | N/A(NO-ACTION) | §2.1 |
 | `F-PRG-PERF-004` | P2 | T63-304 | Check 32 Program lần đầu/lặp; jitter không xấu hơn | — | TODO | |
-| `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | TODO | |
-| `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | TODO | |
+| `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
+| `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
 | `F-PRG-PERF-007` | — | — | Bo cài sạch 27/09 | — | N/A(CLOSED) | §2.1 |
 | `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | TODO | |
 | `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | TODO | |
@@ -453,7 +453,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
 | `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | TODO | |
 | `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
-| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | TODO | |
+| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core chưa được công bố → giao T63-005 | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 
 ---
 
