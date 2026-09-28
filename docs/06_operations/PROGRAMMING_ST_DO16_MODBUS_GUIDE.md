@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.5 |
+| Phiên bản | 1.6 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
@@ -75,7 +75,7 @@ Mỗi dòng dưới đây đã đối chiếu mã nguồn ở `main@0f5d46f3`. D
 | 7 | FB/FUNCTION người dùng được **inline** vào Program: dùng chung trần 4096 lệnh IR, 512 slot ghi được, 64 instance FB chuẩn (tính cả `TON` nằm trong FB người dùng) | `st_compile.cpp`, `st_profile_generated.hpp` | Đo thật ở §9: 1463 lệnh, 453 slot, 42 instance |
 | 8 | Nhãn `CASE` dạng dải: từ compiler có U-11 (PR #803) dải rộng như `16..32767:` **hợp lệ** (trần đếm theo số nhãn). Tool ST trên bo lab đã lên bản có U-11 từ 2026-09-28 (`main@e3072983`); bo chạy bản cũ hơn thì vẫn từ chối (`CASE label set is too large`) | `st_parser.cpp`; `DDD-LANG-PROG-001` §4.3 | Nhánh "từ 16 trở lên" viết bằng `IF`: chạy được ở cả hai bản, nên giữ nguyên |
 | 9 | Lỗi runtime làm Program **FAULTED** và phải reset tay: tràn số nguyên (không quấn vòng), chia 0, ép kiểu ngoài miền, `TIME` âm, `LIMIT` có cận đảo, `HYSTERESIS` có `LOW ≥ HIGH`, số thực không hữu hạn | `st_exec.cpp`, `st_scheduler.cpp` | Chặn trần bộ đếm, kẹp trước khi đổi kiểu, sắp lại cận trong `FN_SEC_TO_TIME` |
-| 10 | `PID` mang nhãn `REVIEW_REQUIRED`: Check từ chối mọi Program dùng nó | `st_profile_generated.hpp` | Không dùng `PID` |
+| 10 | `PID` mang nhãn `REVIEW_REQUIRED`: Check từ chối mọi Program dùng nó. Đây là trạng thái **chờ quyết định** của Controls/Safety + Product (Issue #802, phiếu [`REC-PID-DECISION-REQUEST-20260928`](../07_records/reviews/PID_REVIEW_DECISION_REQUEST_2026-09-28.md)), không phải giới hạn vĩnh viễn | `st_profile_generated.hpp` | Không dùng `PID` |
 | 11 | Chu kỳ Program chỉ nhận {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061) | `kAllowedPeriodMs` | Chọn 100 ms |
 | 12 | Mỗi biến `VAR_INPUT`/`VAR_OUTPUT` cần **đúng một** ánh xạ; mỗi đầu ra chỉ một Program được ghi (`ST-OWN-001`, `PRG-ERR-OUTPUT-OWNER-001`) | `samples/io_map.example.json`, `st_diagnostic.hpp` | §5.2 gỡ người ghi khác; không dùng VP trạng thái thì chuyển biến `Sts*` sang `VAR` |
 | 13 | Virtual Point tới chương trình theo **slot**: `boolean` → `BV` → `BOOL`; `integer`/`float` → `AV` → **`REAL`**; `multistate` → `MSV` → `UINT`. VP chủ sở hữu `WEB` chỉ đọc được; Program muốn ghi thì VP phải có chủ sở hữu `PROGRAM` | `programming_pointcatalog.go`; `point_binding_facts.go` (PR #795) | `CmdManualMask` là `REAL`, đổi sang `UINT` bằng `FN_MASK_FROM_REAL`. Web RC `f86150e3` trở về trước suy kiểu từ `signalType` và **từ chối** VP `integer`/`multistate` (`PIO-SRC-001`); cần web có PR #795 (xem §10) |
@@ -1137,3 +1137,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.3 | 2026-09-27 | Thêm chế độ AUTO (`CmdMode = 10`) tự chạy lần lượt mọi chế độ; sửa lỗi bỏ qua bước OFF khi khởi động (lỗi 9); thêm S16, T13; kiểm AUTO trên bo 1 665 chu kỳ |
 | 1.4 | 2026-09-28 | Ràng buộc 16 và §8: tuỳ chọn FC15 theo thiết bị (PR #804, U-07), mặc định tắt, kèm số đo trên bo (`EV-MB-FC15-20260927`); §7.2 nhắc cột "Giá trị ghi" (U-18). Ràng buộc 8, §9.2 và §10: dải `CASE` rộng hợp lệ từ compiler có U-11 (PR #803), tool ST RC trên bo vẫn từ chối tới khi deploy lại. Mã chương trình không đổi |
 | 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu, ràng buộc 8 và dòng Trạng thái (Active hiện là `0c29f4f1…`) |
+| 1.6 | 2026-09-28 | Ràng buộc 10: `PID` là trạng thái chờ quyết định (Issue #802), trỏ tới phiếu `REC-PID-DECISION-REQUEST-20260928`. Mã chương trình không đổi |
