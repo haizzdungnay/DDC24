@@ -42,6 +42,7 @@ void copy_bounded(std::array<char, N>* target, const char* value) noexcept
  *   2. Có BẤT KỲ Program nào FAULTED → FAULT
  *   3. Không phải chủ sở hữu output, hoặc task bị tắt → STOPPED
  *   4. Task còn Program nhưng KHÔNG Program nào đang chạy → STOPPED
+ *      ("đang chạy" = RUNNING/ACTIVE/WAITING: WAITING vẫn được dispatch)
  *   5. Còn lại                        → RUNNING
  *
  * Luật 4 là chỗ ca thứ hai đỏ: `stop("p")` để `enabled()` của TASK nguyên vẹn
@@ -56,7 +57,12 @@ const char* task_state_name(const StTask& task, bool program_owner) noexcept
     for (const auto& program : task.programs()) {
         if (program == nullptr) continue;
         if (program->state == StProgramState::FAULTED) return "FAULT";
-        if (program->state == StProgramState::RUNNING || program->state == StProgramState::ACTIVE) {
+        /* Issue #827: WAITING vẫn được Task dispatch mỗi release (chờ đầu vào
+         * hoặc signal rồi tự về RUNNING), nên Task KHÔNG dừng. Bỏ WAITING khỏi
+         * đây làm Task báo STOPPED suốt khoảng chờ VP sau mỗi lần Core khởi
+         * động, trong khi không ai dừng gì cả. */
+        if (program->state == StProgramState::RUNNING || program->state == StProgramState::ACTIVE ||
+            program->state == StProgramState::WAITING) {
             any_running = true;
         }
     }
@@ -119,6 +125,10 @@ void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_own
             if (program->last_fault_code != nullptr)
                 copy_bounded(&target.last_fault_code, program->last_fault_code);
             target.last_fault_line = static_cast<uint32_t>(program->last_fault_line);
+            /* Issue #827: lý do chỉ có nghĩa khi đang WAITING. */
+            if (program->state == StProgramState::WAITING)
+                copy_bounded(&target.waiting_reason,
+                             st_waiting_reason_name(program->waiting_reason));
             target.fault_count = program->fault_count;
             target.last_exec_ns = program->last_exec_ns;
             target.max_exec_ns = program->max_exec_ns;

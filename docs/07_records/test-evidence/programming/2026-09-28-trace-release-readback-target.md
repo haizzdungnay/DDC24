@@ -88,6 +88,8 @@ Hệ quả cho người đọc Trace: cột "Đọc lại" trễ sau lệnh tớ
 
 ### 5.1 Core khởi động làm Program FAULTED (Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827), U-22) — chưa sửa
 
+> **Cập nhật 2026-09-28 (sau hồ sơ này):** đã sửa ở mức HOST theo quyết định Q1–Q4 của chủ dự án (`DECISIONS.md`, `DDD-CTRL-PROG-001` v1.7 §5): Program chờ đầu vào ở `WAITING` + `INPUT_NOT_READY`, FAULT `ST-RT-008` chỉ khi xấu liên tục ≥ 60 s. Số đo dưới đây là của Core `1602b2fd` (trước bản sửa) và giữ nguyên; bản sửa chưa lên bo.
+
 Cả hai lần Core khởi động (09:22:07Z khi web đang dừng; 09:45:10Z khi web vẫn chạy), `PRG_DO16_MODBUS` bị `FAULTED ST-RT-008` trước lần chạy đầu (`lastRunAtUtc = null`). Nguyên nhân: VP chưa có trong bảng điểm của Core ở lần dispatch đầu, và bo không có `state.snap`. Mã FAULT ngay ở mẫu xấu đầu tiên, trong khi `DDD-CTRL-PROG-001` §5/§9 ghi "hold-last, tự phục hồi theo ngưỡng hoặc ack". Việc sửa cần chốt ngưỡng, nên chưa sửa.
 
 Cả hai lần đã khôi phục bằng `PUT …/runtime-intent` `false` → `true`. Program về `RUNNING` và Revision Active không đổi. Trình tự này nay ghi ở `DEPLOY_FOXLINX.md`.

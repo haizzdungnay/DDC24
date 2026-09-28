@@ -146,3 +146,31 @@ func TestProgramMetricsFaultReasonAbsentStaysNil(t *testing.T) {
 		t.Fatalf("Core moi gui rong => phai la con tro toi \"\", nhan %v", row.LastFaultCode)
 	}
 }
+
+// Issue #827 — lý do WAITING đi cùng quy ước với lý do fault: khoá VẮNG (Core cũ)
+// ⇒ `nil`; khoá có mặt ⇒ chuyển nguyên văn, kể cả chuỗi rỗng ("không chờ gì").
+func TestProgramMetricsWaitingReasonKeepsAbsentVersusEmpty(t *testing.T) {
+	var row RuntimeProgramSnapshot
+	if err := json.Unmarshal([]byte(`{"instanceId":"P_vp","state":"WAITING"}`), &row); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if row.WaitingReason != nil {
+		t.Fatalf("Core cu khong gui => phai nil, nhan %q", *row.WaitingReason)
+	}
+	body := `{"instanceId":"P_vp","state":"WAITING","lastFaultCode":"","faultCount":0,"waitingReason":"INPUT_NOT_READY"}`
+	row = RuntimeProgramSnapshot{}
+	if err := json.Unmarshal([]byte(body), &row); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if row.WaitingReason == nil || *row.WaitingReason != "INPUT_NOT_READY" {
+		t.Fatalf("waitingReason sai: %v", row.WaitingReason)
+	}
+	body = `{"instanceId":"P_vp","state":"RUNNING","waitingReason":""}`
+	row = RuntimeProgramSnapshot{}
+	if err := json.Unmarshal([]byte(body), &row); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if row.WaitingReason == nil || *row.WaitingReason != "" {
+		t.Fatalf("Core moi gui rong => con tro toi \"\", nhan %v", row.WaitingReason)
+	}
+}

@@ -51,6 +51,16 @@ const char* st_program_state_name(StProgramState s)
     return "?";
 }
 
+const char* st_waiting_reason_name(StWaitingReason reason)
+{
+    switch (reason) {
+    case StWaitingReason::NONE:             return "";
+    case StWaitingReason::INPUT_NOT_READY:  return "INPUT_NOT_READY";
+    case StWaitingReason::SIGNAL_NOT_READY: return "SIGNAL_NOT_READY";
+    }
+    return "";
+}
+
 const char* st_scheduler_profile_name(StSchedulerProfile profile)
 {
     switch (profile) {
@@ -101,6 +111,13 @@ void st_program_reset_release(StProgramInstance* program)
     program->release_started = false;
     program->next_release_ns = 0;
     program->consecutive_missed_release = 0;
+}
+
+void st_program_clear_input_wait(StProgramInstance* program)
+{
+    program->waiting_reason = StWaitingReason::NONE;
+    program->input_wait_active = false;
+    program->input_bad_since_ns = 0;
 }
 
 /* T59-402 — release theo Program. `period_ms == 0` nghĩa là "theo chu kỳ Task":
@@ -561,6 +578,8 @@ bool StScheduler::swap_prepared_program_set_at_boundary(
         program->last_run_mono_ns = 0;
         program->consecutive_missed_release = 0;
         program->activated_artifact.swap(program->pending_artifact);
+        /* Issue #827: ngưỡng chờ đầu vào đếm từ lần kích hoạt NÀY. */
+        st_program_clear_input_wait(program.get());
         program->state = program->enabled ? StProgramState::RUNNING
                                           : StProgramState::DISABLED;
         program->pending_is_rollback = false;
@@ -651,8 +670,10 @@ bool StScheduler::start(const std::string& instance_id, std::string* error)
             return false;
         }
     }
-    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING)
+    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING) {
         st_program_reset_release(p);
+        st_program_clear_input_wait(p);
+    }
     p->state = StProgramState::RUNNING;
     p->enabled = true;
     return true;
@@ -671,6 +692,7 @@ bool StScheduler::stop(const std::string& instance_id, std::string* error)
      * hành có chủ ý của người có quyền. Gộp hai ý nghĩa sẽ làm người vận hành
      * không biết mình đang yêu cầu điều gì. "Không ai điều khiển" được xử lý ở
      * tầng Resource qua trigger no_controller. */
+    st_program_clear_input_wait(p);
     p->state = StProgramState::STOPPED;
     return true;
 }
@@ -692,6 +714,7 @@ bool StScheduler::disable(const std::string& instance_id, std::string* error)
 {
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance"; return false; }
+    st_program_clear_input_wait(p);
     p->enabled = false;
     p->state = StProgramState::DISABLED;
     return true;
@@ -706,6 +729,7 @@ bool StScheduler::reset_fault(const std::string& instance_id, std::string* error
         return false;
     }
     p->last_fault_code = nullptr;
+    st_program_clear_input_wait(p);
     p->state = StProgramState::STOPPED;
     return true;
 }
@@ -804,6 +828,9 @@ void StScheduler::apply_pending_enable_requests(StTask& task) noexcept
                  * đường cũ không quan sát được từ ngoài boundary, và tách hai
                  * bước ra mới là thứ tạo ra trạng thái nửa vời khi bước sau hỏng. */
                 st_program_reset_release(p.get());
+                /* Issue #827: bật lại = "lần kích hoạt gần nhất" của Q1; mốc
+                 * mất đầu vào của lần chạy trước không được mang sang. */
+                st_program_clear_input_wait(p.get());
                 p->enabled = true;
                 p->state = StProgramState::RUNNING;
             }
@@ -812,6 +839,7 @@ void StScheduler::apply_pending_enable_requests(StTask& task) noexcept
              * `enabled=true` làm runtime tiếp tục công bố Program đang bật
              * trong khi người vận hành tin là đã tắt. Áp dụng được từ mọi
              * trạng thái, kể cả FAULTED. */
+            st_program_clear_input_wait(p.get());
             p->enabled = false;
             p->state = StProgramState::DISABLED;
         }
@@ -867,6 +895,7 @@ void StScheduler::apply_pending_activations(StTask& task)
         if (ok) {
             p->state = p->pending_is_rollback ? StProgramState::ROLLED_BACK
                                               : StProgramState::ACTIVE;
+            st_program_clear_input_wait(p.get());
             p->process_input_count = 0;
             p->input_snapshot_generation = 0;
             p->input_snapshot_valid = true;
@@ -982,6 +1011,7 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
         program.last_fault_code = code;
         program.last_fault_pc = pc;
         program.last_fault_line = line;
+        st_program_clear_input_wait(&program);
         program.state = StProgramState::FAULTED;
         program.last_successful_base_step = 0;
         outcome->faults++;
@@ -1001,10 +1031,34 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
         (program.input_snapshot_generation != base_step_count_ || !program.input_snapshot_valid)) {
         /* Required input không GOOD/mapped/coercible thì Program này KHÔNG
          * execute — chạy bằng slot cũ sẽ trình bày dữ liệu stale như dữ liệu
-         * live và vẫn publish output mới. */
-        record_fault(st_diag_code::kRtNonFiniteInput, 0, 0);
-        return false;
+         * live và vẫn publish output mới.
+         *
+         * Issue #827 (DECISIONS Q1–Q4): KHÔNG FAULT ngay mẫu xấu đầu tiên. Bản
+         * trước ghi `ST-RT-008` ở đây và FAULTED vĩnh viễn, nên mỗi lần Core khởi
+         * động lại (slot VP về 0/BAD, web đẩy VP sau tới ~10 s) mọi Program dùng
+         * VP chết ở base step đầu, trước khi kịp chạy lần nào. Thay vào đó:
+         * WAITING + INPUT_NOT_READY — không execute, không publish, không tăng
+         * `fault_count`; lệnh cuối (nếu có) giữ trong TTL ADR-051 bởi
+         * `st_withdraw_stale_outputs`. Chỉ khi chuỗi xấu LIÊN TỤC kéo dài tới
+         * `st_input_wait::kFaultThresholdNs` mới FAULT Program (không FAULT
+         * Task: profile Rev A có một Task, FAULT Task là kéo mọi Program khác). */
+        if (!program.input_wait_active) {
+            program.input_wait_active = true;
+            program.input_bad_since_ns = now_ns;
+        }
+        if (now_ns >= program.input_bad_since_ns &&
+            now_ns - program.input_bad_since_ns >= st_input_wait::kFaultThresholdNs) {
+            record_fault(st_diag_code::kRtNonFiniteInput, 0, 0);
+            return false;
+        }
+        program.state = StProgramState::WAITING;
+        program.waiting_reason = StWaitingReason::INPUT_NOT_READY;
+        program.last_successful_base_step = 0;
+        return true;
     }
+    /* Đầu vào GOOD (hoặc Program không có đầu vào): chuỗi xấu, nếu có, đã hết. */
+    program.input_wait_active = false;
+    program.input_bad_since_ns = 0;
 
     const StExecResult result = program.runtime.execute(static_cast<int64_t>(now_ns));
     program.run_count++;
@@ -1024,6 +1078,7 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
          * read-back không nói sai là RUNNING; dispatcher vẫn release WAITING
          * ở chu kỳ kế để tự hồi phục khi producer có dữ liệu. */
         program.state = StProgramState::WAITING;
+        program.waiting_reason = StWaitingReason::SIGNAL_NOT_READY;
         program.last_successful_base_step = 0;
         return true;
     }
@@ -1033,6 +1088,7 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
     }
     program.last_successful_base_step = base_step_count_;
     program.state = StProgramState::RUNNING;
+    program.waiting_reason = StWaitingReason::NONE;
     program.last_successful_now_ns = now_ns;
     /* Đo WCET theo TỪNG Program: với ba lớp chu kỳ trong một Task, một con số
      * gộp ở Task không trả lời được "Program nào ăn hết ngân sách". */
@@ -1161,6 +1217,7 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
             p->last_fault_code = st_diag_code::kRtTaskOverrun;
             p->last_fault_pc = 0;
             p->last_fault_line = 0;
+            st_program_clear_input_wait(p.get());
             p->state = StProgramState::FAULTED;
             p->last_successful_base_step = 0;
             out->faults++;

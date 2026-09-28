@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 2.1 |
+| Phiên bản | 2.2 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
@@ -60,7 +60,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | U-19 | P3 | Hiệu năng API | Một lệnh ghi VP mất ~4 s (các lệnh khác ~0,1 s) | Chưa tái hiện; **đã thêm log phân rã theo pha ở PR #803** (đã merge) để lần sau có dữ liệu |
 | U-20 | P2 | An toàn đầu ra | Program FAULTED thì DO Modbus giữ giá trị cuối tới 60 s | Theo mã; bằng chứng đã thêm vào #384, chờ quyết định ma trận chính sách đầu ra |
 | U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | **Phần kiểm binary cũ đã sửa ở PR #797, đã merge**; **Đóng**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi); kiểm `/proc/<MainPID>/exe` cả ba unit web cùng `7c58fab0…` |
-| U-22 | P1 | Runtime | Mỗi lần Core khởi động, Program có đầu vào VP bị FAULTED `ST-RT-008` trước lần chạy đầu, phải Disable → Enable | Phát hiện khi kiểm #798 trên bo (2026-09-28), hai lần tái hiện; chờ quyết định ngưỡng: [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) |
+| U-22 | P1 | Runtime | Mỗi lần Core khởi động, Program có đầu vào VP bị FAULTED `ST-RT-008` trước lần chạy đầu, phải Disable → Enable | Phát hiện khi kiểm #798 trên bo (2026-09-28), hai lần tái hiện. **Đã sửa ở mức HOST** ([#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827)): `WAITING` + `INPUT_NOT_READY`, ngưỡng 60 s; chưa kiểm trên bo |
 
 ## 3. Chi tiết và đề xuất
 
@@ -192,6 +192,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 **U-22 — Core khởi động làm Program có đầu vào VP bị FAULTED (P1, thêm 2026-09-28).**
 - Khi kiểm #798 trên bo, cả hai lần Core khởi động (lúc web đang dừng và lúc web vẫn chạy) đều để `PRG_DO16_MODBUS` ở `FAULTED ST-RT-008`, `lastRunAtUtc = null`. VP chưa có trong bảng điểm của Core ở lần dispatch đầu; bo không có `state.snap`. `st_scheduler.cpp` FAULT ngay ở mẫu đầu vào xấu đầu tiên, trong khi `DDD-CTRL-PROG-001` §5/§9 ghi "hold-last, tự phục hồi theo ngưỡng hoặc ack". Hệ quả ngoài hiện trường: sau mất điện, mọi Program dùng VP đứng ở FAULTED tới khi có người reset.
 - *Đề xuất:* chốt ngưỡng mất đầu vào liên tục hoặc trạng thái chờ đầu vào lúc khởi động, rồi sửa scheduler; cân nhắc lưu VP vào `state.snap`. Trong lúc chờ: Disable → Enable sau mỗi lần restart Core (`DEPLOY_FOXLINX.md`). Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827); bằng chứng [`EV-PROG-TRACE-798-TARGET`](../test-evidence/programming/2026-09-28-trace-release-readback-target.md) §5.1.
+- *Đã làm (2026-09-28, mức HOST):* chủ dự án chốt Q1–Q6 (`DECISIONS.md`). Đầu vào REQUIRED chưa GOOD ⇒ Program `WAITING` + `waitingReason = INPUT_NOT_READY`: không execute, không publish, không tăng `faultCount`; Program đã publish giữ lệnh cuối trong TTL 60 s, Program chưa publish (lúc khởi động) để đầu ra ở safe state. GOOD trước 60 s ⇒ tự `RUNNING`; xấu liên tục ≥ 60 s ⇒ FAULT Program `ST-RT-008` (không FAULT Task). **Không** lưu VP vào `state.snap`: web áp chính sách khởi động lại VP (ISS-PIO-14) trước khi đẩy xuống, Core tự khôi phục là bỏ qua chính sách đó. Web đẩy lại VP ngay khi Core khởi động (Q6) chưa làm: Core chưa công bố mốc khởi động qua IPC — việc riêng [#830](https://github.com/Mekong-HCM/MK-DDC-24/issues/830). `DDD-CTRL-PROG-001` v1.7 §5/§9; test `ProgrammingStartupInputWait` 6 ca (đỏ trên mã cũ). Kiểm trên bo (T1–T3) chưa chạy.
 
 ## 4. Lộ trình đề xuất
 
@@ -217,6 +218,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Thiết kế đã duyệt | U-12 khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS`/`BITS_TO_WORD`/`UPTIME` | #801 | **Đã làm**: SYSTEM `rev-a.6`, hồ sơ ngôn ngữ 1.2.0; `PRG_DO16_MODBUS` bản khối SYSTEM lệnh IR 1 525 → 792; mô phỏng 3001 chu kỳ chỉ khác nhịp STAGING (đúng `STAGE_DELAY`); 4 lỗi hiện trường có test tái hiện |
 | Quyết định sản phẩm | U-13 duyệt `PID` | #802 | **Đã làm**: phương án 1 của `REC-PID-DECISION-REQUEST-20260928`; harness PID 15/15 và vòng kín τ = 5 s 4/4 (hội tụ ±2 % sau 7,0 s, rời bão hoà ngay chu kỳ đầu, vọt lố 1,25 %, override giữ tích phân trôi ≤ 0,00001, OUT lúc nhả 70,90 so với 100 ở phản chứng); token ký cho `rev-a.6`; cơ chế cổng giữ nguyên, test bằng bảng giả. Lớp HOST; AO thật NOT RUN |
 | Thiết kế đã duyệt | U-04 Trace nhất quán theo lần chạy, tách lệnh / đọc lại | #798 | **Đã làm, kiểm trên bo PASS** (2026-09-28): HOST ở PR #823; kiểm trên bo lộ lỗi đọc lại DO Modbus = lệnh vừa ghi (tuổi 0), sửa bằng `ext_reported_` (commit `1602b2fd`). Sau sửa: Trace 100 ms 450 mẫu, `releaseSeq` +10 ở 449/449 khoảng (Program 10 ms), 485/7 200 ô DO đọc lại ≠ lệnh, tuổi 28…1 097 ms reset theo poll FC01, lệnh → đọc lại khớp trung vị 500 ms; Trace 10 ms `releaseSeq` +1 ở 1 499/1 499 khoảng; 0 vi phạm bất biến vào/ra, `actualValue` = `readbackValue`. Bằng chứng `EV-PROG-TRACE-798-TARGET` |
+| Quyết định sản phẩm | U-22 Core khởi động làm Program có đầu vào VP FAULTED | #827 | **Đã sửa mức HOST** (2026-09-28): `WAITING` + `INPUT_NOT_READY`, ngưỡng 60 s, FAULT Program (không Task), tự phục hồi trước ngưỡng; `waitingReason` qua IPC/REST (OpenAPI 1.51.0), FE "Chờ đầu vào". 6 test `ProgrammingStartupInputWait` đỏ trên mã cũ (`scan 1: FAULTED lastFault=ST-RT-008`), xanh sau sửa. **Kiểm trên bo T1–T3 chưa chạy** (phiên sửa không có đường mạng tới bo) |
 | Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | #805 | **Xong**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi). Health `ok`, Programming `READY`, toolchain `ok` profile `1cb61fec…`, Active người dùng giữ nguyên, 48/48 điểm Modbus `GOOD` (12 kênh UI cục bộ UI-01..04, UI-09..16 báo `bad`, trạng thái có sẵn trước lượt deploy, ngoài phạm vi), FC15 × 8 ở pha BLINK, 0 khung lỗi |
 
 Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastProvider` không huỷ timer khi unmount, làm cả bộ vitest exit 1 dù mọi test PASS. Lỗi này đã sửa trong #797.
@@ -232,6 +234,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.2 | 2026-09-28 | §2, §3.4, §5: U-22 (#827) đã sửa ở mức HOST — chờ đầu vào có ngưỡng 60 s thay cho FAULT tức thì; chưa kiểm trên bo |
 | 2.1 | 2026-09-28 | §5: U-04 (#798) kiểm trên bo PASS sau khi sửa lỗi đọc lại EXT; §2, §3.4: thêm U-22 (#827) — Core khởi động làm Program có đầu vào VP bị FAULTED |
 | 2.0 | 2026-09-28 | §2, §3.3, §5: U-13 (#802) đã làm — `PID` được duyệt và dùng được |
 | 1.9 | 2026-09-28 | §5: U-04 (#798) đã làm ở mức HOST |

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.50.0"
+  version: "1.51.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -5005,6 +5005,18 @@ components:
         `—`, không bao giờ thành `HEALTHY`.
       type: string
       enum: [HEALTHY, DEGRADED, FAULT, UNKNOWN]
+    ProgrammingProgramWaitingReason:
+      description: >
+        Issue #827 — LÝ DO Program đang `WAITING`, do Core cấp (`StWaitingReason`).
+        `INPUT_NOT_READY` = một đầu vào REQUIRED chưa GOOD (điển hình: vài giây
+        sau khi Core khởi động, web chưa kịp đẩy Virtual Point xuống). Program
+        không chạy, không publish, không tăng `faultCount`; lệnh cuối (nếu có)
+        được giữ trong TTL hold-last 60 s, tự về `RUNNING` khi đầu vào GOOD, và
+        chỉ `FAULTED` (`ST-RT-008`) khi đầu vào xấu liên tục quá 60 s.
+        `SIGNAL_NOT_READY` = Published Signal BLOCK_PROGRAM/WAIT (`ST-RT-011`).
+        Không có trường này thì hai tình huống trên trông y hệt nhau trên UI.
+      type: string
+      enum: [INPUT_NOT_READY, SIGNAL_NOT_READY]
     ProgrammingProgramListItem:
       type: object
       additionalProperties: false
@@ -5017,7 +5029,7 @@ components:
          runtimeState, runtimeStateSource, coreState, enabled, observedAt,
          periodMs, lastExecNs, maxExecNs, missedReleaseCount,
          consecutiveMissedRelease, lastRunAtUtc, lastRunAgeMs, lane,
-         lastFaultCode, lastFaultLine, faultCount, health]
+         lastFaultCode, lastFaultLine, faultCount, waitingReason, health]
       properties:
         programId: { type: string, minLength: 1, maxLength: 64 }
         # --- Ý định bền vững (`program_runtime_intents`) ---
@@ -5069,6 +5081,14 @@ components:
         lastFaultCode: { type: [string, "null"], maxLength: 32 }
         lastFaultLine: { type: [integer, "null"], minimum: 0 }
         faultCount: { type: [integer, "null"], minimum: 0 }
+        # --- LÝ DO Program đang chờ (Issue #827) ---
+        # Chỉ khác `null` khi `runtimeStateSource = CORE_LIVE`, `coreState =
+        # WAITING` và Core cấp lý do. `null` ở mọi trạng thái khác, và khi Core
+        # đời cũ chưa có trường này — client hiện nhãn WAITING chung.
+        waitingReason:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingProgramWaitingReason" }
+            - { type: "null" }
         health:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingProgramHealth" }

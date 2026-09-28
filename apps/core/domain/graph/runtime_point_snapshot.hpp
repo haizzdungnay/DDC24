@@ -105,6 +105,11 @@ struct RuntimeProgramSnapshot {
      * Mã rỗng nghĩa là "chưa từng fault", KHÁC HẲN "fault mà không rõ lý do". */
     std::array<char, 24> last_fault_code{};
     uint32_t last_fault_line = 0;
+    /* Issue #827 — LÝ DO Program đang WAITING (`StWaitingReason`): chuỗi rỗng
+     * khi không WAITING. Không có trường này, WAITING-vì-chờ-VP-sau-khởi-động và
+     * WAITING-vì-Published-Signal trông y hệt nhau, trong khi hai tình huống đòi
+     * hai phản ứng khác nhau. Tên dài nhất "SIGNAL_NOT_READY" (16) + NUL. */
+    std::array<char, 20> waiting_reason{};
     uint32_t fault_count = 0;
     /* Bộ đếm TÍCH LUỸ từ lúc release lần đầu. */
     uint32_t missed_release_count = 0;

@@ -62,6 +62,8 @@ function item(overrides: Partial<ProgrammingProgramListItem> = {}): ProgrammingP
     lastFaultCode: null,
     lastFaultLine: null,
     faultCount: null,
+    /* Issue #827 (OpenAPI 1.51.0) — `null` = không WAITING hoặc Core đời cũ. */
+    waitingReason: null,
     ...overrides
   }
 }
@@ -427,5 +429,47 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
     })
     expect(gentle.safeState).toEqual({ active: true, noControllerOnly: true })
     expect(severe.safeState).toEqual({ active: true, noControllerOnly: false })
+  })
+})
+
+/**
+ * Issue #827 — sau mỗi lần Core khởi động, Program dùng Virtual Point chờ web
+ * đẩy VP xuống. Core báo `WAITING` + `waitingReason = INPUT_NOT_READY` thay vì
+ * FAULTED. View model chỉ mang lý do khi dòng đọc SỐNG và đang WAITING.
+ */
+describe('overviewProgramRows — lý do chờ (Issue #827)', () => {
+  const rowOf = (overrides: Partial<ProgrammingProgramListItem>) =>
+    overviewProgramRows({
+      programsStatus: 'ready', programs: page([item(overrides)]), activeSet: activeSet(), activeSequence: 12
+    }).rows[0]
+
+  it('WAITING sống kèm INPUT_NOT_READY ⇒ giữ lý do, không đánh dấu lỗi', () => {
+    const row = rowOf({
+      runtimeState: 'WAITING', coreState: 'WAITING', waitingReason: 'INPUT_NOT_READY',
+      health: null, lastRunAtUtc: null, lastRunAgeMs: null, faultCount: 0, lastFaultCode: ''
+    })
+    expect(row.runtimeState).toBe('WAITING')
+    expect(row.waitingReason).toBe('INPUT_NOT_READY')
+    expect(programRuntimeSemanticState(row.runtimeState)).toBe('warning')
+  })
+
+  it('SIGNAL_NOT_READY được giữ nguyên', () => {
+    expect(rowOf({ runtimeState: 'WAITING', waitingReason: 'SIGNAL_NOT_READY', health: null }).waitingReason)
+      .toBe('SIGNAL_NOT_READY')
+  })
+
+  it('read-back cũ (LAST_KNOWN) không được trình bày lý do như lý do hiện tại', () => {
+    expect(rowOf({ runtimeState: 'WAITING', runtimeStateSource: 'LAST_KNOWN', waitingReason: 'INPUT_NOT_READY' })
+      .waitingReason).toBeNull()
+  })
+
+  it('không WAITING, server đời cũ (khoá vắng) hoặc giá trị lạ ⇒ null', () => {
+    expect(rowOf({ runtimeState: 'RUNNING', waitingReason: 'INPUT_NOT_READY' }).waitingReason).toBeNull()
+    const legacy = item({ runtimeState: 'WAITING' }) as Partial<ProgrammingProgramListItem>
+    delete legacy.waitingReason
+    expect(overviewProgramRows({
+      programsStatus: 'ready', programs: page([legacy as ProgrammingProgramListItem]), activeSet: activeSet(), activeSequence: 12
+    }).rows[0].waitingReason).toBeNull()
+    expect(rowOf({ runtimeState: 'WAITING', waitingReason: 'SOMETHING_NEW' as never }).waitingReason).toBeNull()
   })
 })

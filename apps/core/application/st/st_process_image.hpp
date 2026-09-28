@@ -97,6 +97,10 @@ bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityRes
  * ADR-051):
  *  - STOPPED/DISABLED: rút NGAY tại safe boundary, không chờ TTL — lệnh dừng
  *    có chủ ý của operator phải nhả quyền ngay, không giữ mãi.
+ *  - WAITING vì Published Signal (`SIGNAL_NOT_READY`): rút NGAY — hợp đồng
+ *    signal đã chọn rút candidate.
+ *  - WAITING vì đầu vào REQUIRED chưa GOOD (`INPUT_NOT_READY`, Issue #827): KHÔNG
+ *    rút ngay, giữ lệnh cuối trong TTL như dòng dưới ("hold-last bounded").
  *  - Mọi instance ĐÃ từng publish mà lệnh cuối đã già hơn TTL CỦA INSTANCE theo
  *    ĐỒNG HỒ của tick: rút, bất kể trạng thái là FAULTED, ROLLED_BACK hay
  *    RUNNING-trong-Task-bị-disable. TTL đo tuổi của lệnh, không đo trạng thái,

@@ -114,6 +114,12 @@ type ProgramListItemView struct {
 	LastFaultCode *string `json:"lastFaultCode"`
 	LastFaultLine *uint32 `json:"lastFaultLine"`
 	FaultCount    *uint32 `json:"faultCount"`
+	// WaitingReason — Issue #827: VÌ SAO Program đang WAITING (`INPUT_NOT_READY`,
+	// `SIGNAL_NOT_READY`). Chỉ khác `null` khi số đo là CORE_LIVE, Core báo
+	// `WAITING` và cấp một lý do trong hợp đồng. Sau mỗi lần Core khởi động,
+	// Program dùng Virtual Point chờ vài giây tới khi web đẩy VP xuống; không có
+	// trường này người vận hành chỉ thấy "WAITING" mà không biết chờ gì.
+	WaitingReason *string `json:"waitingReason"`
 
 	// Health do SERVER tính (D-04), nullable. `null` là câu trả lời hợp lệ và có
 	// nghĩa: Program không đang chạy thì "sức khoẻ" không có nội dung gì, FE
@@ -308,6 +314,7 @@ func applyProgramReadBack(item *ProgramListItemView, metrics ProgramMetricsView,
 	item.LastFaultCode = metrics.LastFaultCode
 	item.LastFaultLine = metrics.LastFaultLine
 	item.FaultCount = metrics.FaultCount
+	item.WaitingReason = programWaitingReason(metrics)
 
 	// Mốc lần chạy gần nhất. `lastRunMonoNs == 0` = chưa chạy lần nào kể từ lần
 	// activate gần nhất ⇒ `null`, không phải "chạy lúc mốc 0". Mốc lớn hơn mốc
@@ -403,6 +410,23 @@ func programRuntimeStateFromCore(state string) string {
 		// EMPTY/STAGED/VALIDATED/READY là pha vòng đời TRƯỚC vận hành; mọi giá
 		// trị ngoài bảng cũng về đây. Không đoán, không mặc định thành RUNNING.
 		return "UNKNOWN"
+	}
+}
+
+// programWaitingReason chiếu lý do chờ của Core về enum của hợp đồng
+// (`ProgrammingProgramWaitingReason`). Trả `nil` khi Program không WAITING, khi
+// Core đời cũ không gửi trường, hoặc khi Core gửi một giá trị ngoài enum (Core
+// mới hơn web): bày nguyên văn một chuỗi lạ sẽ làm hỏng hợp đồng, còn `null` chỉ
+// làm FE hiện nhãn WAITING chung — mất chi tiết nhưng không nói sai.
+func programWaitingReason(metrics ProgramMetricsView) *string {
+	if strings.ToUpper(strings.TrimSpace(metrics.State)) != "WAITING" || metrics.WaitingReason == nil {
+		return nil
+	}
+	switch reason := strings.ToUpper(strings.TrimSpace(*metrics.WaitingReason)); reason {
+	case "INPUT_NOT_READY", "SIGNAL_NOT_READY":
+		return &reason
+	default:
+		return nil
 	}
 }
 

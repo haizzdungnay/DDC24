@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ScheduleObject, ScheduleTimeValue } from '../../shared/types'
 import { describeDateRule, findExceptionConflicts, previewDateRule, weekNDayOfMonth } from './dateRules'
 import {
-  blockToTimeValues, capacityUsage, applySpanToWeekly, dayToBlocks, findOvernightSpan, formatValue, getNextDay, getPrevDay, oppositeValue, removeBlockFromDay, removePiecesFromWeekly, secondsToTime,
+  blockToTimeValues, capacityUsage, applySpanToWeekly, dayToBlocks, findOvernightSpan, formatValue, oppositeValue, removeBlockFromDay, removePiecesFromWeekly, secondsToTime,
   timeToSeconds, weeklySummary
 } from './shared'
 

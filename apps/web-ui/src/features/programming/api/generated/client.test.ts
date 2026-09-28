@@ -9,6 +9,7 @@ import {
   ProgrammingNoResponseError,
   type ProgrammingCommissionRequest,
   type ProgrammingProgramHealth,
+  type ProgrammingProgramWaitingReason,
   type ProgrammingProgramListItem,
   type ProgrammingProgramRuntimeState,
   type ProgrammingProgramRuntimeStateSource,
@@ -184,7 +185,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // `SystemStatus`/`Overview`; không thêm operation Programming.
     // `1.50.0` — Plan 63 T63-003: `ModbusBusRuntime.telemetry` và `SystemStatus.iop.counters`
     // (nhãn cửa sổ/epoch); không thêm operation Programming.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.50.0");
+    // `1.51.0` — Issue #827: `ProgrammingProgramListItem.waitingReason`
+    // (INPUT_NOT_READY | SIGNAL_NOT_READY | null); không thêm operation.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.51.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,
@@ -209,6 +212,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     expect(sources).toHaveLength(3);
     const healthValues: ProgrammingProgramHealth[] = ["HEALTHY", "DEGRADED", "FAULT", "UNKNOWN"];
     expect(healthValues).toHaveLength(4);
+    // Issue #827 — ĐÚNG hai lý do chờ; `null` ở mọi trạng thái khác WAITING.
+    const waitingReasons: ProgrammingProgramWaitingReason[] = ["INPUT_NOT_READY", "SIGNAL_NOT_READY"];
+    expect(waitingReasons).toHaveLength(2);
 
     // Core im: mọi số đo phải là `null` HỢP LỆ theo type. Nếu một trường nào bị
     // khai thành non-nullable thì đối tượng này không biên dịch được — đúng chỗ
@@ -230,6 +236,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
           lastFaultCode: null,
           lastFaultLine: null,
           faultCount: null,
+          waitingReason: null,
           runtimeStateSource: "UNAVAILABLE",
           coreState: null,
           enabled: null,

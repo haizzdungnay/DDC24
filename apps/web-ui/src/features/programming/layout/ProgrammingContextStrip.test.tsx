@@ -100,6 +100,8 @@ function programItem(overrides: Partial<ProgrammingProgramListItem> = {}): Progr
     lastFaultCode: null,
     lastFaultLine: null,
     faultCount: null,
+    /* Issue #827 (OpenAPI 1.51.0) — `null` = không WAITING hoặc Core đời cũ. */
+    waitingReason: null,
     ...overrides
   }
 }

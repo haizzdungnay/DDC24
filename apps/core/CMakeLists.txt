@@ -376,6 +376,7 @@ if(CORE_BUILD_TESTS)
       application/programming/tests/test_programming_package_v2_stage.cpp
       application/programming/tests/test_programming_stage_atomicity.cpp
       application/programming/tests/test_programming_activate_intent.cpp
+      application/programming/tests/test_programming_startup_input_wait.cpp
       application/programming/tests/test_programming_package_swap_withdraw.cpp
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp

@@ -271,6 +271,11 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append(",\"lastFaultCode\":\"");
         writer.append_escaped(program.last_fault_code.data(), fixed_length(program.last_fault_code));
         writer.append("\",\"lastFaultLine\":"); writer.append_uint(program.last_fault_line);
+        /* Issue #827 — lý do WAITING đi cùng trạng thái, cùng quy ước với
+         * `lastFaultCode`: rỗng = không chờ gì; khoá vắng = Core đời cũ. */
+        writer.append(",\"waitingReason\":\"");
+        writer.append_escaped(program.waiting_reason.data(), fixed_length(program.waiting_reason));
+        writer.append("\"");
         writer.append(",\"missedReleaseCount\":");
         writer.append_uint(program.missed_release_count);
         writer.append(",\"consecutiveMissedRelease\":");

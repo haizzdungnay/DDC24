@@ -112,6 +112,8 @@ const generatedTypeSchemas = [
   "ProgrammingProgramRuntimeState",
   "ProgrammingProgramRuntimeStateSource",
   "ProgrammingProgramHealth",
+  // Issue #827 — lý do WAITING; phải sinh TRƯỚC ProgrammingProgramListItem.
+  "ProgrammingProgramWaitingReason",
   "ProgrammingProgramListItem",
   "ProgrammingProgramsPage",
   // T59-819 — typed diff của Compare. Hai schema này KHÔNG khai tay: enum

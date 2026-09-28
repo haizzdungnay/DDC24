@@ -601,6 +601,11 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           lastRunAtUtc: TECHNICAL_TIMESTAMP,
           lastRunAgeMs: 100,
           lane: 0,
+          // Đủ trường bắt buộc của `ProgrammingProgramListItem` (OpenAPI 1.51.0).
+          lastFaultCode: '',
+          lastFaultLine: 0,
+          faultCount: 0,
+          waitingReason: null,
           health: 'HEALTHY'
         }))
       })
