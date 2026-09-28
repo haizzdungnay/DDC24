@@ -1,0 +1,145 @@
+{
+  "label": "AFTER",
+  "baseURL": "http://127.0.0.1:18092",
+  "viewport": "1366x768",
+  "browser": "chromium-1194 (/opt/pw-browsers), playwright 1.61.1",
+  "runs": [
+    {
+      "loadMs": 680,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 351462,
+      "staticTransferTotal": 354207,
+      "allTransferTotal": 394644,
+      "gzipResponses": 7,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    },
+    {
+      "loadMs": 644,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 351462,
+      "staticTransferTotal": 354207,
+      "allTransferTotal": 394644,
+      "gzipResponses": 7,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    },
+    {
+      "loadMs": 664,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 351462,
+      "staticTransferTotal": 354207,
+      "allTransferTotal": 394644,
+      "gzipResponses": 7,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    }
+  ],
+  "resourcesRun1": [
+    {
+      "url": "/assets/index-B1UMlOKu.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 120859,
+      "transferHeaders": 330
+    },
+    {
+      "url": "/assets/charts-CUKRAmjw.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 105076,
+      "transferHeaders": 330
+    },
+    {
+      "url": "/assets/react-BFlICnJl.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 56500,
+      "transferHeaders": 328
+    },
+    {
+      "url": "/assets/auth-Bx2qaFYZ.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 38762,
+      "transferHeaders": 328
+    },
+    {
+      "url": "/assets/index-2QZewsSc.css",
+      "type": "stylesheet",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/css; charset=utf-8",
+      "transferBody": 15230,
+      "transferHeaders": 321
+    },
+    {
+      "url": "/assets/icons-C-qQUh_t.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 10719,
+      "transferHeaders": 328
+    },
+    {
+      "url": "/assets/crypto-BpMLuNFX.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 2331,
+      "transferHeaders": 326
+    },
+    {
+      "url": "/login",
+      "type": "document",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "no-cache",
+      "contentType": "text/html; charset=utf-8",
+      "transferBody": 1269,
+      "transferHeaders": 211
+    },
+    {
+      "url": "/assets/rolldown-runtime-hePW80VL.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 716,
+      "transferHeaders": 243
+    }
+  ]
+}

@@ -63,6 +63,10 @@ Kỳ vọng: pass (gồm contracts, tsc, vite, bundle budget). Output tại
 Programming lúc build); cờ `VITE_PROGRAMS_WORKSPACE_V2=1` không được
 `build:release` tự bật. `npm run build` trơn cho ra bản thiếu Programming.
 
+`build:release` sinh `.gz` cạnh JS/CSS trong `build/web-ui/dist/assets` (T63-104).
+Chép NGUYÊN thư mục dist (bước 5 `scp -r`), không lọc bỏ `.gz`. Thiếu `.gz` thì
+web vẫn chạy nhưng mỗi cold load kéo lại khoảng 1,2 MiB chưa nén.
+
 ### Bước 2b: Đồng bộ tool ST (bắt buộc kiểm mỗi lần deploy web)
 
 Web gọi `/usr/sbin/mkddc-st-compile` và `/usr/sbin/mkddc-st-package` khi

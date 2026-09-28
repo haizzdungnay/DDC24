@@ -369,6 +369,10 @@ func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
 	target := filepath.Join(dir, filepath.FromSlash(name))
 	if info, err := os.Stat(target); err == nil && !info.IsDir() {
 		setStaticCacheHeaders(w, name)
+		// T63-104: JS/CSS có `.gz` nén sẵn thì chọn biến thể theo Accept-Encoding/Range.
+		if serveStaticGzipVariant(w, r, target) {
+			return
+		}
 		http.ServeFile(w, r, target)
 		return
 	}
