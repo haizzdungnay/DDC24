@@ -120,7 +120,7 @@ describe('sidebar reflects the signed-in role', () => {
     authMocks.role = 'operator'
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
-    expect(screen.getByRole('link', { name: 'Commissioning' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Commissioning' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Outputs Config' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Device' })).not.toBeInTheDocument()
@@ -130,9 +130,10 @@ describe('sidebar reflects the signed-in role', () => {
     authMocks.role = 'admin'
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
-    for (const label of ['Users', 'Device', 'Time/Date', 'Scheduler', 'Commissioning', 'Outputs Config']) {
+    for (const label of ['Users', 'Device', 'Time/Date', 'Scheduler', 'Outputs Config']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
     }
+    expect(screen.queryByRole('link', { name: 'Commissioning' })).not.toBeInTheDocument()
   })
 })
 
