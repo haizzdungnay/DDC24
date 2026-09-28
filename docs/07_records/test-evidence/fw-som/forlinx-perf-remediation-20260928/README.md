@@ -147,7 +147,45 @@ seed một Active nền rồi **Restore đúng bản đó** sau khi thử.
 | Như trên | TARGET | **NOT_RUN** — cần đường tới bo (§3), và cần #815 được sửa mới Check được 16 × 4.095 |
 | Đọc Active trước, Restore sau | HOST | Restore `SUCCEEDED`, `activeBefore == activeAfter` (`activeRestored: true`) |
 
-## 7. SHA-256
+## 7. T63-110 — nguồn ghi eMMC 24 giờ (`PERF-SYS-06`)
+
+Lệnh `emmc` của probe (chỉ đọc) làm các việc sau:
+
+- Ghi định danh chip: `/sys/block/mmcblk0/device/{name,manfid,oemid,date,rev,fwrev,life_time,pre_eol_info}`.
+- Ghi bảng mount của eMMC, trạng thái journald (có `/var/log/journal` hay không, `journald.conf`) và `journalctl --disk-usage`. Hai lệnh cuối chạy **trước và sau** cửa sổ, không chạy trong cửa sổ.
+- Trong suốt cửa sổ, cứ 60 s lấy một mẫu `/proc/diskstats` và `write_bytes` của **mọi** tiến trình qua `/proc/<pid>/io`.
+- Luồng SSH đứt thì tự nối lại và ghi khoảng hở vào `commands.log`.
+
+Nguồn ghi được chia theo `comm`:
+
+| Nguồn | `comm` |
+|---|---|
+| journald | `systemd-journal` |
+| web (SQLite Programming/historian) | `mkddc-web` |
+| core (snapshot) | `mkddc-core` |
+| iobus | `mkddc-iobus` |
+| hệ thống file | `jbd2`, `kworker` |
+
+Phần còn lại ghi là "khác". Hiệu giữa tổng thiết bị và tổng đã quy nguồn ghi là `unattributed_bytes_per_s`. Phần này gồm tiến trình sống ngắn hơn một khoảng lấy mẫu và phần khuếch đại ghi của hệ thống file.
+
+```bash
+python3 scripts/forlinx_perf_probe.py emmc --ssh "ssh foxlinx" \
+  --out docs/07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/emmc-t63-110 \
+  --duration 86400 --interval 60
+# Sau khi tra datasheet chip theo emmc-identity.txt (tên/manfid):
+python3 scripts/forlinx_perf_probe.py summarize-emmc \
+  --out <thư mục trên> --endurance-tbw <TB theo datasheet>
+```
+
+| Hạng mục T63-110 | Mức | Trạng thái |
+|---|---|---|
+| Parser, chia nguồn, ngoại suy GB/ngày và TB/năm, số năm tới TBW, giải mã `life_time` (JEDEC) | HOST | `selftest` PASS (13 kiểm eMMC) |
+| Chạy đầu–cuối với bo giả (`sh -c` trên `/proc` của host, 4 s) | HOST | exit 0; 3 mẫu; không có lệnh journal trong pha `window` |
+| Đo 24 giờ, bảng nguồn ghi theo B/s | TARGET | **NOT_RUN** — cần đường tới bo (§3) và một cửa sổ 24 giờ không deploy |
+| Đối chiếu độ bền ghi theo datasheet, ước tuổi thọ trước/sau W1 | TARGET | **NOT_RUN** — cần định danh chip đọc từ bo; đo lại sau T63-105/106/107 để có số "sau W1" |
+| Đề xuất retention journald | — | Chờ số đo. Plan 63 không đổi journald khi chưa có bảng nguồn ghi |
+
+## 8. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

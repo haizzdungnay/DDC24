@@ -25,6 +25,9 @@ Lệnh con:
 ``run``        đo N lượt (mặc định 2 × 30 phút, nghỉ 5 phút) và ghi thư mục evidence.
 ``summarize``  tính lại ``summary.json`` từ dữ liệu thô đã ghi (không cần bo).
 ``selftest``   kiểm các bộ parse/tính toán bằng fixture trong file (chạy trên host).
+``emmc``       T63-110: đo 24 giờ nguồn ghi eMMC (``/proc/diskstats`` + ``write_bytes``
+               từng tiến trình), định danh chip/``life_time``, cấu hình journald.
+``summarize-emmc`` tính lại ``emmc-summary.json`` (tuỳ chọn ``--endurance-tbw`` theo datasheet).
 
 Mức bằng chứng: số đo do ``run`` sinh ra là TARGET (bo thật, Fake MCU hay MCU
 thật ghi ở ``provenance.iobus_mode``); ``selftest`` chỉ là HOST.
@@ -813,6 +816,228 @@ def write_summary(out_dir: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# T63-110 — định lượng nguồn ghi eMMC (PERF-SYS-06): cửa sổ 24 giờ
+# ---------------------------------------------------------------------------
+
+EMMC_INTERVAL_S = 60
+EMMC_ID_SCRIPT = r"""
+d=/sys/block/{disk}/device
+for f in name manfid oemid date type rev fwrev life_time pre_eol_info; do
+  [ -r $d/$f ] && echo "ID $f|$(cat $d/$f 2>/dev/null | tr '\n' ' ')"
+done
+echo "SIZE $(cat /sys/block/{disk}/size 2>/dev/null)"
+cat /proc/mounts | while read dev mnt fs opts rest; do
+  case "$dev" in /dev/{disk}*) echo "MOUNT $dev|$mnt|$fs|$opts";; esac
+done
+echo "JOURNAL_PERSISTENT $( [ -d /var/log/journal ] && echo yes || echo no)"
+for f in /etc/systemd/journald.conf /etc/systemd/journald.conf.d/*.conf; do
+  [ -r "$f" ] && sed -n '/^[A-Za-z]/s/^/JOURNALD_CONF /p' "$f"
+done
+true
+"""
+
+
+def emmc_sampler_script(disk: str, interval: int) -> str:
+    """Mỗi `interval` giây: diskstats + `write_bytes` của MỌI tiến trình.
+
+    `/proc/<pid>/io` gán byte ghi cho tiến trình làm bẩn page cache — đúng thứ
+    cần để chia nguồn ghi (journald, SQLite của web, snapshot Core, …). Chỉ đọc.
+    """
+    return (
+        f"while :; do echo \"@T $(cut -d' ' -f1 /proc/uptime) $(date +%s)\"; "
+        f"echo @DISK; sed -n '/ {disk}/p' /proc/diskstats; echo @IO; "
+        "for p in /proc/[0-9]*; do "
+        "w=$(sed -n 's/^write_bytes: //p' $p/io 2>/dev/null); "
+        "[ -n \"$w\" ] && echo \"${p#/proc/} $w $(cat $p/comm 2>/dev/null)\"; done; "
+        f"echo @END; sleep {interval}; done"
+    )
+
+
+def parse_emmc_stream(text: str) -> List[Dict[str, Any]]:
+    samples: List[Dict[str, Any]] = []
+    cur: Optional[Dict[str, Any]] = None
+    section = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("@T "):
+            parts = line.split()
+            cur = {"uptime_s": float(parts[1]), "epoch": int(parts[2]), "disk": {}, "io": {}}
+            section = None
+        elif cur is None:
+            continue
+        elif line == "@END":
+            samples.append(cur)
+            cur = None
+        elif line in ("@DISK", "@IO"):
+            section = line[1:]
+        elif section == "DISK":
+            f = line.split()
+            if len(f) >= 14:
+                cur["disk"][f[2]] = {"writes": int(f[7]), "sectors_written": int(f[9])}
+        elif section == "IO":
+            f = line.split(None, 2)
+            if len(f) >= 2 and f[0].isdigit() and f[1].isdigit():
+                cur["io"][f[0]] = (int(f[1]), f[2] if len(f) > 2 else "?")
+    return samples
+
+
+# Ánh xạ comm → nguồn ghi theo bảng AC T63-110. `jbd2`/`kworker` là ghi của
+# chính hệ thống file (commit journal ext4, writeback) — tách riêng để không
+# gán nhầm cho ứng dụng.
+EMMC_SOURCES = (
+    ("journald", ("systemd-journal",)),
+    ("web (SQLite Programming/historian)", ("mkddc-web",)),
+    ("core (snapshot)", ("mkddc-core",)),
+    ("iobus", ("mkddc-iobus",)),
+    ("hệ thống file (jbd2/kworker)", ("jbd2", "kworker")),
+)
+
+
+def classify_comm(comm: str) -> str:
+    for source, prefixes in EMMC_SOURCES:
+        if any(comm.startswith(prefix) for prefix in prefixes):
+            return source
+    return "khác"
+
+
+def summarize_emmc(samples: List[Dict[str, Any]], disk: str = DEFAULT_DISK,
+                   endurance_tbw: Optional[float] = None) -> Dict[str, Any]:
+    if len(samples) < 2:
+        return {"sample_count": len(samples), "note": "không đủ 2 mẫu"}
+    first, last = samples[0], samples[-1]
+    elapsed = last["uptime_s"] - first["uptime_s"]
+    out: Dict[str, Any] = {"sample_count": len(samples), "elapsed_s": round(elapsed, 1),
+                           "first_epoch": first["epoch"], "last_epoch": last["epoch"]}
+    parts = {}
+    for name, end in last["disk"].items():
+        start = first["disk"].get(name)
+        if start and elapsed > 0:
+            parts[name] = {
+                "write_bytes_per_s": round((end["sectors_written"] - start["sectors_written"])
+                                           * SECTOR_BYTES / elapsed, 1),
+                "write_iops": round((end["writes"] - start["writes"]) / elapsed, 3),
+            }
+    out["partitions"] = parts
+    total = (parts.get(disk) or {}).get("write_bytes_per_s")
+    out["device_write_bytes_per_s"] = total
+    # Byte ghi theo tiến trình: delta giữa lần đầu và lần cuối THẤY pid đó.
+    # Tiến trình sống ngắn hơn một khoảng lấy mẫu không được thấy — phần đó
+    # nằm trong "chưa quy nguồn" (tổng thiết bị − tổng đã quy).
+    seen_first: Dict[str, Tuple[int, str, float]] = {}
+    seen_last: Dict[str, Tuple[int, str, float]] = {}
+    for sample in samples:
+        for pid, (wbytes, comm) in sample["io"].items():
+            key = f"{pid}:{comm}"
+            seen_first.setdefault(key, (wbytes, comm, sample["uptime_s"]))
+            seen_last[key] = (wbytes, comm, sample["uptime_s"])
+    by_source: Dict[str, float] = {}
+    by_comm: Dict[str, float] = {}
+    for key, (w0, comm, _) in seen_first.items():
+        w1 = seen_last[key][0]
+        delta = max(0, w1 - w0)
+        by_comm[comm] = by_comm.get(comm, 0.0) + delta
+        source = classify_comm(comm)
+        by_source[source] = by_source.get(source, 0.0) + delta
+    rate = (lambda b: round(b / elapsed, 1)) if elapsed > 0 else (lambda b: None)
+    out["sources_bytes_per_s"] = {k: rate(v) for k, v in sorted(by_source.items(), key=lambda kv: -kv[1])}
+    out["top_comm_bytes_per_s"] = {k: rate(v) for k, v in sorted(by_comm.items(), key=lambda kv: -kv[1])[:15]}
+    attributed = sum(by_source.values()) / elapsed if elapsed > 0 else 0.0
+    out["attributed_bytes_per_s"] = round(attributed, 1)
+    if total is not None:
+        out["unattributed_bytes_per_s"] = round(total - attributed, 1)
+        out["gb_per_day"] = round(total * 86400 / 1e9, 3)
+        out["tb_per_year"] = round(total * 86400 * 365 / 1e12, 3)
+        if endurance_tbw:
+            out["endurance_tbw"] = endurance_tbw
+            out["years_to_endurance"] = round(endurance_tbw / (total * 86400 * 365 / 1e12), 1) if total > 0 else None
+    return out
+
+
+def parse_emmc_identity(text: str) -> Dict[str, Any]:
+    out: Dict[str, Any] = {"id": {}, "mounts": [], "journald_conf": []}
+    for line in text.splitlines():
+        tag, _, rest = line.partition(" ")
+        if tag == "ID":
+            key, _, value = rest.partition("|")
+            out["id"][key] = value.strip()
+        elif tag == "SIZE":
+            out["size_bytes"] = int(rest) * SECTOR_BYTES if rest.strip().isdigit() else None
+        elif tag == "MOUNT":
+            dev, mnt, fs, opts = (rest.split("|") + ["", "", ""])[:4]
+            out["mounts"].append({"dev": dev, "mount": mnt, "fs": fs, "opts": opts})
+        elif tag == "JOURNAL_PERSISTENT":
+            out["journal_persistent_dir"] = rest.strip() == "yes"
+        elif tag == "JOURNALD_CONF":
+            out["journald_conf"].append(rest.strip())
+    # EXT_CSD DEVICE_LIFE_TIME_EST (JEDEC eMMC 5.0): 0x01 = 0–10% đã dùng, …, 0x0B = vượt.
+    life = out["id"].get("life_time", "").split()
+    if life:
+        def pct(v: str) -> Optional[str]:
+            try:
+                n = int(v, 16)
+            except ValueError:
+                return None
+            return None if n == 0 else ("vượt tuổi thọ" if n >= 0x0B else f"{(n - 1) * 10}–{n * 10}%")
+        out["life_time_used"] = [pct(v) for v in life]
+    return out
+
+
+def run_emmc(board: "Board", out_dir: str, duration_s: float, interval: int, disk: str) -> Dict[str, Any]:
+    os.makedirs(out_dir, exist_ok=True)
+    board.log.phase = "pre"
+    ident = board.sh(EMMC_ID_SCRIPT.format(disk=disk))
+    with open(os.path.join(out_dir, "emmc-identity.txt"), "w", encoding="utf-8") as handle:
+        handle.write(ident)
+    usage_pre = board.sh("journalctl --disk-usage 2>&1 || true")
+    board.log.phase = "window"
+    start = int(time.time())
+    board.log.write("window", f"emmc start epoch={start}")
+    chunks: List[str] = []
+    deadline = time.monotonic() + duration_s
+    while time.monotonic() < deadline:
+        # Luồng SSH có thể đứt trong 24 giờ: nối lại và ghi khoảng hở; bộ đếm
+        # /proc là tích luỹ nên tổng thiết bị không mất, chỉ mất tiến trình
+        # sống trọn trong khoảng hở.
+        proc = board.spawn(emmc_sampler_script(disk, interval))
+        try:
+            text, _ = proc.communicate(timeout=max(1.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            text, _ = proc.communicate()
+        chunks.append(text)
+        if time.monotonic() < deadline:
+            board.log.write("window", "emmc stream đứt — nối lại")
+            time.sleep(5)
+    end = int(time.time())
+    board.log.write("window", f"emmc end epoch={end}")
+    board.log.phase = "post"
+    usage_post = board.sh("journalctl --disk-usage 2>&1 || true")
+    with open(os.path.join(out_dir, "emmc-samples.txt"), "w", encoding="utf-8") as handle:
+        handle.write("".join(chunks))
+    meta = {"disk": disk, "interval_s": interval, "window_start_epoch": start, "window_end_epoch": end,
+            "journal_disk_usage_pre": usage_pre.strip(), "journal_disk_usage_post": usage_post.strip()}
+    with open(os.path.join(out_dir, "emmc-window.json"), "w", encoding="utf-8") as handle:
+        json.dump(meta, handle, ensure_ascii=False, indent=2)
+    return meta
+
+
+def write_emmc_summary(out_dir: str, endurance_tbw: Optional[float]) -> Dict[str, Any]:
+    with open(os.path.join(out_dir, "emmc-window.json"), encoding="utf-8") as handle:
+        meta = json.load(handle)
+    with open(os.path.join(out_dir, "emmc-samples.txt"), encoding="utf-8") as handle:
+        samples = parse_emmc_stream(handle.read())
+    with open(os.path.join(out_dir, "emmc-identity.txt"), encoding="utf-8") as handle:
+        ident = parse_emmc_identity(handle.read())
+    summary = {"probe_version": PROBE_VERSION, "probe_sha256": sha256_file(os.path.abspath(__file__)),
+               "generated_at": utc_now(), "window": meta, "identity": ident,
+               "writes": summarize_emmc(samples, meta.get("disk") or DEFAULT_DISK, endurance_tbw)}
+    with open(os.path.join(out_dir, "emmc-summary.json"), "w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2)
+    return summary
+
+
+
+# ---------------------------------------------------------------------------
 # selftest — fixture đúng định dạng log/proc tại main@2e53d4a0
 # ---------------------------------------------------------------------------
 
@@ -864,6 +1089,31 @@ FIXTURE_REVISION = {
          "payload": {"objectId": "o2", "programConfig": {"programId": "P2", "periodMs": 100}}},
     ],
 }
+
+
+FIXTURE_EMMC = """@T 1000.0 1759030000
+@DISK
+ 179       0 mmcblk0 10 0 20 5 1000 0 100000 900 0 0 0 0 0 0 0
+ 179       6 mmcblk0p6 5 0 10 2 800 0 80000 700 0 0 0 0 0 0 0
+@IO
+1 0 systemd
+201 5000000 systemd-journal
+300 1000000 mkddc-web
+400 0 mkddc-core
+55 100 jbd2/mmcblk0p6-8
+@END
+@T 1100.0 1759030100
+@DISK
+ 179       0 mmcblk0 10 0 20 5 1500 0 300000 950 0 0 0 0 0 0 0
+ 179       6 mmcblk0p6 5 0 10 2 1200 0 240000 750 0 0 0 0 0 0 0
+@IO
+1 0 systemd
+201 6000000 systemd-journal
+300 1500000 mkddc-web
+400 204800 mkddc-core
+55 51300 jbd2/mmcblk0p6-8
+@END
+"""
 
 
 def selftest() -> int:
@@ -944,6 +1194,27 @@ def selftest() -> int:
     expect("provenance: governor", prov["cpufreq"]["cpu0"]["governor"] == "performance")
     expect("provenance: Fake MCU", prov["iobus_mode"] == "FAKE_MCU")
 
+    # T63-110: nguồn ghi eMMC.
+    emmc = summarize_emmc(parse_emmc_stream(FIXTURE_EMMC), endurance_tbw=10.0)
+    # 200000 sector × 512 B / 100 s = 1 024 000 B/s.
+    expect("emmc: B/s thiết bị", emmc["device_write_bytes_per_s"] == 1024000.0)
+    expect("emmc: IOPS thiết bị", emmc["partitions"]["mmcblk0"]["write_iops"] == 5.0)
+    expect("emmc: journald 10000 B/s", emmc["sources_bytes_per_s"].get("journald") == 10000.0)
+    expect("emmc: web 5000 B/s", emmc["sources_bytes_per_s"].get("web (SQLite Programming/historian)") == 5000.0)
+    expect("emmc: core 2048 B/s", emmc["sources_bytes_per_s"].get("core (snapshot)") == 2048.0)
+    expect("emmc: jbd2 là hệ thống file", emmc["sources_bytes_per_s"].get("hệ thống file (jbd2/kworker)") == 512.0)
+    expect("emmc: phần chưa quy nguồn", emmc["unattributed_bytes_per_s"] == 1024000.0 - 17560.0)
+    expect("emmc: GB/ngày", emmc["gb_per_day"] == round(1024000.0 * 86400 / 1e9, 3))
+    expect("emmc: năm tới TBW", emmc["years_to_endurance"] == round(10.0 / (1024000.0 * 86400 * 365 / 1e12), 1))
+    ident = parse_emmc_identity("ID name|8GTF4R \nID life_time|0x01 0x02 \nSIZE 15269888\n"
+                                "MOUNT /dev/mmcblk0p6|/data|ext4|rw,relatime\nJOURNAL_PERSISTENT yes\n"
+                                "JOURNALD_CONF Storage=persistent\n")
+    expect("emmc: tên chip", ident["id"]["name"] == "8GTF4R")
+    expect("emmc: life_time A/B", ident["life_time_used"] == ["0–10%", "10–20%"])
+    expect("emmc: journald persistent", ident["journal_persistent_dir"] is True and
+           ident["journald_conf"] == ["Storage=persistent"])
+    expect("emmc: sampler chỉ đọc", ">" not in emmc_sampler_script("mmcblk0", 60).replace("2>/dev/null", ""))
+
     # Cấm journalctl trong cửa sổ: Board.sh phải từ chối trước khi gọi ssh.
     log = CommandLog(os.devnull)
     log.phase = "window"
@@ -977,10 +1248,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     summ = sub.add_parser("summarize", help="tính lại summary.json từ dữ liệu thô")
     summ.add_argument("--out", required=True)
     sub.add_parser("selftest", help="kiểm parser trên host")
+    em = sub.add_parser("emmc", help="T63-110: đo nguồn ghi eMMC (mặc định 24 giờ, TARGET)")
+    em.add_argument("--ssh", required=True)
+    em.add_argument("--out", required=True)
+    em.add_argument("--duration", type=float, default=86400.0)
+    em.add_argument("--interval", type=int, default=EMMC_INTERVAL_S)
+    em.add_argument("--disk", default=DEFAULT_DISK)
+    em.add_argument("--endurance-tbw", type=float, help="độ bền ghi của chip theo datasheet (TB)")
+    ems = sub.add_parser("summarize-emmc", help="tính lại emmc-summary.json từ dữ liệu thô")
+    ems.add_argument("--out", required=True)
+    ems.add_argument("--endurance-tbw", type=float)
     args = parser.parse_args(argv)
 
     if args.cmd == "selftest":
         return selftest()
+    if args.cmd in ("emmc", "summarize-emmc"):
+        if args.cmd == "emmc":
+            os.makedirs(args.out, exist_ok=True)
+            log = CommandLog(os.path.join(args.out, "commands.log"))
+            board = Board(args.ssh, "http://unused", log, "-", None)
+            run_emmc(board, args.out, args.duration, args.interval, args.disk)
+        summary = write_emmc_summary(args.out, args.endurance_tbw)
+        print(json.dumps(summary["writes"].get("sources_bytes_per_s"), ensure_ascii=False))
+        return 0
     if args.cmd == "summarize":
         summary = write_summary(args.out)
         print(json.dumps({"rounds": len(summary["rounds"]),

@@ -448,7 +448,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-API-03` | P2 | T63-105, T63-108 | Log −80%; GET −50%; freshness ≤ 1 s | G-D3 | TODO | |
 | `PERF-SYS-03` | P2 | T63-106 | Audit read gộp; audit mutation 100% | G-D3 | TODO | |
 | `PERF-SYS-02` | P2 | T63-107 | RTW log −90%; Wi-Fi ổn định | G-D3 | TODO | |
-| `PERF-SYS-06` | P2 | T63-110 | Bảng nguồn ghi eMMC 24 giờ | — | TODO | |
+| `PERF-SYS-06` | P2 | T63-110 | Bảng nguồn ghi eMMC 24 giờ | — | IN-PROGRESS — lệnh `emmc`/`summarize-emmc` của probe (diskstats + `write_bytes` từng tiến trình 60 s, định danh chip/`life_time`, journald); selftest HOST PASS; đo 24 giờ và đối chiếu datasheet TARGET NOT_RUN | [evidence §7](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 | `PERF-FE-01` | P2 | T63-104 | Transfer cold load trước/sau; test header | — | TODO | |
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
 | `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | IN-PROGRESS — `artifact-manifest.json` từng artifact + `deploy-record` + `readback`; selftest HOST 64/64 (gồm e2e `/proc` thật), `test_release_packaging_guard` 14/14; read-back TARGET NOT_RUN (container implementer không có TCP ra bo) | `python3 scripts/artifact_manifest.py selftest`; DEPLOY_FOXLINX bước 6b/7b |
