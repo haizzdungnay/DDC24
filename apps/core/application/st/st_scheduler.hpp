@@ -54,13 +54,36 @@ enum class StProgramState : uint8_t {
     FAULTED,
     ROLLED_BACK,
     REJECTED,
-    /* Published Signal BLOCK_PROGRAM/WAIT: trạng thái phục hồi được, vẫn
-     * được release lại ở chu kỳ kế nhưng không được publish candidate. Đặt ở
-     * cuối để không đổi wire/checkpoint value của các trạng thái đã có. */
+    /* Trạng thái phục hồi được, vẫn được release lại ở chu kỳ kế nhưng không
+     * được publish candidate. Lý do nằm ở `StProgramInstance::waiting_reason`:
+     * Published Signal BLOCK_PROGRAM/WAIT, hoặc (Issue #827) đầu vào REQUIRED
+     * chưa GOOD. Đặt ở cuối để không đổi wire/checkpoint value của các trạng
+     * thái đã có. */
     WAITING,
 };
 
 const char* st_program_state_name(StProgramState s);
+
+/* Issue #827 — LÝ DO một Program đang WAITING. Tách khỏi `StProgramState` có chủ
+ * ý: enum trạng thái nằm trong wire/checkpoint, thêm giá trị vào đó là đổi hợp
+ * đồng của mọi phía đọc. Lý do chỉ có nghĩa khi `state == WAITING`; ở mọi trạng
+ * thái khác nó là NONE.
+ *
+ * Hai lý do cần hai phản ứng khác nhau, nên phải phân biệt được từ ngoài:
+ *  - INPUT_NOT_READY: một đầu vào REQUIRED chưa GOOD (thường gặp ngay sau khi
+ *    Core khởi động, khi web chưa kịp đẩy Virtual Point xuống). Giữ lệnh cuối
+ *    trong TTL (ADR-051), FAULT khi quá `st_input_wait::kFaultThresholdMs`.
+ *  - SIGNAL_NOT_READY: Published Signal BLOCK_PROGRAM/WAIT (`ST-RT-011`). Hợp
+ *    đồng signal đã chọn rút candidate ngay thay vì giữ. */
+enum class StWaitingReason : uint8_t {
+    NONE = 0,
+    INPUT_NOT_READY,
+    SIGNAL_NOT_READY,
+};
+
+/* Chuỗi công bố ra IPC/REST. NONE trả chuỗi rỗng, cùng quy ước với
+ * `lastFaultCode`: rỗng = "không chờ gì", khoá vắng = "Core đời cũ". */
+const char* st_waiting_reason_name(StWaitingReason reason);
 
 /* Ý ĐỊNH Enable/Disable đang chờ RT tiêu thụ. Không mang trạng thái, chỉ mang
  * điều người vận hành yêu cầu — trạng thái thật vẫn chỉ do RT ghi. */
@@ -204,6 +227,35 @@ static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), 30000u) == ns_from_ms(kS
 constexpr uint64_t kSignedTtlNs = ns_from_ms(kSignedTtlMs);
 } // namespace st_hold_ttl
 
+/* Issue #827 (DECISIONS Q1–Q4, DDD-CTRL-PROG-001 §5) — ngưỡng mất đầu vào
+ * REQUIRED liên tục trước khi FAULT Program.
+ *
+ * Trước #827 không có ngưỡng: mẫu đầu vào xấu ĐẦU TIÊN đã FAULT `ST-RT-008` vĩnh
+ * viễn. Core khởi động lại làm slot AV/BV/MSV về 0/BAD và web chỉ đẩy VP xuống
+ * sau tới ~10 s (vòng đối chiếu `runVirtualPointReconciler`), nên MỌI lần khởi
+ * động, mọi Program dùng VP đứng FAULTED cho tới khi có người Disable → Enable.
+ *
+ * 60 s theo ba ràng buộc:
+ *  1. Lớn hơn khoảng hở khởi động thật: 10 s nhịp đối chiếu VP + ~20 s web khởi
+ *     động (khi cả bo khởi động lại) — static_assert bên dưới.
+ *  2. Bằng TTL hold-last đã ký (ADR-051): Program đang chạy mà mất đầu vào thì
+ *     lệnh cuối được giữ tối đa đúng TTL rồi nhả, và FAULT tới cùng lúc hoặc sau
+ *     đó — không có cửa sổ "đã FAULT mà lệnh cũ còn giữ lâu hơn TTL".
+ *  3. Đồng hồ tường của tick (`now_ns`), không đếm base step: cùng lý do với
+ *     `st_hold_ttl` — đếm vòng quét thì mọi đường chạy nhanh hơn nhịp thật co
+ *     "60 s" lại trong im lặng. */
+namespace st_input_wait {
+constexpr uint32_t kFaultThresholdMs = 60000;
+constexpr uint64_t kFaultThresholdNs = st_hold_ttl::ns_from_ms(kFaultThresholdMs);
+/* Khoảng hở khởi động dự kiến: nhịp đối chiếu VP của web + thời gian web khởi động. */
+constexpr uint32_t kVpReconcileMs = 10000;
+constexpr uint32_t kWebBootMs = 20000;
+static_assert(kFaultThresholdMs > kVpReconcileMs + kWebBootMs,
+              "Issue #827 Q2: ngưỡng phải lớn hơn khoảng hở VP lúc khởi động");
+static_assert(kFaultThresholdMs == st_hold_ttl::kSignedTtlMs,
+              "Issue #827 Q2: ngưỡng bằng TTL hold-last đã ký (ADR-051)");
+} // namespace st_input_wait
+
 enum class StSchedulerProfile : uint8_t {
     SUPPORTING_AS_BUILT = 0,
     REV_A,
@@ -317,6 +369,15 @@ struct StProgramInstance {
     uint16_t    process_input_count = 0;
     uint64_t    input_snapshot_generation = 0;
     bool        input_snapshot_valid = true;
+    /* Issue #827 — lý do WAITING hiện hành (NONE khi không WAITING). */
+    StWaitingReason waiting_reason = StWaitingReason::NONE;
+    /* Issue #827 — mốc `now_ns` của mẫu đầu vào XẤU ĐẦU TIÊN trong chuỗi xấu
+     * liên tục hiện hành. Chỉ ghi lần đầu, xoá khi đầu vào GOOD trở lại hoặc khi
+     * Program được kích hoạt/bật lại: ngưỡng tính "kể từ lần kích hoạt/khởi động
+     * gần nhất", không cộng dồn các lần mất ngắn đã tự hồi phục. Cờ riêng vì
+     * `now_ns == 0` là một mốc hợp lệ (test, replay). */
+    bool        input_wait_active = false;
+    uint64_t    input_bad_since_ns = 0;
     uint64_t    last_successful_base_step = 0;
     /* T59-501 — đã publish output thành công ÍT NHẤT MỘT LẦN kể từ lần activate
      * gần nhất. Khác `output_commit_generation == base_step_count()` (chỉ đúng ở
@@ -433,6 +494,12 @@ uint64_t st_release_tolerance_ns(uint64_t tick_period_ns);
  * chạy trước làm khoảng thời gian bị tắt có chủ ý bị đếm thành lỡ nhịp. Bộ đếm
  * tích luỹ `missed_release_count` giữ nguyên. */
 void st_program_reset_release(StProgramInstance* program);
+
+/* Issue #827 — xoá lý do chờ và mốc mất đầu vào. Gọi ở MỌI chỗ Program rời
+ * WAITING mà không đi qua `run_program` (Stop/Disable/FAULT/kích hoạt/bật lại),
+ * để lý do cũ không bám vào trạng thái mới và ngưỡng 60 s luôn đếm từ lần kích
+ * hoạt gần nhất. */
+void st_program_clear_input_wait(StProgramInstance* program);
 
 struct StTaskStats {
     uint32_t run_count = 0;

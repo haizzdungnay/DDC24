@@ -108,6 +108,35 @@ std::vector<uint8_t> doubler_artifact()
     return build_with_bindings(kDoubler, {in, out});
 }
 
+/* Chương trình: AO-01 = 10 / UI-01. UI-01 = 0 là lỗi runtime THẬT (chia 0,
+ * `ST-RT-002`) — cách dựng một Program FAULTED không phụ thuộc chính sách đầu
+ * vào. Trước Issue #827 các test hold-last dựng FAULTED bằng cách "quên" nạp
+ * đầu vào, nhưng đầu vào chưa sẵn sàng giờ là WAITING có ngưỡng, không còn là
+ * fault tức thì. */
+const char* kDivider = R"ST(
+PROGRAM divider
+VAR_INPUT  in1 : REAL; END_VAR
+VAR_OUTPUT out1 : REAL; END_VAR
+    out1 := 10.0 / in1;
+END_PROGRAM
+)ST";
+
+std::vector<uint8_t> divider_artifact()
+{
+    const StIrModule mod = compile_only(kDivider);
+    StIrIoBinding in{};
+    in.slot = slot_of(mod, "in1");
+    in.is_output = false;
+    in.point_kind = StPointKind::UI;
+    in.point_index = 1;
+    StIrIoBinding out{};
+    out.slot = slot_of(mod, "out1");
+    out.is_output = true;
+    out.point_kind = StPointKind::AO;
+    out.point_index = 1;
+    return build_with_bindings(kDivider, {in, out});
+}
+
 /* Dựng scheduler có một task/một instance đã RUNNING. */
 void make_running(StScheduler* s, const std::vector<uint8_t>& art, const char* inst = "p")
 {
@@ -390,11 +419,11 @@ END_PROGRAM
 TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlDisabled)
 {
     StScheduler sched;
-    make_running(&sched, doubler_artifact());
+    make_running(&sched, divider_artifact());
 
     PointTable table;
     PriorityResolver resolver;
-    set_ai(&table, 0, 5.0f);
+    set_ai(&table, 0, 1.0f);
 
     StIoBridgeStats stats;
     st_load_all_inputs(&sched, table, &stats);
@@ -403,8 +432,9 @@ TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlDisabled)
     ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
     ASSERT_FLOAT_EQ(resolver.resolve().ao[0], 10.0f);
 
-    /* Không load input lại trước tick kế -> input_snapshot_generation lệch
-     * base_step_count_ -> FAULTED (không phải chạy thành công rồi mới lỗi). */
+    /* Chia 0 ở tick kế -> FAULTED thật (không phải chạy thành công rồi mới lỗi). */
+    set_ai(&table, 0, 0.0f);
+    st_load_all_inputs(&sched, table, &stats);
     sched.tick(200 * kMs);
     ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
     st_apply_all_outputs(&sched, &resolver, &table, &stats);
@@ -421,11 +451,11 @@ TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlDisabled)
 TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlElapsesAfterFault)
 {
     StScheduler sched;
-    make_running(&sched, doubler_artifact());
+    make_running(&sched, divider_artifact());
 
     PointTable table;
     PriorityResolver resolver;
-    set_ai(&table, 0, 5.0f);
+    set_ai(&table, 0, 1.0f);
 
     StIoBridgeStats stats;
     st_load_all_inputs(&sched, table, &stats);
@@ -433,7 +463,9 @@ TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlElapsesAfterFault)
     ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
     ASSERT_EQ(sched.find_program("p")->output_commit_now_ns, 100 * kMs);
 
-    sched.tick(200 * kMs);   /* FAULTED (input snapshot cũ) */
+    set_ai(&table, 0, 0.0f);
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(200 * kMs);   /* FAULTED (chia 0) */
     ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
     st_apply_all_outputs(&sched, &resolver, &table, &stats);
 
@@ -853,9 +885,17 @@ END_PROGRAM
     EXPECT_FLOAT_EQ(loaded->slots[a.slot].r, 2.0f)
         << "binding đầu không được commit khi binding sau BAD";
     EXPECT_FLOAT_EQ(loaded->slots[b.slot].r, 3.0f);
+    /* Issue #827: lô bị từ chối ⇒ WAITING + INPUT_NOT_READY (không execute,
+     * không publish, không fault). FAULT `ST-RT-008` chỉ tới khi xấu liên tục
+     * quá `st_input_wait::kFaultThresholdMs` — xem
+     * test_programming_startup_input_wait.cpp. */
     const StSchedulerTickResult failed = scheduler.tick(200 * kMs);
-    EXPECT_EQ(failed.faults, 1u);
-    EXPECT_STREQ(instance->last_fault_code, st_diag_code::kRtNonFiniteInput);
+    EXPECT_EQ(failed.faults, 0u);
+    EXPECT_EQ(failed.programs_run, 0u);
+    EXPECT_EQ(instance->state, StProgramState::WAITING);
+    EXPECT_EQ(instance->waiting_reason, StWaitingReason::INPUT_NOT_READY);
+    EXPECT_EQ(instance->last_fault_code, nullptr);
+    EXPECT_FLOAT_EQ(loaded->slots[a.slot].r, 2.0f) << "WAITING không execute bằng slot cũ";
     EXPECT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
 }
@@ -1208,7 +1248,7 @@ TEST(StIntegration, ScanLoopPublishesFaultWhenProgramInstanceFaults)
     CoreMetrics metrics;
 
     StScheduler sched;
-    make_running(&sched, doubler_artifact());
+    make_running(&sched, divider_artifact());
     ScanDeps deps{&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
                   &metrics, -1, nullptr, nullptr};
     deps.st_sched = &sched;
@@ -1219,7 +1259,9 @@ TEST(StIntegration, ScanLoopPublishesFaultWhenProgramInstanceFaults)
     loop.step();
     ASSERT_STREQ(web.snapshot_for_test().task.state.data(), "RUNNING");
 
-    shm.ui_quality[0] = KX_Q_BAD;
+    /* Lỗi runtime thật (chia 0). Đầu vào BAD không còn FAULT tức thì
+     * (Issue #827), nên không dùng được để dựng ca này. */
+    shm.ui_value[0] = 0.0f;
     shm.ts_ns += 1000000;
     std::this_thread::sleep_for(std::chrono::milliseconds(110));
     loop.step();

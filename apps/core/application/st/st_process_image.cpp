@@ -658,9 +658,15 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                 /* Lệnh operator: rút NGAY tại safe boundary, không chờ TTL. */
                 should_withdraw = true;
                 reason = programming::CandidateWithdrawReason::OPERATOR_DISABLE;
-            } else if (p.state == StProgramState::WAITING) {
+            } else if (p.state == StProgramState::WAITING &&
+                       p.waiting_reason != StWaitingReason::INPUT_NOT_READY) {
                 /* BLOCK_PROGRAM không được giữ proposal cũ: signal contract
-                 * đã chọn rút candidate thay vì chạy bằng dữ liệu không hợp lệ. */
+                 * đã chọn rút candidate thay vì chạy bằng dữ liệu không hợp lệ.
+                 *
+                 * Issue #827: WAITING vì đầu vào REQUIRED chưa GOOD thì KHÔNG
+                 * rút ở đây mà rơi xuống nhánh TTL bên dưới — DDD-CTRL-PROG-001
+                 * §5 "required input bad ⇒ hold-last bounded". Rút ngay sẽ giật
+                 * mọi đầu ra về default/safe ở mỗi lần một VP chập chờn vài giây. */
                 should_withdraw = true;
                 reason = programming::CandidateWithdrawReason::SIGNAL_BLOCKED;
             } else if (instance_ttl_ns > 0 && p.output_commit_now_ns > 0 &&
