@@ -16705,7 +16705,7 @@ chuyển, mỗi hồ sơ gắn banner `🗄 ĐÃ LƯU TRỮ` ghi **lý do đóng
 | `32_DEV_TEAM_NEXT_ACTION` | SUPERSEDED Rev 2.0 | 3 task chặn đã xử lý |
 | `46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN` | Closed, G0..G5 PASS | `apps/*` + root `CMakeLists.txt` |
 | `50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN` | 96/96 task đóng | `apps/core/application/schedule/`, `bacnet_schedule.*` |
-| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 51/51 task, G0–G6 | `apps/web-ui/src/features/*` |
+| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 50/50 task, G0–G6 | `apps/web-ui/src/features/*` |
 
 Trước khi chuyển đã kiểm phần còn treo **không bị mất dấu**: `EXT_PHYSICAL_VERIFIED` /
 `PHYSICAL_IO_VERIFIED` của plan 50 thuộc `ADR-023` và mở khoá bởi plan 49 `G-C`/`G-D`;
@@ -23249,7 +23249,7 @@ bằng chứng hiện hành; không thay đổi nội dung nghiệp vụ PA3.
 **Kiểm chứng.** Kiểm tra mã tài liệu không trùng, liên kết tài liệu nội bộ tồn
 tại, `git diff --check` và docs harness.
 
-### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 51/51 (2026-08-08)
+### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
 
 **Phạm vi.** Phần còn lại của `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`:
 P0 tài liệu, các use case P5 còn thiếu, a11y và diễn tập rollback.
@@ -23301,7 +23301,7 @@ cũ, và kho Activity giữ nguyên `retained: 25` — nhật ký vận hành n�
 tới nó. Sau đó tiến lại bản mới (`mkddc-web` `a5bcc5f5…7655e1`, bundle
 `index-DepLspUa.js`), `journalctl -p err` trống.
 
-**Tracker plan 52: 51/51 HOÀN TẤT, G0–G6 đạt.** Finding `PA3-N03` (hierarchy
+**Tracker plan 52: 50/50 HOÀN TẤT, G0–G6 đạt.** Finding `PA3-N03` (hierarchy
 Modbus) đã đóng. Vẫn mở: `PA3-N01` (PLC SHM chưa mang mốc lấy mẫu — cần đổi hợp
 đồng SHM và deploy lại Core), `PA3-N02`, `PA3-N04`.
 
@@ -24064,7 +24064,7 @@ Bốn điểm đáng ghi lại:
 
 ```
 ctest --test-dir build/fw (MODBUS+BACNET+HMI ON) → 822/822 passed, 0 failed (13,16 s)
-core_tests --gtest_filter='ScheduleV31*'          → 51/51 passed
+core_tests --gtest_filter='ScheduleV31*'          → 50/50 passed
 [PERF] 64 lịch × 16 target = 1024 lệnh ghi: 0,120 ms/vòng
        ngưỡng đặc tả §21 là 100 ms ⇒ dư 833 lần
 ```
@@ -27190,7 +27190,7 @@ Không đổi hợp đồng binary: `kx_ext_point_t`, `kx_io_shm_t`, `kx_plc_shm
 ### Added - WEB-HIST-005 shared Logging Control and feature-gated unified Trends (2026-07-20)
 - fe(logging-control): added one reusable UI/AO/DO/VP database logging control with textual `off|scheduled|recording|error` status, 11 intervals, admin-only two-step immediate/future UTC activation, viewer/operator read-only behavior, revisioned policy updates, capacity/storage/conflict/field alerts, VP diagnostic-log separation, focus trap/Escape/focus restore and screen-reader alerts.
 - fe(history): added explicit UTC `[from,to)` history client, generation-aware response normalization, structured 400/413/503 errors, CSV query parity, partial/gap/unavailable/no-history state banner, BAD/missing gap line breaks, boolean stepped lines and stale-response suppression. Trends can use v2 unified response without browser tier merge when `VITE_HISTORIAN_V2_TRENDS=1`; default `0` preserves legacy range/query authority until activation/cutover.
-- Verification: frontend Vitest `51/51`, `npm run lint`, `npm run typecheck`, default and `VITE_HISTORIAN_V2_TRENDS=1` production builds pass; backend regression `go test -count=1 ./...` passes (`20.790s`), with `go vet ./...` and `go build ./...` GREEN. Browser/manual accessibility, activation/cutover, target eMMC and `E2E-HIST-001` remain open; legacy code/query removal is deferred.
+- Verification: frontend Vitest `50/50`, `npm run lint`, `npm run typecheck`, default and `VITE_HISTORIAN_V2_TRENDS=1` production builds pass; backend regression `go test -count=1 ./...` passes (`20.790s`), with `go vet ./...` and `go build ./...` GREEN. Browser/manual accessibility, activation/cutover, target eMMC and `E2E-HIST-001` remain open; legacy code/query removal is deferred.
 ### Added - WEB-HIST-004 unified UTC history query (2026-07-20)
 - web/backend(historian-v2): added a generation-aware unified query engine for 1..8 canonical UI/AO/DO/VP IDs over explicit half-open UTC `[from,to)` ranges. The engine supports all 11 fixed resolutions plus `auto`, enforces `maxPoints<=5000` per series without silent truncation, merges RAM > hot > committed archive at 15-second base buckets, re-aggregates deterministically, preserves value/min/max/sum/count/worst-quality/source/tier semantics, returns empty generation series only after all tiers finish, and emits explicit partial gaps when a tier is unavailable or corrupt.
 - web/backend(historian-query-store): added bounded, cancellable RAM/hot/archive readers with common per-request RAM coverage, hot/gap half-open reads, enabled-policy identity discovery, contiguous archive-watermark enforcement, committed-block checksum/codec/identity verification, safe local regular-file reads, generation isolation, typed partial archive errors and hard row/block/identity limits.
