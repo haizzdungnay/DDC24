@@ -323,6 +323,51 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.sampleMode).toBe('ON_CHANGE')
   })
 
+  /* Issue #798 — cột đọc lại hiện SỐ ĐỌC VỀ từ điểm kèm tuổi, không phải lệnh; ô
+   * của Program không chạy ở mẫu đó ghi "không chạy" thay vì một giá trị cũ. */
+  it('trace tách lệnh khỏi đọc lại và đánh dấu mẫu Program không chạy', async () => {
+    state.monitor = ready(monitorPage([sample()]))
+    const variableId = '11111111-1111-4111-8111-111111111111'
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999798', state: 'RUNNING',
+      variableIds: [variableId], durationMs: 60_000, samplePeriodMs: 100, effectiveSamplePeriodMs: 100,
+      startedAt: '2026-09-28T01:02:03Z', updatedAt: '2026-09-28T01:02:04Z',
+      stopReason: null, source: 'CORE', droppedSamples: 0,
+      samples: [
+        { sequence: 1, cycle: 10, observedAt: '2026-09-28T01:02:03.100Z', values: [{
+          variableId, programValue: 41, actualValue: 39, commandedValue: 41, readbackValue: 39, readbackAgeMs: 400,
+          releaseSeq: 7, unavailableReason: null, overriddenBy: null, effectivePriority: 5, quality: 'GOOD', freshness: 'LIVE',
+        }] },
+        { sequence: 2, cycle: 11, observedAt: '2026-09-28T01:02:03.110Z', values: [{
+          variableId, programValue: null, actualValue: null, commandedValue: null, readbackValue: null, readbackAgeMs: null,
+          releaseSeq: 7, unavailableReason: 'NOT_RELEASED', overriddenBy: null, effectivePriority: null, quality: 'UNKNOWN', freshness: 'UNAVAILABLE',
+        }] },
+      ],
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0798' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    renderWatch()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+
+    expect(await screen.findByRole('columnheader', { name: 'Đọc lại (tuổi)' })).toBeInTheDocument()
+    /* Hàng trace mang "lần chạy N"; hàng monitor phía trên thì không. */
+    const traceRows = screen.getAllByRole('row', { name: /SupplySetpoint/ })
+      .filter((row) => /lần chạy/.test(row.textContent ?? ''))
+    expect(traceRows).toHaveLength(2)
+    const cells = (row: HTMLElement) => Array.from(row.querySelectorAll('td')).map((cell) => cell.textContent)
+    /* Bảng trace hiện mẫu MỚI NHẤT trước. */
+    expect(cells(traceRows[1])).toEqual(expect.arrayContaining(['41 V', '39 V · 400 ms']))
+    expect(traceRows[1].textContent).toContain('lần chạy 7')
+    expect(within(traceRows[0]).getByText('không chạy')).toBeInTheDocument()
+  })
+
   it('trace mặc định không gửi sampleMode', async () => {
     state.monitor = ready(monitorPage([sample()]))
     state.request.mockImplementation((operationId: string) => {

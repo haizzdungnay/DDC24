@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.46.0"
+  version: "1.47.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -4351,7 +4351,25 @@ components:
       properties:
         variableId: { type: string, format: uuid }
         programValue: { type: [number, integer, boolean, string, "null"] }
-        actualValue: { type: [number, integer, boolean, string, "null"] }
+        # Issue #798: DEPRECATED — bằng `readbackValue`, không còn chép
+        # `programValue`. Giữ một phiên bản minor cho client cũ.
+        actualValue:
+          type: [number, integer, boolean, string, "null"]
+          deprecated: true
+        # Issue #798 (U-04): lệnh Program ghi ra điểm; null khi biến không gắn
+        # điểm đầu ra.
+        commandedValue: { type: [number, integer, boolean, string, "null"] }
+        # Giá trị ĐỌC LẠI gần nhất của điểm đầu ra (feedback AO/DO, poll Modbus);
+        # null khi không có kênh đọc lại hoặc điểm không GOOD.
+        readbackValue: { type: [number, integer, boolean, string, "null"] }
+        readbackAgeMs: { type: [integer, "null"], minimum: 0, maximum: 4294967295 }
+        # Số lần chạy của Program nguồn tại mẫu; hai mẫu liền nhau cách nhau > 1
+        # nghĩa là có lần chạy không được lấy mẫu.
+        releaseSeq: { type: [integer, "null"], minimum: 0 }
+        # Vì sao ô không có giá trị: UNRESOLVED = biến/Program không có;
+        # NOT_RELEASED = Program không chạy ở boundary của mẫu (mẫu Core chỉ lấy
+        # giá trị tại lần chạy để cặp vào/ra cùng một lần chạy).
+        unavailableReason: { type: [string, "null"], enum: [UNRESOLVED, NOT_RELEASED, null] }
         overriddenBy: { type: [string, "null"], maxLength: 64 }
         effectivePriority: { type: [integer, "null"], minimum: 1, maximum: 6 }
         quality: { type: string, enum: [GOOD, UNCERTAIN, BAD, STALE, OFFLINE, UNKNOWN] }

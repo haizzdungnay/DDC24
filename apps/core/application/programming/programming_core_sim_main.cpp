@@ -247,7 +247,7 @@ int main(int argc, char** argv)
             const bool outputs_committed = st_apply_all_outputs(
                 &scheduler, &priority_resolver, &point_table, &bridge_stats);
             coordinator.on_output_commit(outputs_committed);
-            trace.on_boundary(scheduler, now_ns);
+            trace.on_boundary(scheduler, now_ns, &point_table);
         }
         publish_monitor_snapshot(now_ns);
         /* point_snapshot được WebIpc trả từ cache ngay trong drain(). Mọi

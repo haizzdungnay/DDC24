@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <string>
 
+#include "graph/point_table.hpp"
 #include "st/st_loader.hpp"
 
 namespace core {
@@ -54,6 +55,32 @@ constexpr uint32_t kMaxTraceDurationMs = 600000;  /* 10 phút */
 constexpr uint32_t kMinTraceSamplePeriodMs = 10;
 constexpr uint32_t kMaxTraceSamplePeriodMs = 50000;
 
+/* Issue #798 — vì sao một ô KHÔNG có giá trị. Hai lý do khác nhau về bản chất:
+ * UNRESOLVED là "biến/Program không tồn tại", NOT_RELEASED là "Program có thật
+ * nhưng không chạy ở boundary này" — slot của nó lúc đó có đầu vào đã được nạp
+ * lại cho lần chạy SAU nằm cạnh đầu ra của lần chạy TRƯỚC, nên chép slot ra là
+ * trình bày một cặp vào/ra chưa từng cùng tồn tại. */
+enum class StTraceCellReason : uint8_t {
+    OK = 0,
+    UNRESOLVED = 1,
+    NOT_RELEASED = 2,
+};
+
+/* Issue #798 — kênh đọc lại của một ô: NONE = biến không gắn điểm đầu ra (biến
+ * nội bộ/đầu vào), VALID = có số đọc lại từ bảng điểm, UNAVAILABLE = gắn điểm
+ * đầu ra nhưng điểm không GOOD hoặc giá trị không đổi được về kiểu biến. */
+enum class StTraceReadback : uint8_t {
+    NONE = 0,
+    VALID = 1,
+    UNAVAILABLE = 2,
+};
+
+/* Lấy mẫu TẠI RELEASE (Issue #798): mẫu tới hạn được hoãn tới boundary có ít
+ * nhất một Program được theo dõi vừa chạy. Chu kỳ Program dài nhất của profile
+ * là 50 s, nên quá mốc này mà vẫn chưa có Program nào chạy thì lấy mẫu luôn (ô
+ * mang NOT_RELEASED) thay vì để phiên đứng im không một dấu vết. */
+constexpr uint64_t kMaxTraceReleaseDeferNs = static_cast<uint64_t>(kMaxTraceSamplePeriodMs) * 1000000ull;
+
 /* Một biến được theo dõi.
  *
  * Khai bằng TÊN, không bằng số slot: số slot là kết quả của một lần biên dịch
@@ -69,6 +96,9 @@ struct StTraceVariable {
     std::string variable_name;
     uint16_t    slot = 0;
     bool        resolved = false;
+    /* Issue #798 — chỉ số binding ĐẦU RA trong `io_bindings` của Program gắn với
+     * slot này, -1 khi biến không ghi ra điểm nào. Phân giải cùng lúc với slot. */
+    int16_t     output_binding = -1;
 };
 
 /* Một mẫu ĐỌC RA: giá trị của MỌI biến tại cùng một mốc chu kỳ.
@@ -84,6 +114,15 @@ struct StTraceSample {
     /* Biến có Program chưa nạp / slot ngoài dải: đánh dấu thay vì bịa số 0.
      * "Không đo được" và "đo được giá trị 0" là hai sự thật khác nhau. */
     std::array<bool, kMaxTraceVariables> valid{};
+    /* Issue #798. `valid[i] == (reason[i] == OK)`. */
+    std::array<StTraceCellReason, kMaxTraceVariables> reason{};
+    /* Số release (`run_count`) của Program nguồn tại mẫu; 0 khi UNRESOLVED. Hai
+     * mẫu liền nhau của cùng một biến mà số này cách nhau > 1 nghĩa là đã có lần
+     * chạy không được lấy mẫu — khoảng trống nhìn thấy được, không lặng lẽ. */
+    std::array<uint64_t, kMaxTraceVariables> release_seq{};
+    std::array<StTraceReadback, kMaxTraceVariables> readback_state{};
+    std::array<StCell, kMaxTraceVariables> readback{};
+    std::array<uint32_t, kMaxTraceVariables> readback_age_ms{};
 };
 
 enum class StTraceState : uint8_t {
@@ -137,10 +176,14 @@ public:
      * chạy — dừng nhầm phiên của người khác là mất dữ liệu chẩn đoán của họ. */
     bool stop(const std::string& session_id, std::string* error);
 
-    /* Gọi tại RANH GIỚI QUÉT. Lấy mẫu nếu tới hạn; tự chuyển COMPLETED khi hết
-     * thời lượng hoặc hết chỗ. Không cấp phát, KHÔNG chờ khoá: khoá đang bị
-     * luồng IPC giữ thì bỏ lượt này (đếm `contended_boundary_count`). */
-    void on_boundary(const StScheduler& scheduler, uint64_t now_ns);
+    /* Gọi tại RANH GIỚI QUÉT, SAU `on_base_step` và output commit của cùng
+     * boundary. Lấy mẫu nếu tới hạn VÀ có Program được theo dõi vừa release ở
+     * boundary này (Issue #798; xem `kMaxTraceReleaseDeferNs`); tự chuyển
+     * COMPLETED khi hết thời lượng hoặc hết chỗ. `table` (có thể null) cho giá
+     * trị đọc lại của biến gắn điểm đầu ra. Không cấp phát, KHÔNG chờ khoá: khoá
+     * đang bị luồng IPC giữ thì bỏ lượt này (đếm `contended_boundary_count`). */
+    void on_boundary(const StScheduler& scheduler, uint64_t now_ns,
+                     const PointTable* table = nullptr);
 
     /* Các hàm đọc dưới đây mỗi hàm tự lấy khoá — mỗi lời gọi nhất quán với
      * chính nó. Cần nhiều lời gọi nhất quán với NHAU thì dùng `ConsistentRead`. */
@@ -215,7 +258,7 @@ private:
     std::size_t capacity() const;
     void reset_locked();
     void resolve_locked(const StScheduler& scheduler);
-    void sample_locked(const StScheduler& scheduler, uint64_t now_ns);
+    void sample_locked(const StScheduler& scheduler, uint64_t now_ns, const PointTable* table);
     StTraceStatus status_locked() const;
     StTraceSample sample_locked_at(std::size_t index) const;
 
@@ -232,12 +275,19 @@ private:
     std::size_t variable_count_ = 0;
     /* Kho theo Ô: `cells_[sample * variable_count_ + variable]`. Ngân sách bộ
      * nhớ tĩnh vì thế KHÔNG phụ thuộc số biến — 1 biến × 10.000 mẫu và 32 biến ×
-     * 312 mẫu tiêu đúng cùng một chỗ. Tổng ~170 KB (`cells_` 80 KB, `timestamps_`
+     * 312 mẫu tiêu đúng cùng một chỗ. Trước #798 tổng ~170 KB (`cells_` 80 KB, `timestamps_`
      * 80 KB, `valid_` 10 KB): một con số cố định và nói ra được, thay vì một
      * mảng struct 3 MB. */
     std::array<StCell, kMaxTraceCells> cells_{};
     std::array<uint64_t, kMaxTraceCells> timestamps_{};
+    /* Issue #798: bit 0..1 = `StTraceCellReason`, bit 2..3 = `StTraceReadback`. */
     std::array<uint8_t, kMaxTraceCells> valid_{};
+    /* Issue #798 — +160 KB tĩnh (Q3 của `SW-TRACE-RELEASE-COHERENT`): số release
+     * 32 bit (quấn sau ~497 ngày ở 10 ms; người đọc chỉ cần hiệu giữa hai mẫu
+     * liền nhau), số đọc lại và tuổi của nó. */
+    std::array<uint32_t, kMaxTraceCells> release_seq_{};
+    std::array<StCell, kMaxTraceCells> readback_{};
+    std::array<uint32_t, kMaxTraceCells> readback_age_ms_{};
     std::size_t head_ = 0;
     std::size_t sample_count_ = 0;
     uint32_t dropped_ = 0;

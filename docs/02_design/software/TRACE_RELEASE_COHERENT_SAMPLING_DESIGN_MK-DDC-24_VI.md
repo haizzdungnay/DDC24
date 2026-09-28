@@ -1,8 +1,10 @@
 # Thiết kế đề xuất: Trace nhất quán theo lần chạy Program và tách giá trị lệnh / đọc lại
 
 > **Document ID:** SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI
-> **Phiên bản:** 0.1
-> **Trạng thái:** Proposed — chờ Core Lead, BE Lead và Product duyệt; **chưa code**
+> **Phiên bản:** 0.2
+> **Trạng thái:** **Accepted + Implemented (HOST) 2026-09-28** — chủ dự án chấp
+> thuận Q1–Q4 theo đề xuất khi giao triển khai. Kết quả ở §9; kiểm trên bo (phần
+> trên bo của T-798-4) còn chờ deploy lên bo lab
 > **Issue:** [#798](https://github.com/Mekong-HCM/MK-DDC-24/issues/798) (finding **U-04** của
 > [`REC-DDC-FIELD-USE-20260927`](../../07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md))
 > **Mốc mã nguồn đối chiếu:** `main@9910b88` (2026-09-28)
@@ -127,10 +129,29 @@ Chỉ biến có binding tới điểm vật lý/Modbus mới có `readbackValue
 | Q3 | Ngân sách RAM tăng thêm của `StValueTrace` chấp nhận được không, hay giảm `kMaxTraceCells` | Giữ 10 000 ô nếu đo trên target cho thấy còn dư | Core Lead |
 | Q4 | `actualValue` giữ một phiên bản dạng deprecated hay bỏ ngay | Giữ một minor | BE Lead |
 
-Tài liệu này **không** thay chữ ký cho Q1–Q4.
+Chủ dự án chấp thuận Q1–Q4 theo cột "Đề xuất" ngày 2026-09-28 khi giao triển
+khai Issue #798; hiện thực theo đúng các đề xuất đó (§9).
+
+## 9. Kết quả hiện thực
+
+| Mục | Kết quả |
+|---|---|
+| Q1 (B + A) | `StValueTrace` chỉ lấy mẫu ở boundary có ít nhất một Program được theo dõi vừa chạy (`StProgramInstance::last_release_base_step == base_step_count()`); mẫu tới hạn ở boundary khác được **hoãn** tới release kế. Mỗi ô mang `releaseSeq` (= `run_count`). Không Program nào còn được dispatch (STOPPED/FAULTED/không phân giải) thì lấy mẫu ngay; hoãn quá 50 s (chu kỳ dài nhất của profile) cũng lấy mẫu — phiên không bao giờ đứng im không dấu vết |
+| Q2 (cho phép phiên trộn) | Ô của Program không chạy ở boundary của mẫu: `valid=false`, lý do `NOT_RELEASED`, **không** chép slot. BE công bố `quality=UNKNOWN`, `freshness=UNAVAILABLE`, `unavailableReason=NOT_RELEASED` |
+| Q3 (RAM) | Giữ `kMaxTraceCells = 10 000`. `StValueTrace` thêm 160 KB tĩnh (số release u32, số đọc lại 8 B, tuổi u32 mỗi ô; lý do + trạng thái đọc lại gói vào byte `valid_` sẵn có) — ~170 KB → ~330 KB. Số release 32 bit quấn sau ~497 ngày ở 10 ms; người đọc chỉ dùng hiệu giữa hai mẫu liền nhau. Chưa đo trên target |
+| Q4 (`actualValue`) | Giữ một minor dưới dạng `deprecated`: bằng `readbackValue`, rỗng khi không có kênh đọc lại — **không** còn chép `programValue` |
+| Đọc lại | `st_output_readback`: điểm của binding đầu ra trong bảng điểm Core (feedback AO/DO nội bộ; giá trị poll + `sample_mono_ns` của Modbus EXT). Điểm không GOOD hoặc không đổi được về kiểu biến ⇒ UNAVAILABLE, không bịa |
+| IPC | `TRACE_READ` `[sessionId, fromSequence, cellFormat]`; `cellFormat = 2` cho ô `[valid, bits, reason, releaseSeq, readbackState, readbackBits, readbackAgeMs]`. Core vẫn phục vụ BE cũ bằng dạng 1; BE mới gặp Core cũ (`IPC-PAYLOAD`) thì đọc tiếp bằng dạng 1. Không đổi `schema.json`/golden IPC (dạng payload là phần mô tả ở README §4.2) |
+| OpenAPI | 1.46.0 → **1.47.0**: `ProgrammingTraceValue` + `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` `deprecated`. Re-pin G1 và `pgm02` |
+| FE | Bảng Trace: cột "Đọc lại (tuổi)" thay cột "Actual", "lần chạy N" dưới mốc, ô NOT_RELEASED ghi "không chạy" |
+| T-798-1..3 | `test_st_value_trace.cpp`: `T798_1_…` (Program 100 ms trong Task 10 ms, 300 boundary, 30 mẫu, 0 cặp lệch), `T798_2_…` (phiên trộn 10/100 ms: 100 mẫu, 10 ô chậm hợp lệ, 90 ô NOT_RELEASED), `T798_3_…` (release 1, 2, 4, 5 khi boundary 200 ms bị chặn; biến lạ UNRESOLVED), `StoppedProgramDoesNotFreezeTheSession` |
+| T-798-4 | Core: `T798_4_…` (lệnh đóng, đọc lại mở, tuổi 5 → 25 ms, đuổi kịp ở 40 ms, không bảng điểm ⇒ UNAVAILABLE). Go: `TestTraceReadbackIsSeparateFromCommand`. **Trên bo: chưa chạy** |
+| T-798-5 | Go: `TestTraceActualValueNoLongerCopiesProgramValue`, `TestTraceFallsBackToLegacyCellsOnOldCore`, `TestTraceReadCellDecodesBothFormats` |
+| T-798-6 | IPC `TraceReadCellFormatTwoCarriesReleaseAndReadback`; G1 10/10 và PGM-02 PASS sau re-pin |
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.2 | 2026-09-28 | Chủ dự án chấp thuận Q1–Q4; hiện thực HOST (Core, IPC, BE, OpenAPI 1.47.0, FE); §9 kết quả |
 | 0.1 | 2026-09-28 | Bản đề xuất đầu tiên cho Issue #798 (U-04): hiện trạng đối chiếu `main@9910b88`, ba phương án lấy mẫu, tách `commandedValue`/`readbackValue`, ảnh hưởng hợp đồng, test đóng Issue và câu hỏi duyệt |

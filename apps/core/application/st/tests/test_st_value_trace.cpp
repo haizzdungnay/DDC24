@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "graph/point_table.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_scheduler.hpp"
@@ -40,18 +41,30 @@ END_PROGRAM
 }
 
 /* Scheduler một Program đang chạy, để trace có thứ thật để đọc. */
-void build_scheduler(StScheduler* scheduler)
+void build_scheduler(StScheduler* scheduler, uint32_t task_period_ms = 100)
 {
     std::string error;
     StTaskConfig task;
     task.id = "T";
-    task.period_ms = 100;
-    task.budget_us = 100000;
+    task.period_ms = task_period_ms;
+    task.budget_us = task_period_ms >= 100 ? 100000 : task_period_ms * 199;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler->add_program("T", "instance-1", 0, &error)) << error;
     ASSERT_TRUE(scheduler->request_activation("instance-1", counter_program(), &error)) << error;
-    scheduler->tick(0);
+    /* Chỉ áp activation, KHÔNG tick: tick ở 0 đánh dấu Task đã chạy tại 0 và
+     * boundary đầu của test (cũng ở 0) sẽ không còn là một lần release. */
+    scheduler->apply_pending_activations_at_boundary();
     ASSERT_TRUE(scheduler->start("instance-1", &error)) << error;
+}
+
+/* Issue #798: ranh giới quét thật gọi `on_base_step` (Program chạy) rồi mới lấy
+ * mẫu. Trace chỉ lấy mẫu ở boundary có Program được theo dõi vừa release, nên
+ * test phải đi đúng thứ tự đó thay vì gọi `on_boundary` trên scheduler đứng im. */
+void boundary(StScheduler& scheduler, StValueTrace& trace, uint64_t now_ns,
+              const PointTable* table = nullptr)
+{
+    scheduler.on_base_step(now_ns);
+    trace.on_boundary(scheduler, now_ns, table);
 }
 
 StTraceVariable variable_of(const char* name = "n")
@@ -110,17 +123,19 @@ TEST(StValueTrace, EffectiveSamplePeriodIsNeverFasterThanBaseStep)
     ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 10, 10000, 0, &error)) << error;
     EXPECT_EQ(trace.status().requested_sample_period_ms, 10u);
     EXPECT_EQ(trace.status().effective_sample_period_ms, 1000u);
-    for (uint64_t now = 0; now < 3000 * kMs; now += 10 * kMs) trace.on_boundary(scheduler, now);
+    for (uint64_t now = 0; now < 3000 * kMs; now += 10 * kMs) boundary(scheduler, trace, now);
     EXPECT_EQ(trace.sample_count(), 3u) << "3 s ở nhịp hiệu lực 1 s = 3 mẫu, không phải 300";
     EXPECT_TRUE(trace.stop("s1", &error)) << error;
 
-    StScheduler fast;
-    build_scheduler(&fast);
+    /* Task 10 ms chỉ có ở profile Rev A; Program chạy mỗi boundary nên mỗi
+     * boundary là một release (Issue #798). */
+    StScheduler fast(StSchedulerProfile::REV_A);
+    build_scheduler(&fast, 10);
     fast.set_base_step_ns(10 * kMs);
     StValueTrace fast_trace;
     ASSERT_TRUE(fast_trace.start("s2", fast, &variable, 1, 10, 10000, 0, &error)) << error;
     EXPECT_EQ(fast_trace.status().effective_sample_period_ms, 10u);
-    for (uint64_t now = 0; now < 100 * kMs; now += 10 * kMs) fast_trace.on_boundary(fast, now);
+    for (uint64_t now = 0; now < 100 * kMs; now += 10 * kMs) boundary(fast, fast_trace, now);
     EXPECT_EQ(fast_trace.sample_count(), 10u);
 }
 
@@ -135,14 +150,14 @@ TEST(StValueTrace, SamplesAtBoundaryOnDeclaredPeriod)
     std::string error;
     ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 1000, 10000, 0, &error)) << error;
 
-    trace.on_boundary(scheduler, 0);
+    boundary(scheduler, trace, 0);
     EXPECT_EQ(trace.sample_count(), 1u) << "mẫu đầu phải lấy ngay tại boundary kế";
 
     /* Boundary trong cùng chu kỳ không tạo thêm mẫu. */
-    trace.on_boundary(scheduler, 500 * kMs);
+    boundary(scheduler, trace, 500 * kMs);
     EXPECT_EQ(trace.sample_count(), 1u);
 
-    trace.on_boundary(scheduler, 1000 * kMs);
+    boundary(scheduler, trace, 1000 * kMs);
     EXPECT_EQ(trace.sample_count(), 2u);
     EXPECT_EQ(trace.sample(1).timestamp_ns, 1000 * kMs);
     EXPECT_TRUE(trace.sample(1).valid[0]);
@@ -157,7 +172,7 @@ TEST(StValueTrace, CompletesWhenDurationElapses)
     const StTraceVariable variable = variable_of("n");
     std::string error;
     ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 1000, 3000, 0, &error)) << error;
-    for (uint64_t tick = 0; tick <= 5; ++tick) trace.on_boundary(scheduler, tick * 1000 * kMs);
+    for (uint64_t tick = 0; tick <= 5; ++tick) boundary(scheduler, trace, tick * 1000 * kMs);
     EXPECT_EQ(trace.status().state, StTraceState::COMPLETED);
     EXPECT_EQ(trace.sample_count(), 3u) << "0/1000/2000 ms; 3000 ms là hết hạn";
 }
@@ -180,7 +195,7 @@ TEST(StValueTrace, DurationAndCellBudgetAreTwoSeparateCaps)
     std::string error;
     ASSERT_TRUE(single.start("s1", scheduler, &one, 1, 100, kMaxTraceDurationMs, 0, &error)) << error;
     for (uint64_t tick = 0; tick < kMaxTraceCells + 10; ++tick)
-        single.on_boundary(scheduler, tick * 100 * kMs);
+        boundary(scheduler, single, tick * 100 * kMs);
     /* Một biến: thời lượng chặn trước, KHÔNG chạm trần Ô. */
     EXPECT_EQ(single.sample_count(), kMaxTraceDurationMs / 100u);
     EXPECT_LT(single.sample_count(), kMaxTraceCells);
@@ -190,10 +205,13 @@ TEST(StValueTrace, DurationAndCellBudgetAreTwoSeparateCaps)
     std::array<StTraceVariable, kMaxTraceVariables> many{};
     for (std::size_t index = 0; index < kMaxTraceVariables; ++index)
         many[index] = variable_of("n");
+    /* Scheduler mới: đồng hồ của cái cũ đã đi tới 10 phút. */
+    StScheduler wide_scheduler;
+    build_scheduler(&wide_scheduler);
     StValueTrace wide;
-    ASSERT_TRUE(wide.start("s2", scheduler, many.data(), many.size(), 100, kMaxTraceDurationMs, 0, &error))
+    ASSERT_TRUE(wide.start("s2", wide_scheduler, many.data(), many.size(), 100, kMaxTraceDurationMs, 0, &error))
         << error;
-    for (uint64_t tick = 0; tick < 400; ++tick) wide.on_boundary(scheduler, tick * 100 * kMs);
+    for (uint64_t tick = 0; tick < 400; ++tick) boundary(wide_scheduler, wide, tick * 100 * kMs);
     /* 32 biến: trần Ô chặn trước, và số mẫu rơi được ĐẾM. */
     EXPECT_EQ(wide.sample_count(), kMaxTraceCells / kMaxTraceVariables);
     EXPECT_GT(wide.dropped_count(), 0u);
@@ -213,7 +231,7 @@ TEST(StValueTrace, OverflowDropsOldestAndCountsThem)
     ASSERT_TRUE(trace.start("s1", scheduler, many.data(), many.size(), 100, kMaxTraceDurationMs, 0, &error))
         << error;
     const std::size_t slots = kMaxTraceCells / kMaxTraceVariables;
-    for (uint64_t tick = 0; tick < slots + 5; ++tick) trace.on_boundary(scheduler, tick * 100 * kMs);
+    for (uint64_t tick = 0; tick < slots + 5; ++tick) boundary(scheduler, trace, tick * 100 * kMs);
     EXPECT_EQ(trace.sample_count(), slots);
     EXPECT_EQ(trace.dropped_count(), 5u);
     /* Mẫu 0 là mẫu CŨ NHẤT CÒN GIỮ, không phải mẫu đầu tiên từng lấy. */
@@ -233,7 +251,7 @@ TEST(StValueTrace, UnreadableVariableIsMarkedNotZeroed)
     std::string error;
     ASSERT_TRUE(trace.start("s1", scheduler, variables.data(), variables.size(), 1000, 10000, 0, &error))
         << error;
-    trace.on_boundary(scheduler, 0);
+    boundary(scheduler, trace, 0);
     const StTraceSample sample = trace.sample(0);
     EXPECT_TRUE(sample.valid[0]);
     EXPECT_FALSE(sample.valid[1]) << "biến không đọc được bị trình bày như một giá trị thật";
@@ -255,7 +273,7 @@ TEST(StValueTrace, SamplingDoesNotAllocate)
     std::size_t allocations = 0;
     {
         allocation_probe::ScopedCounter counter;
-        for (uint64_t tick = 0; tick < 200; ++tick) trace.on_boundary(scheduler, tick * 100 * kMs);
+        for (uint64_t tick = 0; tick < 200; ++tick) boundary(scheduler, trace, tick * 100 * kMs);
         allocations = counter.allocations();
     }
     EXPECT_EQ(allocations, 0u);
@@ -280,13 +298,15 @@ TEST(StValueTrace, BoundaryNeverWaitsForReaderAndDefersTheDueSample)
 
     {
         StValueTrace::ConsistentRead hold(trace);
-        trace.on_boundary(scheduler, 0);   /* phải trả về ngay, không treo */
+        boundary(scheduler, trace, 0);   /* phải trả về ngay, không treo */
         EXPECT_EQ(hold.sample_count(), 0u) << "boundary bị chặn không được ghi mẫu";
         EXPECT_EQ(hold.status().contended_boundary_count, 1u);
     }
-    trace.on_boundary(scheduler, 10 * kMs);
+    /* Boundary kế có release của Program (Task 100 ms) — Issue #798: mẫu chỉ
+     * lấy ở boundary Program vừa chạy. */
+    boundary(scheduler, trace, 100 * kMs);
     ASSERT_EQ(trace.sample_count(), 1u) << "mẫu tới hạn phải được lấy ở boundary kế";
-    EXPECT_EQ(trace.sample(0).timestamp_ns, 10 * kMs) << "mốc là thời điểm lấy thật";
+    EXPECT_EQ(trace.sample(0).timestamp_ns, 100 * kMs) << "mốc là thời điểm lấy thật";
     EXPECT_TRUE(trace.sample(0).valid[0]);
     EXPECT_EQ(trace.status().contended_boundary_count, 1u);
 }
@@ -302,7 +322,7 @@ TEST(StValueTrace, NameResolutionHappensAtTheScanBoundary)
     std::string error;
     ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 1000, 10000, 0, &error)) << error;
     EXPECT_FALSE(trace.variable(0).resolved) << "start() không được tự phân giải trên luồng gọi";
-    trace.on_boundary(scheduler, 0);
+    boundary(scheduler, trace, 0);
     EXPECT_TRUE(trace.variable(0).resolved);
     EXPECT_TRUE(trace.sample(0).valid[0]);
 }
@@ -349,6 +369,238 @@ TEST(StValueTrace, ConcurrentIpcReaderAndScanBoundaryStayConsistent)
     stop.store(true, std::memory_order_release);
     scan.join();
     EXPECT_NE(trace.status().state, StTraceState::RUNNING);
+}
+
+/* ===================================================================
+ * Issue #798 (U-04) — mẫu Trace nhất quán theo LẦN CHẠY Program và tách lệnh /
+ * giá trị đọc lại (`SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI`).
+ * =================================================================== */
+namespace {
+
+/* `y := x` — mẫu nhất quán khi và chỉ khi y == x trong cùng mẫu. */
+std::vector<uint8_t> echo_program(const std::vector<StIrIoBinding>& bindings = {})
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    EXPECT_TRUE(compile_st_source(R"ST(
+PROGRAM echo
+VAR_INPUT x : INT; cmd : BOOL; END_VAR
+VAR_OUTPUT y : INT; q : BOOL; END_VAR
+    y := x;
+    q := cmd;
+END_PROGRAM
+)ST", &module, &diagnostic)) << diagnostic.code << ": " << diagnostic.message;
+    for (StIrIoBinding binding : bindings) {
+        for (const StIrVariable& variable : module.variables)
+            if (variable.name == (binding.slot == 0 ? "q" : "")) binding.slot = variable.slot;
+        module.io_bindings.push_back(binding);
+    }
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_TRUE(serialize_st_ir(module, &bytes, &error)) << error;
+    EXPECT_TRUE(sign_st_artifact(&bytes, st_test_secret_key()));
+    return bytes;
+}
+
+/* Task 10 ms (Rev A), các instance cho sẵn chu kỳ Program riêng. */
+void build_rev_a(StScheduler* scheduler,
+                 const std::vector<std::pair<const char*, uint32_t>>& instances,
+                 const std::vector<uint8_t>& artifact)
+{
+    std::string error;
+    StTaskConfig task;
+    task.id = "T";
+    task.period_ms = 10;
+    task.budget_us = 1999;
+    ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
+    uint16_t order = 0;
+    for (const auto& [id, period_ms] : instances) {
+        ASSERT_TRUE(scheduler->add_program("T", id, order++, &error)) << error;
+        ASSERT_TRUE(scheduler->request_activation(id, artifact, &error)) << error;
+    }
+    scheduler->apply_pending_activations_at_boundary();
+    for (const auto& [id, period_ms] : instances) {
+        scheduler->find_program(id)->period_ms = period_ms;
+        ASSERT_TRUE(scheduler->start(id, &error)) << error;
+    }
+}
+
+StTraceVariable traced(const char* instance, const char* name)
+{
+    StTraceVariable variable;
+    variable.instance_id = instance;
+    variable.variable_name = name;
+    return variable;
+}
+
+/* Ranh giới quét như ScanLoop: nạp đầu vào cho mọi Program của Task đến hạn
+ * (kể cả Program chưa tới lượt chạy — đúng nguồn lệch pha của U-04), chạy
+ * Program đến hạn, rồi lấy mẫu. */
+void scan(StScheduler& scheduler, StValueTrace& trace, uint64_t now_ns, int32_t x,
+          const PointTable* table = nullptr)
+{
+    for (auto& task : scheduler.tasks())
+        for (auto& program : task->programs())
+            (void)program->runtime.set_variable("x", StValue::make_int(x));
+    scheduler.on_base_step(now_ns);
+    trace.on_boundary(scheduler, now_ns, table);
+}
+
+} // namespace
+
+/* T-798-1: Program 100 ms trong Task 10 ms, đầu vào đổi ở MỌI boundary (giữa
+ * hai release). Trước #798 mẫu 10 ms mang x mới cạnh y của lần chạy trước. Nay
+ * mọi mẫu có cặp (x, y) của cùng một lần chạy, và mẫu chỉ có ở boundary release. */
+TEST(StValueTrace, T798_1_EverySamplePairsInputAndOutputOfTheSameRelease)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"slow", 100}}, echo_program());
+    std::array<StTraceVariable, 2> variables{traced("slow", "x"), traced("slow", "y")};
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, variables.data(), variables.size(), 10, 60000, 0, &error))
+        << error;
+    for (uint64_t step = 0; step < 300; ++step) scan(scheduler, trace, step * 10 * kMs, int32_t(step));
+
+    ASSERT_EQ(trace.sample_count(), 30u) << "3 s ở Program 100 ms = 30 lần chạy = 30 mẫu";
+    int incoherent = 0;
+    for (std::size_t index = 0; index < trace.sample_count(); ++index) {
+        const StTraceSample sample = trace.sample(index);
+        ASSERT_TRUE(sample.valid[0] && sample.valid[1]);
+        if (sample.values[0].i != sample.values[1].i) ++incoherent;
+        EXPECT_EQ(sample.release_seq[0], sample.release_seq[1]);
+        EXPECT_EQ(sample.timestamp_ns % (100 * kMs), 0u) << "mẫu phải nằm đúng boundary release";
+    }
+    EXPECT_EQ(incoherent, 0);
+}
+
+/* T-798-2: phiên trộn Program 10 ms và 100 ms. Ô của Program chưa release mang
+ * NOT_RELEASED (không bịa giá trị cũ); ô của Program vừa chạy có giá trị. */
+TEST(StValueTrace, T798_2_MixedPeriodSessionMarksCellsOfNotReleasedProgram)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"fast", 0}, {"slow", 100}}, echo_program());
+    std::array<StTraceVariable, 2> variables{traced("fast", "y"), traced("slow", "y")};
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, variables.data(), variables.size(), 10, 60000, 0, &error))
+        << error;
+    for (uint64_t step = 0; step < 100; ++step) scan(scheduler, trace, step * 10 * kMs, int32_t(step + 1));
+
+    ASSERT_EQ(trace.sample_count(), 100u) << "Program 10 ms chạy mỗi boundary";
+    int slow_valid = 0;
+    for (std::size_t index = 0; index < trace.sample_count(); ++index) {
+        const StTraceSample sample = trace.sample(index);
+        EXPECT_TRUE(sample.valid[0]);
+        EXPECT_EQ(sample.reason[0], StTraceCellReason::OK);
+        if (sample.valid[1]) {
+            ++slow_valid;
+            EXPECT_EQ(sample.values[1].i, sample.values[0].i) << "cùng boundary, cùng đầu vào";
+        } else {
+            EXPECT_EQ(sample.reason[1], StTraceCellReason::NOT_RELEASED);
+            EXPECT_EQ(sample.values[1].i, 0) << "ô không release không được mang giá trị cũ";
+        }
+    }
+    EXPECT_EQ(slow_valid, 10);
+}
+
+/* T-798-3: số release liên tiếp khi mọi lần chạy đều được lấy mẫu; khi boundary
+ * bị luồng IPC chặn thì khoảng trống HIỆN RA ở số release (cách nhau 2), không
+ * lặng lẽ. Biến không phân giải được mang UNRESOLVED, số release 0. */
+TEST(StValueTrace, T798_3_ReleaseSequenceIsContiguousAndGapsAreVisible)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"slow", 100}}, echo_program());
+    std::array<StTraceVariable, 2> variables{traced("slow", "y"), traced("slow", "khong_co")};
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, variables.data(), variables.size(), 10, 60000, 0, &error))
+        << error;
+    for (uint64_t step = 0; step < 50; ++step) {
+        if (step == 20) {
+            /* Boundary 200 ms là một release — bị chặn thì mất đúng lần đó. */
+            StValueTrace::ConsistentRead hold(trace);
+            scan(scheduler, trace, step * 10 * kMs, int32_t(step));
+            continue;
+        }
+        scan(scheduler, trace, step * 10 * kMs, int32_t(step));
+    }
+    ASSERT_EQ(trace.sample_count(), 4u) << "release 0/100/200/300/400 ms trừ lần 200 ms bị chặn";
+    std::vector<uint64_t> seq;
+    for (std::size_t index = 0; index < trace.sample_count(); ++index) {
+        const StTraceSample sample = trace.sample(index);
+        seq.push_back(sample.release_seq[0]);
+        EXPECT_EQ(sample.reason[1], StTraceCellReason::UNRESOLVED);
+        EXPECT_EQ(sample.release_seq[1], 0u);
+    }
+    /* Mẫu hoãn từ 200 ms được lấy ở release kế (300 ms); release 200 ms mất. */
+    EXPECT_EQ(seq, (std::vector<uint64_t>{1, 2, 4, 5}));
+}
+
+/* T-798-4 (phần Core): biến gắn điểm đầu ra có số ĐỌC LẠI từ bảng điểm, khác
+ * lệnh khi thiết bị chưa theo kịp, kèm tuổi tăng giữa hai lần cập nhật điểm.
+ * Biến không gắn điểm đầu ra không có kênh đọc lại (NONE), không chép lệnh. */
+TEST(StValueTrace, T798_4_OutputBoundVariableCarriesReadbackDistinctFromCommand)
+{
+    StIrIoBinding output{};
+    output.slot = 0;   /* echo_program điền slot của `q` */
+    output.is_output = true;
+    output.point_kind = StPointKind::DO;
+    output.point_index = 1;
+    output.type = StType::BOOL;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"relay", 0}}, echo_program({output}));
+    PointTable table;
+    IoSnapshot io{};
+    io.ts_ns = 5 * kMs;
+    io.do_feedback[0] = 0;   /* relay chưa đổi */
+    table.update_inputs(io);
+
+    std::array<StTraceVariable, 2> variables{traced("relay", "q"), traced("relay", "y")};
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, variables.data(), variables.size(), 10, 60000, 0, &error))
+        << error;
+    (void)scheduler.find_program("relay")->runtime.set_variable("cmd", StValue::make_bool(true));
+    scan(scheduler, trace, 10 * kMs, 1, &table);
+    scan(scheduler, trace, 30 * kMs, 1, &table);
+    ASSERT_EQ(trace.sample_count(), 2u);
+    const StTraceSample first = trace.sample(0);
+    EXPECT_TRUE(first.valid[0]);
+    EXPECT_TRUE(first.values[0].b) << "lệnh Program: đóng";
+    ASSERT_EQ(first.readback_state[0], StTraceReadback::VALID);
+    EXPECT_FALSE(first.readback[0].b) << "đọc lại: relay chưa đóng — khác lệnh";
+    EXPECT_EQ(first.readback_age_ms[0], 5u);
+    EXPECT_EQ(trace.sample(1).readback_age_ms[0], 25u) << "tuổi tăng khi điểm chưa cập nhật";
+    EXPECT_EQ(first.readback_state[1], StTraceReadback::NONE) << "y không gắn điểm đầu ra";
+
+    io.ts_ns = 40 * kMs;
+    io.do_feedback[0] = 1;
+    table.update_inputs(io);
+    scan(scheduler, trace, 40 * kMs, 1, &table);
+    const StTraceSample caught_up = trace.sample(2);
+    EXPECT_TRUE(caught_up.readback[0].b);
+    EXPECT_EQ(caught_up.readback_age_ms[0], 0u);
+
+    /* Không có bảng điểm (đường không có phần cứng): gắn điểm nhưng KHÔNG có số. */
+    scan(scheduler, trace, 50 * kMs, 1, nullptr);
+    EXPECT_EQ(trace.sample(3).readback_state[0], StTraceReadback::UNAVAILABLE);
+}
+
+/* Program không còn được dispatch (STOPPED) thì không chờ release mãi: mẫu vẫn
+ * lấy, ô mang NOT_RELEASED. */
+TEST(StValueTrace, StoppedProgramDoesNotFreezeTheSession)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"slow", 100}}, echo_program());
+    std::string error;
+    ASSERT_TRUE(scheduler.stop("slow", &error)) << error;
+    const StTraceVariable variable = traced("slow", "y");
+    StValueTrace trace;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 10, 60000, 0, &error)) << error;
+    for (uint64_t step = 0; step < 5; ++step) scan(scheduler, trace, step * 10 * kMs, 1);
+    ASSERT_EQ(trace.sample_count(), 5u);
+    EXPECT_EQ(trace.sample(0).reason[0], StTraceCellReason::NOT_RELEASED);
 }
 
 } // namespace core

@@ -1008,6 +1008,7 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
 
     const StExecResult result = program.runtime.execute(static_cast<int64_t>(now_ns));
     program.run_count++;
+    program.last_release_base_step = base_step_count_;
     /* T60-002 — MỐC THỜI GIAN của lần chạy, ghi ngay sau khi thân chương trình
      * đã thực thi và TRƯỚC nhánh fault: một Program chết lúc 10:03 phải báo
      * 10:03, không phải mốc của lần chạy tốt cuối cùng trước đó. Chỉ RUNNING

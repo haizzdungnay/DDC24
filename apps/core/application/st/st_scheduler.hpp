@@ -303,7 +303,14 @@ struct StProgramInstance {
     uint32_t    last_fault_pc = 0;
     int         last_fault_line = 0;
     uint32_t    fault_count = 0;
+    /* Số lần thân chương trình được thực thi — cũng là SỐ RELEASE (`releaseSeq`)
+     * mà Trace gắn vào mỗi ô (Issue #798). */
     uint32_t    run_count = 0;
+    /* Issue #798 — `base_step_count()` của lần release gần nhất (0 = chưa từng).
+     * Trace so với base step hiện hành để biết Program có vừa chạy ở CHÍNH
+     * boundary đang lấy mẫu không: chỉ khi đó đầu vào trong slot là đầu vào đã
+     * dùng cho đầu ra đang nằm cạnh nó. */
+    uint64_t    last_release_base_step = 0;
 
     /* ProgramProcessImage: cấp phát tĩnh theo profile, không heap trong scan. */
     std::array<StProcessInputSlot, st_ir::kMaxIoBindings> process_inputs{};

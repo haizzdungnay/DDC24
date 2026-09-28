@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 2.2 |
+| Phiên bản | 2.3 |
 | Trạng thái | **Baseline 2.0 M3 AS-BUILT + ISS-PGM03-01 AS-BUILT; PGM-02 v2.2 CONTRACT OVERLAY TARGET CANDIDATE — NO EXECUTION AUTHORITY** |
 | Ngày | 2026-09-06 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -143,6 +143,16 @@ Trace HTTP là **read-only sampling của cùng MonitorService** trong Task 509:
   chủ ý; không được mô tả như durable trace. Core `TRACE_START` ở §8 là đường
   target cho trace RT/fault chuyên biệt và **chưa** là producer của HTTP trace
   hiện hành.
+- **Cập nhật 2026-09-28 (Issue #798, OpenAPI 1.47.0):** từ F18/U-02 Trace HTTP
+  lấy mẫu từ ring Core (`source = CORE`) khi Core nhận phiên, poll monitor chỉ là
+  dự phòng. Mẫu Core lấy **tại lần chạy** Program nên cặp vào/ra thuộc đúng một
+  lần chạy. `ProgrammingTraceValue` thêm `commandedValue` (lệnh ra điểm đầu ra),
+  `readbackValue` + `readbackAgeMs` (giá trị đọc lại của điểm và tuổi),
+  `releaseSeq` (số lần chạy của Program nguồn) và `unavailableReason`
+  (`UNRESOLVED`/`NOT_RELEASED`). `actualValue` của Trace **deprecated**: bằng
+  `readbackValue`, không còn chép `programValue`. Chi tiết IPC ở
+  `contracts/ipc/programming_v1/README.md` §4.2; thiết kế
+  `SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI`.
 
 `GET /runtime/signals` trả identity/type/unit, publisher Program, value nullable,
 quality/freshness, producer timestamp và observed generation. `value=null` là
@@ -797,6 +807,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
+| 2.3 | 2026-09-28 | §3.1: Trace lấy mẫu tại lần chạy Program, tách `commandedValue`/`readbackValue`/`readbackAgeMs`, thêm `releaseSeq`/`unavailableReason`, `actualValue` deprecated (Issue #798, OpenAPI 1.47.0). Bằng chứng HOST | Core + BE + FE |
 | 2.2 | 2026-09-06 | Đồng bộ As-Built `ISS-PGM03-01`: OpenAPI v1.38.0/44 operation, preview binding typed khóa bằng ETag/base revision, validator dùng chung ở preview/upsert/Check, detailCode công khai qua allowlist và compatibility fail-closed. Chỉ có bằng chứng HOST; không nâng HIL/release. | BE + FE + QA |
 | 2.1-candidate | 2026-08-24 | Thêm contract overlay PGM-02 cho typed EDIT, coherent LIVE và Simulation worker cách ly; bổ sung `IF-T-016..018`; giữ OpenAPI v1.28.0 Active không đổi và R1/R2/R3 `NO-GO` chờ exact pin. | System Architecture + Programming Team |
 | 0.1 | 2026-08-09 | Draft REST/event/internal contract | System Engineering |

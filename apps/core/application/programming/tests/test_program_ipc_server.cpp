@@ -464,7 +464,7 @@ TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
-    scheduler.tick(0);
+    scheduler.apply_pending_activations_at_boundary();
     ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
 
     StValueTrace trace;
@@ -493,9 +493,12 @@ TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
     EXPECT_EQ(send(ProgramAction::TraceStart, start_body, 0x20).result, ProgramResult::Accepted);
     EXPECT_EQ(trace.status().state, StTraceState::RUNNING);
 
-    /* Lấy mẫu ở boundary — đúng chỗ scan loop gọi. */
-    trace.on_boundary(scheduler, 1'000'000);
-    trace.on_boundary(scheduler, 1'001'000'000);
+    /* Lấy mẫu ở boundary — đúng chỗ scan loop gọi, SAU khi Program chạy
+     * (Issue #798: mẫu chỉ lấy ở boundary có release). */
+    for (const uint64_t now : {1'000'000ull, 1'001'000'000ull}) {
+        scheduler.on_base_step(now);
+        trace.on_boundary(scheduler, now);
+    }
     EXPECT_EQ(trace.sample_count(), 2u);
 
     const ProgramResponse read =
@@ -529,12 +532,14 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
     std::string error;
     StTaskConfig task;
     task.id = "main";
-    task.period_ms = 1000;
-    task.budget_us = 199000;
+    /* Issue #798: mẫu lấy ở boundary có release — Task 10 ms để mỗi boundary
+     * 10 ms là một lần chạy. */
+    task.period_ms = 10;
+    task.budget_us = 1999;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
-    scheduler.tick(0);
+    scheduler.apply_pending_activations_at_boundary();
     ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
 
     StValueTrace trace;
@@ -556,6 +561,10 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
         EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
         return response;
     };
+    auto boundary = [&](uint64_t now) {
+        scheduler.on_base_step(now);
+        trace.on_boundary(scheduler, now);
+    };
     auto body_of = [](const ProgramResponse& response) {
         return nlohmann::json::from_cbor(response.payload, true, true);
     };
@@ -567,7 +576,7 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
     ASSERT_EQ(send(ProgramAction::TraceStart, start_body).result, ProgramResult::Accepted);
     ASSERT_EQ(trace.status().effective_sample_period_ms, 10u);
     const uint64_t t0 = 1'000'000;
-    for (uint64_t k = 0; k < 300; ++k) trace.on_boundary(scheduler, t0 + k * 10'000'000ull);
+    for (uint64_t k = 0; k < 300; ++k) boundary(t0 + k * 10'000'000ull);
     ASSERT_EQ(trace.sample_count(), 300u);
     EXPECT_EQ(trace.first_sequence(), 1u);
     EXPECT_EQ(trace.next_sequence(), 301u);
@@ -597,7 +606,7 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
     /* Ghi tiếp tới 10 050 mẫu: 50 mẫu đầu bị ghi đè. Người đọc dừng ở 301 vẫn
      * đọc tiếp đúng từ 301; người đọc còn ở 1 thấy `firstSequence = 51` —
      * khoảng hụt 50 chính là số mẫu nó đã mất. */
-    for (uint64_t k = 300; k < 10050; ++k) trace.on_boundary(scheduler, t0 + k * 10'000'000ull);
+    for (uint64_t k = 300; k < 10050; ++k) boundary(t0 + k * 10'000'000ull);
     ASSERT_EQ(trace.sample_count(), 10000u);
     EXPECT_EQ(trace.first_sequence(), 51u);
     const nlohmann::json resumed = body_of(send(ProgramAction::TraceRead, nlohmann::json::array({"session-f18", 301u})));
@@ -616,6 +625,83 @@ TEST(ProgramIpcServer, TraceReadIsIncrementalBoundedAndReportsOverwrittenGap)
               ProgramResult::Rejected);
 }
 
+/* Issue #798 — BE mới xin dạng ô 2 bằng phần tử thứ ba của payload và nhận
+ * `[valid, bits, reason, releaseSeq, readbackState, readbackBits,
+ * readbackAgeMs]`; BE cũ không gửi nên vẫn nhận `[valid, bits]`. Dạng lạ bị từ
+ * chối thay vì rơi về dạng cũ. */
+TEST(ProgramIpcServer, TraceReadCellFormatTwoCarriesReleaseAndReadback)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_us = 199000;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
+    scheduler.apply_pending_activations_at_boundary();
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    server.set_value_trace(&trace, &scheduler);
+    uint8_t seed = 0x30;
+    auto send = [&](ProgramAction action, const nlohmann::json& body) {
+        ProgramRequest input = request(action);
+        input.request_id = bytes(16, seed++);
+        input.operation_id = bytes(16, seed++);
+        input.actor_id = "admin-1";
+        input.payload = nlohmann::json::to_cbor(body);
+        crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+        ProgramCodecError codec_error = ProgramCodecError::None;
+        const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+        EXPECT_EQ(codec_error, ProgramCodecError::None);
+        const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+        ProgramResponse response;
+        EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+        return response;
+    };
+    const nlohmann::json start_body = nlohmann::json::array(
+        {"session-798", 1000u, 10000u,
+         nlohmann::json::array({nlohmann::json::array({"P_ahu", "x"}),
+                                nlohmann::json::array({"P_ahu", "khong_co"})})});
+    ASSERT_EQ(send(ProgramAction::TraceStart, start_body).result, ProgramResult::Accepted);
+    for (uint64_t k = 0; k < 3; ++k) {
+        const uint64_t now = 1'000'000ull + k * 1'000'000'000ull;
+        scheduler.on_base_step(now);
+        trace.on_boundary(scheduler, now);
+    }
+    ASSERT_EQ(trace.sample_count(), 3u);
+
+    const ProgramResponse legacy =
+        send(ProgramAction::TraceRead, nlohmann::json::array({"session-798", 1u}));
+    const nlohmann::json legacy_body = nlohmann::json::from_cbor(legacy.payload, true, true);
+    ASSERT_EQ(legacy_body[2][0][1][0].size(), 2u) << "BE cũ phải nhận đúng dạng nó giải mã được";
+
+    const ProgramResponse read =
+        send(ProgramAction::TraceRead, nlohmann::json::array({"session-798", 1u, 2u}));
+    ASSERT_EQ(read.result, ProgramResult::Ok);
+    const nlohmann::json body = nlohmann::json::from_cbor(read.payload, true, true);
+    ASSERT_EQ(body.size(), 5u);
+    ASSERT_EQ(body[2].size(), 3u);
+    for (std::size_t index = 0; index < 3; ++index) {
+        const nlohmann::json& cells = body[2][index][1];
+        ASSERT_EQ(cells[0].size(), 7u);
+        EXPECT_TRUE(cells[0][0].get<bool>());
+        EXPECT_EQ(cells[0][2].get<uint64_t>(), 0u) << "OK";
+        EXPECT_EQ(cells[0][3].get<uint64_t>(), index + 1) << "số release liên tiếp";
+        EXPECT_EQ(cells[0][4].get<uint64_t>(), 0u) << "x không gắn điểm đầu ra: NONE";
+        EXPECT_FALSE(cells[1][0].get<bool>());
+        EXPECT_EQ(cells[1][2].get<uint64_t>(), 1u) << "UNRESOLVED";
+        EXPECT_EQ(cells[1][3].get<uint64_t>(), 0u);
+    }
+    EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-798", 1u, 3u})).result,
+              ProgramResult::Rejected);
+    EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-798", 1u, "2"})).result,
+              ProgramResult::Rejected);
+}
+
 /* X19 / F05 — `TRACE_READ` chạy trên luồng `prog-ipc` trong khi luồng quét ghi
  * trace mỗi base step. Trạng thái, số thứ tự và mẫu phải đến từ CÙNG một lần
  * giữ khoá: nếu đọc rời từng hàm, ring (đầy, đang ghi đè) có thể dịch một mẫu
@@ -629,12 +715,14 @@ TEST(ProgramIpcServer, TraceReadSequencesStayBoundToTheirSamplesUnderConcurrentW
     std::string error;
     StTaskConfig task;
     task.id = "main";
-    task.period_ms = 1000;
-    task.budget_us = 199000;
+    /* Issue #798: trace lấy mẫu ở boundary có release, nên luồng "quét" phải
+     * chạy Program ở MỖI boundary (Task 10 ms) như ScanLoop thật. */
+    task.period_ms = 10;
+    task.budget_us = 1999;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
-    scheduler.tick(0);
+    scheduler.apply_pending_activations_at_boundary();
     ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
 
     StValueTrace trace;
@@ -680,6 +768,7 @@ TEST(ProgramIpcServer, TraceReadSequencesStayBoundToTheirSamplesUnderConcurrentW
         uint32_t contended_before = trace.status().contended_boundary_count;
         for (uint64_t k = 0; k < kMaxBoundaries && !stop.load(std::memory_order_acquire); ++k) {
             const uint64_t now = 1'000'000ull + k * 10'000'000ull;
+            scheduler.on_base_step(now);
             trace.on_boundary(scheduler, now);
             const StTraceStatus status = trace.status();
             if (status.state != StTraceState::RUNNING) break;

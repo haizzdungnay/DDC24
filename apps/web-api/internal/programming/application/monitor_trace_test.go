@@ -365,6 +365,10 @@ type traceCoreReader struct {
 	firstSeq  uint64
 	batch     int
 	failReads bool
+	// Issue #798: `legacyOnly` giả lập Core đời trước — từ chối payload có
+	// `cellFormat` bằng `IPC-PAYLOAD`; `legacyReads` đếm lần đọc dạng cũ.
+	legacyOnly  bool
+	legacyReads int
 }
 
 // counts trả về ảnh chụp nhất quán của ba bộ đếm. Đọc từng trường rời rạc sẽ
@@ -417,6 +421,13 @@ func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (co
 		// tối đa một lô.
 		var read traceReadPayload
 		if err := coreipc.DecodePayload(request.Payload, &read); err != nil {
+			var legacy traceReadPayloadLegacy
+			if legacyErr := coreipc.DecodePayload(request.Payload, &legacy); legacyErr != nil {
+				return coreipc.ResponseFor(request, coreipc.ResultRejected, "IPC-PAYLOAD", "core.programming.ipc", nil), nil
+			}
+			f.legacyReads++
+			read = traceReadPayload{SessionID: legacy.SessionID, FromSequence: legacy.FromSequence}
+		} else if f.legacyOnly {
 			return coreipc.ResponseFor(request, coreipc.ResultRejected, "IPC-PAYLOAD", "core.programming.ipc", nil), nil
 		}
 		first := f.firstSeq

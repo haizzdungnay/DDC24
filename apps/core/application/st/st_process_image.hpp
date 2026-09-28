@@ -60,6 +60,15 @@ bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
 bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
                       PointTable* table, StIoBridgeStats* stats);
 
+/* Issue #798 — giá trị ĐỌC LẠI của điểm mà một binding ĐẦU RA trỏ tới: bảng
+ * điểm giữ feedback (AO/DO nội bộ) hoặc giá trị poll gần nhất (Modbus EXT), KHÁC
+ * với lệnh Program vừa ghi. Trả false khi binding không map được, điểm không
+ * GOOD hoặc giá trị không đổi được về kiểu của biến — "không có số đọc lại" phải
+ * hiện là không có, không phải chép lệnh sang. `*age_ms` = tuổi của mẫu điểm tại
+ * `now_ns` (bão hoà ở UINT32_MAX). Không cấp phát: gọi được từ đường quét. */
+bool st_output_readback(const StIrIoBinding& binding, const PointTable& table, uint64_t now_ns,
+                        StCell* value, uint32_t* age_ms);
+
 /* Đường ScanLoop: chỉ chụp Task đến hạn, sau safe-boundary activation.
  * Instance WAITING vẫn phải nhận snapshot input mới để lần retry cùng
  * generation không fault vì dùng ảnh cũ. */
