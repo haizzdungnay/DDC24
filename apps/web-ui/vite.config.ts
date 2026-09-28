@@ -55,12 +55,23 @@ export default defineConfig(({ mode }) => {
             return 'assets/[name]-[hash].js'
           },
           manualChunks(id) {
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            /* Khớp ĐÚNG tên gói. Tiền tố `node_modules/react` trước đây còn khớp
+               cả `react-smooth`, `react-is` — phụ thuộc riêng của recharts — và
+               kéo chúng (cùng `prop-types`, `fast-equals`) vào chunk tải ở MỌI
+               trang (T63-109). */
+            if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
               return 'react'
             }
-            if (id.includes('node_modules/recharts')) {
-              return 'charts'
-            }
+            /* T63-109 (PERF-FE-02): KHÔNG còn nhóm `charts` cho `recharts`.
+             *
+             * Nhóm thủ công kéo theo cả phụ thuộc của recharts, trong đó có lõi
+             * `react`, `clsx`, `prop-types`… Chunk entry và chunk `react` vì thế
+             * import React TỪ chunk `charts`, nên `index.html` modulepreload
+             * `charts` (407.319 B thô) cho MỌI trang, kể cả `/login` — tách
+             * TrendChart ra `import()` thôi thì chưa đủ. Nay recharts chỉ tới được
+             * qua `import('./TrendChartPlot')`, nên để bộ chia chunk mặc định đặt
+             * nó vào chunk động, còn phụ thuộc dùng chung ở lại đồ thị chính.
+             * Cổng: `scripts/check-login-chunks.mjs` (chạy trong `npm run build`). */
             if (id.includes('node_modules/lucide-react')) {
               return 'icons'
             }

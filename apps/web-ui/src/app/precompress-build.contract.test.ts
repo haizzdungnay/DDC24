@@ -19,12 +19,14 @@ const webUi = resolve(here, '../..')
 const script = resolve(webUi, 'scripts/precompress-assets.mjs')
 
 describe('T63-104 nén sẵn tài nguyên FE lúc build', () => {
-  it('build chạy precompress ngay sau vite build, và build:release đi qua build', () => {
+  it('build chạy precompress sau vite build (trước bundle budget), và build:release đi qua build', () => {
     const scripts = JSON.parse(readFileSync(resolve(webUi, 'package.json'), 'utf8')).scripts as Record<string, string>
     const steps = scripts.build.split('&&').map((step) => step.trim())
     const vite = steps.indexOf('vite build')
+    const precompress = steps.indexOf('node scripts/precompress-assets.mjs')
     expect(vite).toBeGreaterThanOrEqual(0)
-    expect(steps[vite + 1]).toBe('node scripts/precompress-assets.mjs')
+    expect(precompress).toBeGreaterThan(vite)
+    expect(precompress).toBeLessThan(steps.indexOf('npm run check:bundle-budget'))
     expect(scripts['build:release']).toContain('npm run build')
   })
 

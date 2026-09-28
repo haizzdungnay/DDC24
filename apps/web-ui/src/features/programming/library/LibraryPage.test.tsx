@@ -23,8 +23,19 @@ vi.mock('../../auth', async (importOriginal) => {
   }
 })
 
-const client = vi.hoisted(() => ({ request: vi.fn() }))
-vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
+/* MỖI TEST MỘT client MỚI, không chỉ một `mockReset()`.
+ *
+ * Mutation "chưa rõ kết quả" (test deprecate mất phản hồi) khởi một vòng đối soát
+ * nền: tới 4 lượt, cách nhau 750 ms, đọc `searchProgrammingLibraries` với
+ * `projectId` của test đó — và vòng này còn chạy SAU khi test kết thúc. Khi mọi
+ * test dùng chung một object `client`, lượt đọc trễ ấy rơi vào `mockImplementation`
+ * của test sau và bị ghi nhận như request của test đó ("tab Dự án không có
+ * Project: không gọi máy chủ" nhận `{projectId: 1111…}`). Rơi hay không tuỳ tải CPU
+ * của máy chạy — tức một test chập chờn. Hook giữ object client của lần render,
+ * nên đổi object theo từng test là đủ để vòng nền cũ chỉ gọi vào client cũ. */
+const clientHolder = vi.hoisted(() => ({ current: { request: vi.fn() } }))
+vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => clientHolder.current }))
+let client = clientHolder.current
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const ENTRY_ID = '44444444-4444-4444-8444-444444444444'
@@ -181,7 +192,8 @@ beforeEach(() => {
   // chuỗi tiếng Việt sẽ đỏ/xanh theo locale của máy chạy nếu không ghim.
   localStorage.setItem('mkddc-lang', 'vi')
   auth.role = 'admin'
-  client.request.mockReset()
+  clientHolder.current = { request: vi.fn() }
+  client = clientHolder.current
 })
 afterEach(cleanup)
 

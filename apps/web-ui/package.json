@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "npm run check:programming-contracts && tsc --noEmit && vite build && node scripts/precompress-assets.mjs && npm run check:bundle-budget",
+    "build": "npm run check:programming-contracts && tsc --noEmit && vite build && node scripts/check-login-chunks.mjs && node scripts/precompress-assets.mjs && npm run check:bundle-budget",
     "build:release": "VITE_PROGRAMMING_REV_A=1 npm run build",
     "build:foxlinx": "npm run build:release",
     "generate:programming-errors": "python3 ../../scripts/generate_programming_errors.py",
