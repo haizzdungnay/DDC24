@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ScheduleObject, ScheduleTimeValue } from '../../shared/types'
 import { describeDateRule, findExceptionConflicts, previewDateRule, weekNDayOfMonth } from './dateRules'
 import {
-  blockToTimeValues, capacityUsage, dayToBlocks, formatValue, secondsToTime,
+  blockToTimeValues, capacityUsage, dayToBlocks, formatValue, removeBlockFromDay, secondsToTime,
   timeToSeconds, weeklySummary
 } from './shared'
 
@@ -64,6 +64,29 @@ describe('biên dịch Start/End ↔ Time-Value', () => {
     expect(secondsToTime(timeToSeconds('23:59:59'))).toBe('23:59:59')
     expect(timeToSeconds('8:30')).toBe(-1)
     expect(timeToSeconds('24:00:00')).toBe(-1)
+  })
+
+  it('xóa khối TimeBlock dọn sạch cả mốc bật và mốc trả về mặc định', () => {
+    const day: ScheduleTimeValue[] = [
+      { time: '08:00:00', value: 'ACTIVE' },
+      { time: '17:00:00', value: 'INACTIVE' }
+    ]
+    const res = removeBlockFromDay(day, 8 * 3600, 17 * 3600, 'INACTIVE')
+    expect(res).toEqual([])
+  })
+
+  it('xóa khối ở giữa giữ nguyên các khối khác', () => {
+    const day: ScheduleTimeValue[] = [
+      { time: '08:00:00', value: 'ACTIVE' },
+      { time: '12:00:00', value: 'INACTIVE' },
+      { time: '13:00:00', value: 'ACTIVE' },
+      { time: '18:00:00', value: 'INACTIVE' }
+    ]
+    const res = removeBlockFromDay(day, 8 * 3600, 12 * 3600, 'INACTIVE')
+    expect(res).toEqual([
+      { time: '13:00:00', value: 'ACTIVE' },
+      { time: '18:00:00', value: 'INACTIVE' }
+    ])
   })
 })
 

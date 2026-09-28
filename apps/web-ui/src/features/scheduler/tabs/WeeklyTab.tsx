@@ -1,11 +1,13 @@
-import { Copy, Plus, Trash2 } from 'lucide-react'
+import { CheckSquare, Copy, Edit3, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../../../shared/components/Button'
-import type { ScheduleDayKey, ScheduleObject, ScheduleTimeValue } from '../../../shared/types'
+import { Modal } from '../../../shared/components/Modal'
+import type { ScheduleDayKey, ScheduleObject, ScheduleTimeValue, ScheduleValue } from '../../../shared/types'
 import { cn } from '../../../shared/utils'
 import {
   DAY_KEYS, DAY_LABELS, EM_DASH, activeValue, blockToTimeValues, dayToBlocks,
-  formatValue, isActiveValue, secondsToTime, shortTime, sortTimeValues, timeToSeconds
+  formatValue, isActiveValue, removeBlockFromDay, secondsToTime, shortTime, sortTimeValues, timeToSeconds,
+  type TimeBlock
 } from '../shared'
 
 const STEP_SEC = 5 * 60          // bước nhảy 5 phút
@@ -34,6 +36,23 @@ export function WeeklyTab({
   const [activeDay, setActiveDay] = useState<ScheduleDayKey>('MON')
   const [selected, setSelected] = useState<{ day: ScheduleDayKey; index: number } | null>(null)
   const [copyOpen, setCopyOpen] = useState(false)
+  const [clipboard, setClipboard] = useState<{ duration: number; value: ScheduleValue } | null>(null)
+  const [editModal, setEditModal] = useState<{
+    origDay: ScheduleDayKey
+    day: ScheduleDayKey
+    origStartSec: number
+    origEndSec: number
+    startSec: number
+    endSec: number
+    value: ScheduleValue
+  } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    day: ScheduleDayKey
+    timeSec: number
+    block?: TimeBlock
+  } | null>(null)
 
   const defaultValue = draft.schedule_default.value
   const onValue = activeValue(draft.value_type)
@@ -42,11 +61,40 @@ export function WeeklyTab({
     onChange({ weekly_schedule: { ...draft.weekly_schedule, [day]: sortTimeValues(events) } })
   }
 
-  function addBlock(day: ScheduleDayKey) {
-    // Khối mặc định 08:00–17:00 — khung giờ hành chính, chỗ bắt đầu quen thuộc.
-    const next = blockToTimeValues(draft.weekly_schedule[day], 8 * 3600, 17 * 3600, onValue, defaultValue)
+  function addBlock(day: ScheduleDayKey, startSec = 8 * 3600, endSec = 17 * 3600, val = onValue) {
+    const next = blockToTimeValues(draft.weekly_schedule[day], startSec, endSec, val, defaultValue)
     setDay(day, next)
     setActiveDay(day)
+  }
+
+  function removeBlock(day: ScheduleDayKey, startSec: number, endSec: number) {
+    const next = removeBlockFromDay(draft.weekly_schedule[day], startSec, endSec, defaultValue)
+    setDay(day, next)
+    setSelected(null)
+  }
+
+  function resizeBlock(day: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) {
+    const without = removeBlockFromDay(draft.weekly_schedule[day], oldStart, oldEnd, defaultValue)
+    const next = blockToTimeValues(without, newStart, newEnd, val, defaultValue)
+    setDay(day, next)
+  }
+
+  function moveBlock(fromDay: ScheduleDayKey, toDay: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) {
+    const without = removeBlockFromDay(draft.weekly_schedule[fromDay], oldStart, oldEnd, defaultValue)
+    if (fromDay === toDay) {
+      const next = blockToTimeValues(without, newStart, newEnd, val, defaultValue)
+      setDay(fromDay, next)
+    } else {
+      const targetWithNew = blockToTimeValues(draft.weekly_schedule[toDay], newStart, newEnd, val, defaultValue)
+      onChange({
+        weekly_schedule: {
+          ...draft.weekly_schedule,
+          [fromDay]: without,
+          [toDay]: targetWithNew
+        }
+      })
+      setActiveDay(toDay)
+    }
   }
 
   function removeEvent(day: ScheduleDayKey, index: number) {
@@ -73,6 +121,20 @@ export function WeeklyTab({
     setCopyOpen(false)
   }
 
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [contextMenu])
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       {/* N-08: tab nằm trong `ScheduleEditorPage` vốn đã giữ `<h1>`, nên đây là
@@ -83,9 +145,32 @@ export function WeeklyTab({
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
         <WeekGrid
           draft={draft}
+          canEdit={canEdit}
           selected={selected}
+          onValue={onValue}
+          defaultValue={defaultValue}
           onSelect={(day, index) => { setSelected({ day, index }); setActiveDay(day) }}
           onDayFocus={setActiveDay}
+          onAddBlock={addBlock}
+          onRemoveBlock={removeBlock}
+          onResizeBlock={resizeBlock}
+          onMoveBlock={moveBlock}
+          onOpenEditModal={(day, b) => setEditModal({
+            origDay: day,
+            day,
+            origStartSec: b.startSec,
+            origEndSec: b.endSec,
+            startSec: b.startSec,
+            endSec: b.endSec,
+            value: b.value
+          })}
+          onOpenContextMenu={(e, day, b, timeSec) => setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            day,
+            timeSec: timeSec ?? (b ? b.startSec : 0),
+            block: b
+          })}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--c-text-dim)]">
           <LegendSwatch className="bg-[var(--c-accent)]" label={formatValue(onValue, draft.value_type)} />
@@ -144,19 +229,392 @@ export function WeeklyTab({
 
         <KeyboardHelp />
       </section>
+
+      {/* Context Menu chuẩn Google Calendar */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-52 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-1.5 shadow-2xl text-xs text-[var(--c-text)] select-none"
+          style={{
+            left: Math.min(typeof window !== 'undefined' ? window.innerWidth - 220 : 0, contextMenu.x),
+            top: Math.min(typeof window !== 'undefined' ? window.innerHeight - 230 : 0, contextMenu.y)
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2 py-1 font-semibold text-[11px] text-[var(--c-text-dim)] border-b border-[var(--c-border)] mb-1 flex items-center justify-between">
+            <span>{DAY_LABELS[contextMenu.day]}</span>
+            <span className="font-mono">
+              {contextMenu.block
+                ? shortTime(secondsToTime(contextMenu.block.startSec)) + ' – ' + shortTime(secondsToTime(contextMenu.block.endSec))
+                : shortTime(secondsToTime(contextMenu.timeSec))}
+            </span>
+          </div>
+
+          {contextMenu.block ? (
+            <>
+              {(draft.value_type === 'BINARY' || draft.value_type === 'BOOLEAN') && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-surface-2)] text-left"
+                  onClick={() => {
+                    const currentActive = isActiveValue(contextMenu.block!.value, draft.value_type)
+                    const nextVal = currentActive ? defaultValue : onValue
+                    resizeBlock(
+                      contextMenu.day,
+                      contextMenu.block!.startSec,
+                      contextMenu.block!.endSec,
+                      contextMenu.block!.startSec,
+                      contextMenu.block!.endSec,
+                      nextVal
+                    )
+                    setContextMenu(null)
+                  }}
+                >
+                  <CheckSquare className="h-3.5 w-3.5 shrink-0" />
+                  <span>Đổi giá trị sang {formatValue(isActiveValue(contextMenu.block.value, draft.value_type) ? defaultValue : onValue, draft.value_type)}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-surface-2)] text-left"
+                onClick={() => {
+                  setEditModal({
+                    origDay: contextMenu.day,
+                    day: contextMenu.day,
+                    origStartSec: contextMenu.block!.startSec,
+                    origEndSec: contextMenu.block!.endSec,
+                    startSec: contextMenu.block!.startSec,
+                    endSec: contextMenu.block!.endSec,
+                    value: contextMenu.block!.value
+                  })
+                  setContextMenu(null)
+                }}
+              >
+                <Edit3 className="h-3.5 w-3.5 shrink-0" />
+                <span>Chỉnh sửa chi tiết...</span>
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-surface-2)] text-left"
+                onClick={() => {
+                  setClipboard({
+                    duration: contextMenu.block!.endSec - contextMenu.block!.startSec,
+                    value: contextMenu.block!.value
+                  })
+                  setContextMenu(null)
+                }}
+              >
+                <Copy className="h-3.5 w-3.5 shrink-0" />
+                <span>Sao chép khoảng này</span>
+              </button>
+              <div className="my-1 border-t border-[var(--c-border)]" />
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-bad-bg)] text-[var(--c-bad-fg)] text-left"
+                onClick={() => {
+                  removeBlock(contextMenu.day, contextMenu.block!.startSec, contextMenu.block!.endSec)
+                  setContextMenu(null)
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                <span>Xóa khoảng này</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-surface-2)] text-left"
+                onClick={() => {
+                  const start = contextMenu.timeSec
+                  const end = Math.min(86_400, start + 3600)
+                  addBlock(contextMenu.day, start, end)
+                  setContextMenu(null)
+                }}
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span>Thêm khoảng 1 giờ tại đây</span>
+              </button>
+              {clipboard && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--c-surface-2)] text-left"
+                  onClick={() => {
+                    const start = contextMenu.timeSec
+                    const end = Math.min(86_400, start + clipboard.duration)
+                    addBlock(contextMenu.day, start, end, clipboard.value)
+                    setContextMenu(null)
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                  <span>Dán khoảng ({shortTime(secondsToTime(clipboard.duration))})</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Hộp thoại chỉnh sửa chi tiết (Mở khi nhấp đúp hoặc từ context menu) */}
+      {editModal && (
+        <Modal
+          open={true}
+          title={'Chỉnh sửa khoảng thời gian (' + DAY_LABELS[editModal.day] + ')'}
+          confirmLabel="Lưu thay đổi"
+          cancelLabel="Hủy"
+          onClose={() => setEditModal(null)}
+          onConfirm={() => {
+            if (editModal.startSec >= editModal.endSec) return
+            moveBlock(
+              editModal.origDay,
+              editModal.day,
+              editModal.origStartSec,
+              editModal.origEndSec,
+              editModal.startSec,
+              editModal.endSec,
+              editModal.value
+            )
+            setEditModal(null)
+          }}
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[var(--c-text-dim)] mb-1">
+                  Thứ trong tuần
+                </label>
+                <select
+                  className="h-9 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)]"
+                  value={editModal.day}
+                  onChange={(e) => setEditModal({ ...editModal, day: e.target.value as ScheduleDayKey })}
+                >
+                  {DAY_KEYS.map((d) => (
+                    <option key={d} value={d}>{DAY_LABELS[d]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[var(--c-text-dim)] mb-1">
+                  Giá trị điều khiển
+                </label>
+                <ValueControl
+                  value={editModal.value}
+                  valueType={draft.value_type}
+                  disabled={!canEdit}
+                  onChange={(v) => setEditModal({ ...editModal, value: v })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[var(--c-text-dim)] mb-1">
+                  Giờ bắt đầu
+                </label>
+                <input
+                  type="time"
+                  step={60}
+                  className="h-9 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-3 font-mono text-sm text-[var(--c-text)]"
+                  value={shortTime(secondsToTime(editModal.startSec))}
+                  onChange={(e) => {
+                    const sec = timeToSeconds(e.target.value + ':00')
+                    if (sec >= 0) setEditModal({ ...editModal, startSec: sec })
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[var(--c-text-dim)] mb-1">
+                  Giờ kết thúc
+                </label>
+                <input
+                  type="time"
+                  step={60}
+                  className="h-9 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-3 font-mono text-sm text-[var(--c-text)]"
+                  value={shortTime(secondsToTime(editModal.endSec))}
+                  onChange={(e) => {
+                    const sec = timeToSeconds(e.target.value + ':00')
+                    if (sec >= 0) setEditModal({ ...editModal, endSec: sec })
+                  }}
+                />
+              </div>
+            </div>
+
+            {editModal.startSec >= editModal.endSec && (
+              <p className="text-xs text-[var(--c-bad-fg)] font-semibold">
+                Giờ bắt đầu phải trước giờ kết thúc.
+              </p>
+            )}
+
+            <div className="flex justify-between items-center pt-2 border-t border-[var(--c-border)]">
+              <Button
+                variant="danger"
+                size="sm"
+                icon={<Trash2 className="h-4 w-4" />}
+                onClick={() => {
+                  removeBlock(editModal.origDay, editModal.origStartSec, editModal.origEndSec)
+                  setEditModal(null)
+                }}
+              >
+                Xóa khoảng này
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
 
+type DragAction =
+  | {
+      type: 'create'
+      day: ScheduleDayKey
+      anchorSec: number
+      currentSec: number
+    }
+  | {
+      type: 'resize-top'
+      day: ScheduleDayKey
+      origStartSec: number
+      origEndSec: number
+      currentSec: number
+      value: ScheduleValue
+    }
+  | {
+      type: 'resize-bottom'
+      day: ScheduleDayKey
+      origStartSec: number
+      origEndSec: number
+      currentSec: number
+      value: ScheduleValue
+    }
+  | {
+      type: 'move'
+      fromDay: ScheduleDayKey
+      targetDay: ScheduleDayKey
+      origStartSec: number
+      origEndSec: number
+      currentStartSec: number
+      duration: number
+      offsetSec: number
+      value: ScheduleValue
+    }
+
 function WeekGrid({
-  draft, selected, onSelect, onDayFocus
+  draft, canEdit, selected, onValue, defaultValue, onSelect, onDayFocus,
+  onAddBlock, onRemoveBlock, onResizeBlock, onMoveBlock, onOpenEditModal, onOpenContextMenu
 }: {
   draft: ScheduleObject
+  canEdit: boolean
   selected: { day: ScheduleDayKey; index: number } | null
+  onValue: ScheduleValue
+  defaultValue: ScheduleValue
   onSelect: (day: ScheduleDayKey, index: number) => void
   onDayFocus: (day: ScheduleDayKey) => void
+  onAddBlock: (day: ScheduleDayKey, startSec: number, endSec: number) => void
+  onRemoveBlock: (day: ScheduleDayKey, startSec: number, endSec: number) => void
+  onResizeBlock: (day: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) => void
+  onMoveBlock: (fromDay: ScheduleDayKey, toDay: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) => void
+  onOpenEditModal: (day: ScheduleDayKey, block: TimeBlock) => void
+  onOpenContextMenu: (e: React.MouseEvent, day: ScheduleDayKey, block?: TimeBlock, timeSec?: number) => void
 }) {
   const nowPct = useNowPercent(draft.timezone)
+  const dayColRefs = useRef<Record<string, HTMLElement | null>>({})
+  const [dragAction, setDragAction] = useState<DragAction | null>(null)
+  const [hoverGuide, setHoverGuide] = useState<{ day: ScheduleDayKey; sec: number; y: number } | null>(null)
+
+  function yToSec(clientY: number, colEl: HTMLElement): number {
+    const rect = colEl.getBoundingClientRect()
+    const relY = Math.max(0, Math.min(rect.height, clientY - rect.top))
+    const ratio = relY / rect.height
+    const rawSec = ratio * 86_400
+    const snapped = Math.round(rawSec / STEP_SEC) * STEP_SEC
+    return Math.max(0, Math.min(86_400, snapped))
+  }
+
+  useEffect(() => {
+    if (!dragAction) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const elUnder = document.elementFromPoint(e.clientX, e.clientY)
+      const dayColEl = elUnder?.closest<HTMLElement>('[data-day-col]')
+      const hoveredDay = (dayColEl?.dataset.day as ScheduleDayKey) || (dragAction.type === 'move' ? dragAction.targetDay : dragAction.day)
+
+      const refCol = dayColEl || dayColRefs.current[dragAction.type === 'move' ? dragAction.targetDay : dragAction.day]
+      if (!refCol) return
+      const sec = yToSec(e.clientY, refCol)
+
+      setDragAction((curr) => {
+        if (!curr) return null
+        if (curr.type === 'create') {
+          return { ...curr, currentSec: sec }
+        }
+        if (curr.type === 'resize-top') {
+          const snapped = Math.min(sec, curr.origEndSec - STEP_SEC)
+          return { ...curr, currentSec: Math.max(0, snapped) }
+        }
+        if (curr.type === 'resize-bottom') {
+          const snapped = Math.max(sec, curr.origStartSec + STEP_SEC)
+          return { ...curr, currentSec: Math.min(86_400, snapped) }
+        }
+        if (curr.type === 'move') {
+          const rawStart = sec - curr.offsetSec
+          const clampedStart = Math.max(0, Math.min(86_400 - curr.duration, Math.round(rawStart / STEP_SEC) * STEP_SEC))
+          return {
+            ...curr,
+            targetDay: hoveredDay,
+            currentStartSec: clampedStart
+          }
+        }
+        return curr
+      })
+    }
+
+    const handlePointerUp = () => {
+      setDragAction((curr) => {
+        if (curr && canEdit) {
+          if (curr.type === 'create') {
+            const start = Math.min(curr.anchorSec, curr.currentSec)
+            const end = Math.max(curr.anchorSec, curr.currentSec)
+            if (end - start >= STEP_SEC) {
+              onAddBlock(curr.day, start, end)
+            } else {
+              onDayFocus(curr.day)
+            }
+          } else if (curr.type === 'resize-top') {
+            if (curr.currentSec !== curr.origStartSec) {
+              onResizeBlock(curr.day, curr.origStartSec, curr.origEndSec, curr.currentSec, curr.origEndSec, curr.value)
+            }
+          } else if (curr.type === 'resize-bottom') {
+            if (curr.currentSec !== curr.origEndSec) {
+              onResizeBlock(curr.day, curr.origStartSec, curr.origEndSec, curr.origStartSec, curr.currentSec, curr.value)
+            }
+          } else if (curr.type === 'move') {
+            const moved = curr.fromDay !== curr.targetDay || curr.currentStartSec !== curr.origStartSec
+            if (moved) {
+              onMoveBlock(
+                curr.fromDay,
+                curr.targetDay,
+                curr.origStartSec,
+                curr.origEndSec,
+                curr.currentStartSec,
+                curr.currentStartSec + curr.duration,
+                curr.value
+              )
+            }
+          }
+        }
+        return null
+      })
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [dragAction, canEdit, onAddBlock, onDayFocus, onResizeBlock, onMoveBlock])
 
   return (
     <div className="flex gap-1 overflow-x-auto">
@@ -181,7 +639,45 @@ function WeekGrid({
               {DAY_LABELS[day]}
             </button>
             <div
-              className="relative rounded border border-[var(--c-border)] bg-[var(--c-surface-2)]"
+              ref={(el) => {
+                if (el) dayColRefs.current[day] = el
+                else delete dayColRefs.current[day]
+              }}
+              data-day-col
+              data-day={day}
+              onPointerDown={(e) => {
+                if (e.button !== 0 || !canEdit) return
+                if ((e.target as HTMLElement).closest('[data-block-item]')) return
+                const sec = yToSec(e.clientY, e.currentTarget)
+                setDragAction({
+                  type: 'create',
+                  day,
+                  anchorSec: sec,
+                  currentSec: sec
+                })
+              }}
+              onDoubleClick={(e) => {
+                if (!canEdit) return
+                if ((e.target as HTMLElement).closest('[data-block-item]')) return
+                const sec = yToSec(e.clientY, e.currentTarget)
+                const end = Math.min(86_400, sec + 3600)
+                onAddBlock(day, sec, end)
+              }}
+              onContextMenu={(e) => {
+                if ((e.target as HTMLElement).closest('[data-block-item]')) return
+                e.preventDefault()
+                const sec = yToSec(e.clientY, e.currentTarget)
+                onOpenContextMenu(e, day, undefined, sec)
+              }}
+              onPointerMove={(e) => {
+                if (dragAction) return
+                const sec = yToSec(e.clientY, e.currentTarget)
+                setHoverGuide({ day, sec, y: (sec / 86_400) * GRID_HEIGHT })
+              }}
+              onPointerLeave={() => {
+                setHoverGuide((curr) => (curr?.day === day ? null : curr))
+              }}
+              className="relative rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] select-none cursor-crosshair overflow-hidden"
               style={{ height: GRID_HEIGHT }}
             >
               {/* vạch giờ mỗi 6 tiếng cho dễ định vị */}
@@ -189,28 +685,215 @@ function WeekGrid({
                 <div key={h} className="absolute inset-x-0 border-t border-[var(--c-border)] opacity-50"
                      style={{ top: (h / 24) * GRID_HEIGHT }} />
               ))}
+
+              {/* Đường vạch kẻ chuột theo thời gian thực (Google Calendar hover guide) */}
+              {hoverGuide?.day === day && !dragAction && (
+                <div
+                  className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[var(--c-accent)] z-20"
+                  style={{ top: hoverGuide.y }}
+                >
+                  <span className="absolute -top-3 left-1 rounded bg-[var(--c-accent)] px-1 py-0.5 font-mono text-[9px] text-white opacity-90 shadow-sm">
+                    {shortTime(secondsToTime(hoverGuide.sec))}
+                  </span>
+                </div>
+              )}
+
               {blocks.map((b, i) => {
                 const evIndex = events.findIndex((e) => timeToSeconds(e.time) === b.startSec)
                 const isSel = selected?.day === day && selected.index === evIndex
+                const isBeingDragged =
+                  (dragAction?.type === 'move' && dragAction.fromDay === day && dragAction.origStartSec === b.startSec) ||
+                  ((dragAction?.type === 'resize-top' || dragAction?.type === 'resize-bottom') && dragAction.day === day && dragAction.origStartSec === b.startSec)
+
                 return (
-                  <button
-                    key={`${b.startSec}-${i}`}
-                    type="button"
-                    onClick={() => onSelect(day, evIndex)}
-                    title={`${shortTime(secondsToTime(b.startSec))}–${shortTime(secondsToTime(b.endSec))}`}
+                  <div
+                    key={b.startSec + '-' + i}
+                    data-block-item
+                    tabIndex={0}
+                    role="button"
+                    aria-label={DAY_LABELS[day] + ' ' + shortTime(secondsToTime(b.startSec)) + ' - ' + shortTime(secondsToTime(b.endSec))}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSelect(day, evIndex)
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      onOpenEditModal(day, b)
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onOpenContextMenu(e, day, b)
+                    }}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0 || !canEdit) return
+                      if ((e.target as HTMLElement).closest('[data-resize-handle]')) return
+                      e.stopPropagation()
+                      const colEl = dayColRefs.current[day]
+                      if (!colEl) return
+                      const sec = yToSec(e.clientY, colEl)
+                      setDragAction({
+                        type: 'move',
+                        fromDay: day,
+                        targetDay: day,
+                        origStartSec: b.startSec,
+                        origEndSec: b.endSec,
+                        currentStartSec: b.startSec,
+                        duration: b.endSec - b.startSec,
+                        offsetSec: sec - b.startSec,
+                        value: b.value
+                      })
+                    }}
+                    onKeyDown={(e) => {
+                      if (!canEdit) return
+                      if (e.key === 'Delete' || e.key === 'Backspace') {
+                        e.preventDefault()
+                        onRemoveBlock(day, b.startSec, b.endSec)
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        const dur = b.endSec - b.startSec
+                        const newStart = Math.max(0, b.startSec - STEP_SEC)
+                        onMoveBlock(day, day, b.startSec, b.endSec, newStart, newStart + dur, b.value)
+                      } else if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        const dur = b.endSec - b.startSec
+                        const newStart = Math.min(86_400 - dur, b.startSec + STEP_SEC)
+                        onMoveBlock(day, day, b.startSec, b.endSec, newStart, newStart + dur, b.value)
+                      }
+                    }}
+                    title={shortTime(secondsToTime(b.startSec)) + '–' + shortTime(secondsToTime(b.endSec)) + ' · Bấm đúp để sửa, chuột phải để mở menu, kéo để di chuyển'}
                     className={cn(
-                      'absolute inset-x-0.5 rounded bg-[var(--c-accent)] text-[9px] font-semibold text-white transition',
-                      isSel && 'ring-2 ring-[var(--c-text)]'
+                      'group absolute inset-x-0.5 rounded bg-[var(--c-accent)] text-[10px] font-semibold text-white transition-shadow',
+                      'hover:brightness-110 cursor-grab active:cursor-grabbing focus-visible:outline-none select-none',
+                      isSel && 'ring-2 ring-[var(--c-text)] z-10',
+                      isBeingDragged && 'opacity-25'
                     )}
                     style={{
                       top: (b.startSec / 86_400) * GRID_HEIGHT,
-                      height: Math.max(6, ((b.endSec - b.startSec) / 86_400) * GRID_HEIGHT)
+                      height: Math.max(12, ((b.endSec - b.startSec) / 86_400) * GRID_HEIGHT)
                     }}
                   >
-                    {b.endSec - b.startSec >= 3600 ? shortTime(secondsToTime(b.startSec)) : ''}
-                  </button>
+                    {/* Handle kéo co giãn mép trên */}
+                    {canEdit && (
+                      <div
+                        data-resize-handle="top"
+                        className="absolute inset-x-0 -top-1 h-2.5 cursor-ns-resize z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onPointerDown={(e) => {
+                          if (e.button !== 0 || !canEdit) return
+                          e.stopPropagation()
+                          setDragAction({
+                            type: 'resize-top',
+                            day,
+                            origStartSec: b.startSec,
+                            origEndSec: b.endSec,
+                            currentSec: b.startSec,
+                            value: b.value
+                          })
+                        }}
+                        title="Kéo để đổi giờ bắt đầu"
+                      >
+                        <div className="h-1 w-6 rounded-full bg-white shadow" />
+                      </div>
+                    )}
+
+                    {/* Thân hiển thị giờ của khối */}
+                    <div className="flex h-full w-full flex-col justify-between overflow-hidden p-1 pointer-events-none">
+                      <div className="truncate text-[9px] leading-tight font-medium">
+                        {shortTime(secondsToTime(b.startSec))} – {shortTime(secondsToTime(b.endSec))}
+                      </div>
+                      {b.endSec - b.startSec >= 5400 && (
+                        <div className="truncate text-[8px] opacity-80">
+                          {formatValue(b.value, draft.value_type)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Handle kéo co giãn mép dưới */}
+                    {canEdit && (
+                      <div
+                        data-resize-handle="bottom"
+                        className="absolute inset-x-0 -bottom-1 h-2.5 cursor-ns-resize z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onPointerDown={(e) => {
+                          if (e.button !== 0 || !canEdit) return
+                          e.stopPropagation()
+                          setDragAction({
+                            type: 'resize-bottom',
+                            day,
+                            origStartSec: b.startSec,
+                            origEndSec: b.endSec,
+                            currentSec: b.endSec,
+                            value: b.value
+                          })
+                        }}
+                        title="Kéo để đổi giờ kết thúc"
+                      >
+                        <div className="h-1 w-6 rounded-full bg-white shadow" />
+                      </div>
+                    )}
+                  </div>
                 )
               })}
+
+              {/* Ghost block xem trước khi Kéo tạo mới */}
+              {dragAction?.type === 'create' && dragAction.day === day && (
+                <div
+                  className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-80 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-lg backdrop-blur-[1px]"
+                  style={{
+                    top: (Math.min(dragAction.anchorSec, dragAction.currentSec) / 86_400) * GRID_HEIGHT,
+                    height: Math.max(14, (Math.abs(dragAction.currentSec - dragAction.anchorSec) / 86_400) * GRID_HEIGHT)
+                  }}
+                >
+                  <span>
+                    {shortTime(secondsToTime(Math.min(dragAction.anchorSec, dragAction.currentSec)))} – {shortTime(secondsToTime(Math.max(dragAction.anchorSec, dragAction.currentSec)))}
+                  </span>
+                </div>
+              )}
+
+              {/* Ghost block xem trước khi Kéo mép trên */}
+              {dragAction?.type === 'resize-top' && dragAction.day === day && (
+                <div
+                  className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-80 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-lg"
+                  style={{
+                    top: (dragAction.currentSec / 86_400) * GRID_HEIGHT,
+                    height: Math.max(14, ((dragAction.origEndSec - dragAction.currentSec) / 86_400) * GRID_HEIGHT)
+                  }}
+                >
+                  <span>
+                    {shortTime(secondsToTime(dragAction.currentSec))} – {shortTime(secondsToTime(dragAction.origEndSec))}
+                  </span>
+                </div>
+              )}
+
+              {/* Ghost block xem trước khi Kéo mép dưới */}
+              {dragAction?.type === 'resize-bottom' && dragAction.day === day && (
+                <div
+                  className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-80 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-lg"
+                  style={{
+                    top: (dragAction.origStartSec / 86_400) * GRID_HEIGHT,
+                    height: Math.max(14, ((dragAction.currentSec - dragAction.origStartSec) / 86_400) * GRID_HEIGHT)
+                  }}
+                >
+                  <span>
+                    {shortTime(secondsToTime(dragAction.origStartSec))} – {shortTime(secondsToTime(dragAction.currentSec))}
+                  </span>
+                </div>
+              )}
+
+              {/* Ghost block xem trước khi Kéo di chuyển khối */}
+              {dragAction?.type === 'move' && dragAction.targetDay === day && (
+                <div
+                  className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-85 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-xl ring-2 ring-white/60"
+                  style={{
+                    top: (dragAction.currentStartSec / 86_400) * GRID_HEIGHT,
+                    height: Math.max(14, (dragAction.duration / 86_400) * GRID_HEIGHT)
+                  }}
+                >
+                  <span>
+                    {shortTime(secondsToTime(dragAction.currentStartSec))} – {shortTime(secondsToTime(dragAction.currentStartSec + dragAction.duration))}
+                  </span>
+                </div>
+              )}
+
               {/* Đường "bây giờ" theo timezone CỦA LỊCH, không theo TZ trình duyệt. */}
               {nowPct !== null && (
                 <div
@@ -226,6 +909,7 @@ function WeekGrid({
     </div>
   )
 }
+
 
 function TimeValueTable({
   day, events, valueType, canEdit, selectedIndex, onSelect, onShift, onSetTime, onSetValue, onRemove
@@ -385,7 +1069,7 @@ function CopyDayPanel({
 function KeyboardHelp() {
   return (
     <details className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
-      <summary className="cursor-pointer font-semibold">Thao tác bàn phím</summary>
+      <summary className="cursor-pointer font-semibold">Thao tác kiểu Google Calendar & Bàn phím</summary>
       <ul className="mt-2 space-y-1">
         <li><kbd>Tab</kbd> — chuyển giữa các sự kiện</li>
         <li><kbd>←</kbd> <kbd>→</kbd> — dời sự kiện 5 phút</li>

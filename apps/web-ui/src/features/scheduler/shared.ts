@@ -168,6 +168,25 @@ export function blockToTimeValues(
   return sortTimeValues(kept)
 }
 
+/**
+ * Xoá một khối [startSec, endSec) khỏi ngày, dọn sạch mốc bật và mốc trả về mặc định.
+ */
+export function removeBlockFromDay(
+  day: ScheduleTimeValue[],
+  startSec: number,
+  endSec: number,
+  defaultValue: ScheduleValue
+): ScheduleTimeValue[] {
+  const sorted = sortTimeValues(day)
+  return sorted.filter((e) => {
+    const s = timeToSeconds(e.time)
+    if (s === startSec) return false
+    if (s > startSec && s < endSec) return false
+    if (s === endSec && e.value === defaultValue) return false
+    return true
+  })
+}
+
 // ── Trạng thái ────────────────────────────────────────────────────────────
 
 export interface StatusPresentation {
