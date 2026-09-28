@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Fixed — Xoá POU gỡ đủ Binding theo owner `programId` ("không xóa được chương trình") (2026-09-28)
+
+- Phạm vi: `apps/web-ui/src/features/programming/{model/signals.ts,design/pou/pouCommands.ts,design/pou/PouExplorer.tsx,design/DesignWorkspacePage.tsx}` + test; `apps/web-api/internal/programming/application/draft_v2_test.go` (chỉ thêm test). Bản sửa viết ngày 2026-09-25 trên `main@36c1a863` nhưng chưa từng được commit; nay áp lên `main@597616ca`.
+- Triệu chứng: trên bo Foxlinx, bấm Xoá Program ở Project `AHU-MASTER-SEQUENCE` luôn nhận `PATCH .../draft` → `400 PRG-ERR-REQ-001`.
+- Nguyên nhân gốc: `deletePouOperations` chỉ gỡ Binding tìm được qua biến `locals` của POU trong view Mapping. View đó (`programmingBindingsFromV2`) fail-closed: chỉ cần một Binding flat legacy hoặc thiếu `variableId` là cả collection rỗng, nên batch xoá không có `removeBinding` nào và backend từ chối vì Binding còn trỏ vào Program đã xoá.
+- Cách sửa: `draftBindingOwners` đọc owner `programId` của mọi Binding từ draft thô (cùng cách `draftSignals`); `deletePouOperations` gộp Binding theo biến và theo owner, khử trùng, chỉ áp cho POU đã xếp lịch; `DesignWorkspacePage` truyền `bindingOwners` xuống `PouExplorer`. Backend giữ hành vi fail-closed (khoá bằng test).
+- Dữ liệu hỏng của Project đó không còn: bo lab đã cài sạch ngày 2026-09-27.
+- Kiểm chứng trên `main@597616ca`: 4 test FE mới đỏ khi bỏ bản sửa, xanh khi có; vitest 267 file / 3490 test exit 0; `npm run lint` và `npm run build` exit 0; `go vet` exit 0; `go test ./... -count=1` 21 package ok. Người dùng đã tự kiểm và deploy lên bo.
+- Refs: `F-P59-DELETE-PROGRAM-001`.
+
 ### Added — Báo cáo riêng trình PM quyết định cải thiện hiệu năng Forlinx (2026-09-28)
 
 - Thêm `docs/07_records/reviews/FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md` (`REC-FORLINX-PERF-PM-20260928` 1.0, In Review): hiện trạng theo audit ngày 28/09, 9 nhóm finding, các phương án/lợi ích/rủi ro/độ phức tạp tương đối, ba đợt triển khai, tiêu chí thử nghiệm đề xuất và phiếu D01–D07 để PM giao owner/lịch/phạm vi.

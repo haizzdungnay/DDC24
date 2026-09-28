@@ -11,6 +11,8 @@ import {
   uniquePouName,
   validatePouName, pouPublishedSignalBlockers } from './pouCommands'
 import { pouItems, type PouItem } from './pouViewModel'
+import { toWorkspaceDocument } from '../../model/draftV2'
+import { draftBindingOwners } from '../../model/signals'
 
 function baseDocument(): ProgrammingDraftDocument {
   return {
@@ -192,6 +194,51 @@ describe('PGM-02 lệnh vòng đời POU', () => {
     ])
   })
 
+  it('xóa Program gỡ cả Binding chỉ biết qua owner programId ở draft thô', () => {
+    /* Hồi quy bo Foxlinx 2026-09-25: Binding không có `variableId` (hoặc flat
+       legacy) làm view Mapping fail-closed thành rỗng. Trước bản vá batch xoá
+       không có `removeBinding` nào và backend trả 400 vì Binding còn trỏ vào
+       Program đã xoá — người dùng không tài nào xoá được Program. */
+    const document = { ...baseDocument(), variables: [], bindings: [] } as ProgrammingDraftDocument
+    const items = pouItems(document)
+    const owners = [
+      { bindingId: 'bind-a', programId: 'run-1' },
+      { bindingId: 'bind-b', programId: 'run-1' },
+      { bindingId: 'bind-x', programId: 'run-9' },
+    ]
+    expect(deletePouOperations(document, itemOf(items, 'obj-1'), owners)).toEqual([
+      { op: 'removeBinding', bindingId: 'bind-a' },
+      { op: 'removeBinding', bindingId: 'bind-b' },
+      { op: 'removeProgram', programId: 'run-1' },
+      { op: 'removeObject', objectId: 'obj-1' }
+    ])
+  })
+
+  it('Binding thấy ở cả hai nguồn chỉ bị gỡ MỘT lần', () => {
+    /* `removeBinding` lần hai cho cùng id là lỗi người gọi ở backend
+       (`removeByID` không tìm thấy) — trùng lặp làm hỏng cả batch. */
+    const document = baseDocument()
+    const items = pouItems(document)
+    expect(deletePouOperations(document, itemOf(items, 'obj-1'), [
+      { bindingId: 'bind-1', programId: 'run-1' },
+    ])).toEqual([
+      { op: 'removeBinding', bindingId: 'bind-1' },
+      { op: 'removeVariable', variableId: 'var-1' },
+      { op: 'removeProgram', programId: 'run-1' },
+      { op: 'removeObject', objectId: 'obj-1' }
+    ])
+  })
+
+  it('POU chưa xếp lịch không sở hữu Binding runtime nào', () => {
+    const document = baseDocument()
+    const items = pouItems(document)
+    expect(deletePouOperations(document, itemOf(items, 'obj-3'), [
+      { bindingId: 'bind-z', programId: 'obj-3' },
+    ])).toEqual([
+      { op: 'removeObject', objectId: 'obj-3' }
+    ])
+  })
+
   it('xóa FUNCTION và PROGRAM chưa xếp lịch KHÔNG gửi removeProgram', () => {
     const document = baseDocument()
     const items = pouItems(document)
@@ -243,5 +290,59 @@ describe('pouPublishedSignalBlockers — POU đang publish thì KHÔNG xoá đư
     // Hai trục định danh khác nhau; so nhầm sẽ vừa bỏ sót vừa chặn oan.
     const signalsByObject = [{ signalId: 's-3', name: 'X', publisherProgramId: 'obj-1' }]
     expect(pouPublishedSignalBlockers(signalsByObject, scheduled)).toEqual([])
+  })
+})
+
+describe('xóa POU trên draft v2 thật mà view Mapping fail-closed', () => {
+  /* Hình dạng rút gọn từ Draft `AHU-MASTER-SEQUENCE` trên bo Foxlinx
+     2026-09-25: Binding canonical mang owner `programId/variable` nhưng thiếu
+     `variableId`, và POU không khai `locals`. */
+  const P1 = '5619efde-f419-44cc-b4aa-981e19425481'
+  const P2 = '9f1887fe-9fe1-47b2-8801-baf5248a75be'
+  function binding(bindingId: string, programId: string, variable: string) {
+    return {
+      bindingId, programId, variable, dataType: 'BOOL', direction: 'WRITE', writable: true,
+      qualityPolicy: 'REQUIRE_GOOD', point: { category: 'LOCAL', pointId: variable.replace('_', '-') },
+    }
+  }
+  const raw = {
+    schemaVersion: 2,
+    project: { projectId: 'e96357dc-b00c-4116-a4a0-1dd71ea116db', name: 'AHU', functionalTags: [] },
+    objects: [
+      { objectId: P1, kind: 'PROGRAM', language: 'FBD', name: 'DO_BlinkFast', source: '', locals: [] },
+      { objectId: P2, kind: 'PROGRAM', language: 'ST', name: 'RelayPattern32ST', source: '', locals: [] },
+    ],
+    programs: [
+      { programId: P1, objectId: P1, periodMs: 1000 },
+      { programId: P2, objectId: P2, periodMs: 1000 },
+    ],
+    signals: [],
+    bindings: [
+      binding('b0000001-0000-4000-8000-000000000001', P1, 'DO_01'),
+      binding('b0000001-0000-4000-8000-000000000002', P1, 'DO_02'),
+      binding('b0050805-0000-4000-8000-000000000001', P2, 'R50805_DO1'),
+    ],
+    library: { systemProfile: 'revA-1t-1-5-30', systemVersion: 'rev-a.3', projectLibraryRevisionId: null },
+    execution: { profileId: 'revA-1t-1-5-30', maxProgramsEnabled: 16 },
+  } as unknown as ProgrammingDraftDocument
+
+  it('view Mapping rỗng nhưng owner ở draft thô vẫn đủ để gỡ đúng Binding của Program', () => {
+    const document = toWorkspaceDocument(raw)
+    expect(document.bindings).toEqual([])
+    const items = pouItems(document)
+    expect(deletePouOperations(document, itemOf(items, P1), draftBindingOwners(raw))).toEqual([
+      { op: 'removeBinding', bindingId: 'b0000001-0000-4000-8000-000000000001' },
+      { op: 'removeBinding', bindingId: 'b0000001-0000-4000-8000-000000000002' },
+      { op: 'removeProgram', programId: P1 },
+      { op: 'removeObject', objectId: P1 },
+    ])
+  })
+
+  it('draftBindingOwners bỏ qua phần tử không mang đủ hai định danh thay vì làm rỗng cả danh sách', () => {
+    const noisy = {
+      ...raw,
+      bindings: [null, { bindingId: 'b-1' }, { bindingId: 'b-2', programId: P2 }, 'rác'],
+    } as unknown as ProgrammingDraftDocument
+    expect(draftBindingOwners(noisy)).toEqual([{ bindingId: 'b-2', programId: P2 }])
   })
 })

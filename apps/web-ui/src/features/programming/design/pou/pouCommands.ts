@@ -186,18 +186,32 @@ export function pouPublishedSignalBlockers(
  * không: một POU kind PROGRAM vẫn có thể chưa xếp lịch, và gửi `removeProgram`
  * cho nó làm backend từ chối cả batch — người dùng không xoá được đúng cái POU
  * đó, một vòng lặp chết đã từng xảy ra thật.
+ *
+ * Binding cần gỡ lấy từ HAI nguồn: qua biến của POU (view Mapping), và qua
+ * owner `programId` đọc từ draft thô (`bindingOwners`). Nguồn thứ hai bắt buộc
+ * vì view Mapping fail-closed — một Binding flat legacy hay thiếu `variableId`
+ * làm nó rỗng hẳn, và khi đó batch xoá không gỡ Binding nào, để backend từ
+ * chối vì Binding còn trỏ vào Program đã xoá (bo Foxlinx 2026-09-25).
  */
 export function deletePouOperations(
   document: ProgrammingDraftDocument,
-  item: PouItem
+  item: PouItem,
+  bindingOwners: readonly { bindingId: string; programId: string }[] = []
 ): ProgrammingDraftOperation[] {
   const runtimeProgramId = item.runtimeProgramId ?? item.objectId
   const variableIds = document.variables
     .filter((variable) => variable.programId === runtimeProgramId)
     .map((variable) => variable.variableId)
-  const bindingIds = document.bindings
-    .filter((binding) => variableIds.includes(binding.variableId))
-    .map((binding) => binding.bindingId)
+  const bindingIds = [...new Set([
+    ...document.bindings
+      .filter((binding) => variableIds.includes(binding.variableId))
+      .map((binding) => binding.bindingId),
+    ...(item.runtimeProgramId
+      ? bindingOwners
+        .filter((owner) => owner.programId === item.runtimeProgramId)
+        .map((owner) => owner.bindingId)
+      : []),
+  ])]
   return [
     ...bindingIds.map((bindingId): ProgrammingDraftOperation => ({ op: 'removeBinding', bindingId })),
     ...variableIds.map((variableId): ProgrammingDraftOperation => ({ op: 'removeVariable', variableId })),

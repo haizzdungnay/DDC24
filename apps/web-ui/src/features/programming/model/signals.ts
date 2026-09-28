@@ -181,6 +181,27 @@ export function draftSignals(draft: ProgrammingDraftDocument): ProgrammingPublis
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
+/**
+ * Chủ sở hữu RUNTIME của từng Binding, đọc từ draft THÔ.
+ *
+ * Document v2 lưu owner `programId` trên mọi Binding — cả dạng canonical lẫn
+ * dạng flat legacy (`pointId` phẳng, `variableId` tuỳ chọn) mà backend vẫn
+ * chấp nhận. View Mapping (`programmingBindingsFromV2`) thì fail-closed: chỉ
+ * một Binding không đúng hình canonical là cả collection thành rỗng. Dựa vào
+ * view đó để dọn Binding khi xoá POU nghĩa là không gửi `removeBinding` nào,
+ * rồi backend từ chối cả batch vì còn Binding trỏ vào Program vừa xoá — đúng
+ * lỗi "không xóa được chương trình" trên bo Foxlinx 2026-09-25.
+ *
+ * Ở đây chỉ cần hai định danh để dựng lệnh xoá, nên KHÔNG kiểm phần còn lại
+ * của Binding: kiểm chặt ở chỗ này sẽ tái tạo đúng điểm mù vừa kể.
+ */
+export function draftBindingOwners(draft: ProgrammingDraftDocument): { bindingId: string; programId: string }[] {
+  return collection(draft, 'bindings').flatMap((binding) =>
+    typeof binding?.bindingId === 'string' && typeof binding.programId === 'string'
+      ? [{ bindingId: binding.bindingId, programId: binding.programId }]
+      : [])
+}
+
 export function draftLibraryLock(draft: ProgrammingDraftDocument): ProgrammingDraftLibraryLock | null {
   const library = rawDocument(draft).library
   if (!library || typeof library !== 'object') return null

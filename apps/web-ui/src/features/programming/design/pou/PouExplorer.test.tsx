@@ -33,6 +33,7 @@ function renderExplorer(overrides: Partial<Parameters<typeof PouExplorer>[0]> = 
     <I18nProvider>
       <PouExplorer
         document={overrides.document ?? baseDocument()}
+        bindingOwners={overrides.bindingOwners}
         canEdit={overrides.canEdit ?? true}
         saving={overrides.saving ?? false}
         selectedObjectId={overrides.selectedObjectId}
@@ -128,6 +129,25 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     fireEvent.submit(input)
     await waitFor(() => expect(onSave).toHaveBeenCalledWith([
       { op: 'renameObject', objectId: 'obj-1', name: 'AHU_MAIN_V2' }
+    ]))
+  })
+
+  it('xóa Program gỡ cả Binding mà trang cha đọc được owner từ draft thô', async () => {
+    /* Hồi quy bo Foxlinx 2026-09-25: view Mapping fail-closed (bindings rỗng)
+       nên trước bản vá batch xoá thiếu `removeBinding` và nhận 400. */
+    const { onSave } = renderExplorer({
+      bindingOwners: [
+        { bindingId: 'bind-a', programId: 'run-1' },
+        { bindingId: 'bind-x', programId: 'run-9' },
+      ],
+    })
+    pouAction('AHU_MAIN', 'Xóa')
+    const dialog = await screen.findByRole('dialog', { name: 'Xóa POU?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith([
+      { op: 'removeBinding', bindingId: 'bind-a' },
+      { op: 'removeProgram', programId: 'run-1' },
+      { op: 'removeObject', objectId: 'obj-1' },
     ]))
   })
 

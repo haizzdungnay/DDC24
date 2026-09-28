@@ -14,7 +14,7 @@ import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
-import { draftSignals } from '../model/signals'
+import { draftBindingOwners, draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
 import { programmingCompatibility } from '../shared/programmingCompatibility'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
@@ -899,6 +899,9 @@ export function DesignWorkspacePage({
    * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
    * từ chối `removeProgram`. */
   const publishedSignals = draftSignals(workspace.project.draft)
+  /* Cùng lý do: owner `programId` của Binding chỉ có ở draft thô, còn view
+   * Mapping fail-closed có thể rỗng — xoá POU cần owner để gỡ đủ Binding. */
+  const bindingOwners = draftBindingOwners(workspace.project.draft)
   const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const pouNameByObjectId = new Map(
@@ -1094,6 +1097,7 @@ export function DesignWorkspacePage({
               className="w-full min-w-0 max-w-full"
               document={document}
               publishedSignals={publishedSignals}
+              bindingOwners={bindingOwners}
               canEdit={canEdit}
               saving={workspace.saving}
               selectedObjectId={selectedObjectId}
@@ -1171,6 +1175,7 @@ export function DesignWorkspacePage({
                     className="w-full min-w-0 max-w-full"
                     document={document}
                     publishedSignals={publishedSignals}
+                    bindingOwners={bindingOwners}
                     canEdit={canEdit}
                     saving={workspace.saving}
                     selectedObjectId={selectedObjectId}

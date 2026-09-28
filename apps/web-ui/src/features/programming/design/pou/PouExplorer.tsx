@@ -62,6 +62,7 @@ function formatBytes(bytes: number): string {
 export function PouExplorer({
   document,
   publishedSignals,
+  bindingOwners,
   canEdit,
   saving,
   selectedObjectId,
@@ -76,6 +77,11 @@ export function PouExplorer({
    * đi qua `toWorkspaceDocument`, nên Explorer không tự lấy được.
    */
   publishedSignals?: readonly { signalId: string; name: string; publisherProgramId: string }[]
+  /**
+   * Owner `programId` của mọi Binding, cũng đọc từ draft THÔ: view Mapping
+   * fail-closed nên không đủ để biết xoá POU phải gỡ những Binding nào.
+   */
+  bindingOwners?: readonly { bindingId: string; programId: string }[]
   canEdit: boolean
   saving: boolean
   selectedObjectId?: string
@@ -307,7 +313,7 @@ export function PouExplorer({
 
   function confirmDelete() {
     if (!pendingDelete || deleteBlocked) return
-    void onSave(deletePouOperations(document, pendingDelete)).then((ok) => {
+    void onSave(deletePouOperations(document, pendingDelete, bindingOwners)).then((ok) => {
       setPendingDeleteObjectId(null)
       if (!ok) return
       if (selectedObjectId === pendingDelete.objectId) {
