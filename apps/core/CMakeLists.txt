@@ -413,6 +413,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fbd_user_pou.cpp
       application/st/tests/test_st_function_frame.cpp
       application/st/tests/test_st_language_u10.cpp
+      application/st/tests/test_st_system_blocks.cpp
       application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_library_conformance.cpp

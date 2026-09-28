@@ -49,6 +49,10 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
     uint32_t pc = 0;
     const char* fault_code = nullptr;
     bool waiting = false;
+    if (!prog->uptime_origin_set) {
+        prog->uptime_origin_set = true;
+        prog->uptime_origin_ns = now_ns;
+    }
 
 /* Thoát fault: ghi mã + pc, tra vị trí ST rồi trả false. Dùng macro để không
  * phải nhân bản 20 lần cùng một khối thoát trong vòng thực thi. */
@@ -459,6 +463,13 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
             break;
         }
 
+        case StOp::UPTIME: {
+            const int64_t elapsed = now_ns - prog->uptime_origin_ns;
+            S[in.dst].t = elapsed > 0 ? elapsed : 0;
+            pc++;
+            break;
+        }
+
         case StOp::FB_CALL: {
             const StIrFbInstance& fb = prog->fb_instances[in.aux];
             StFbState& st = prog->fb_states[in.aux];
@@ -591,6 +602,127 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
                 if (value >= high) st.q = true;
                 else if (value <= low) st.q = false;
                 outs[0].b = st.q;
+                break;
+            }
+            case StFbType::RELAY_GUARD: {
+                /* Issue #801 §3.1. Mốc Q đổi lần cuối là gốc của cả thời gian
+                 * đóng lẫn thời gian nghỉ. Lần gọi đầu đặt mốc = now với Q =
+                 * FALSE: relay phải nghỉ đủ MIN_OFF mới đóng lần đầu (chống
+                 * đóng dồn sau mất điện/Commission). */
+                const bool cmd = ins[0].b;
+                const bool enable = ins[1].b;
+                const int64_t min_on = ins[2].t;
+                const int64_t min_off = ins[3].t;
+                if (!st.timing) { st.timing = true; st.start_ns = now_ns; st.q = false; }
+                int64_t elapsed = now_ns - st.start_ns;
+                if (elapsed < 0) elapsed = 0;
+                if (!enable) {
+                    if (st.q) { st.q = false; st.start_ns = now_ns; }
+                } else if (cmd && !st.q && elapsed >= min_off) {
+                    st.q = true;
+                    st.start_ns = now_ns;
+                    if (st.counter < INT32_MAX) st.counter += 1;
+                } else if (!cmd && st.q && elapsed >= min_on) {
+                    st.q = false;
+                    st.start_ns = now_ns;
+                }
+                outs[0].b = st.q;
+                outs[1].b = enable && (cmd != st.q);
+                outs[2].i = st.counter;
+                break;
+            }
+            case StFbType::STAGER: {
+                /* Issue #801 §3.2. Đổi TỪNG bậc; điều kiện đổi (lệch mục tiêu,
+                 * không HOLD, cùng hướng) phải giữ liên tục STAGE_DELAY; đồng
+                 * hồ bắt đầu lại tại chính lần đổi. MASK bật bit 0..STAGES-1:
+                 * bậc đóng trước ở bit thấp nên giảm bậc nhả bit cao nhất
+                 * trước (LIFO, không "lỗ"). */
+                const bool run = ins[0].b;
+                const float demand = ins[1].r;
+                const int32_t max_stages = ins[2].i;
+                const int64_t delay = ins[3].t;
+                const bool hold = ins[4].b;
+                if (!std::isfinite(demand)) ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                if (max_stages < 1 || max_stages > 16) ST_FAULT(st_diag_code::kRtLimitMinMax);
+                int32_t target = 0;
+                if (run) {
+                    const float clamped = std::min(100.0f, std::max(0.0f, demand));
+                    target = static_cast<int32_t>(std::lround(
+                        static_cast<double>(clamped) * max_stages / 100.0));
+                    target = std::min(max_stages, std::max(0, target));
+                }
+                if (st.counter > max_stages) st.counter = max_stages;
+                if (!run) {
+                    st.counter = 0;
+                    st.timing = false;
+                } else {
+                    const bool want_up = target > st.counter;
+                    const bool want_down = target < st.counter;
+                    if (hold || (!want_up && !want_down)) {
+                        st.timing = false;
+                    } else {
+                        if (!st.timing || st.prev_in != want_up) {
+                            st.timing = true;
+                            st.prev_in = want_up;
+                            st.start_ns = now_ns;
+                        }
+                        int64_t elapsed = now_ns - st.start_ns;
+                        if (elapsed < 0) elapsed = 0;
+                        if (elapsed >= delay) {
+                            /* Đồng hồ bắt đầu lại NGAY tại lần đổi, không phải ở
+                             * lần gọi kế tiếp: nếu không, mỗi bậc chậm thêm một
+                             * chu kỳ quét và đổi chu kỳ Program đổi luôn hành vi
+                             * (vi phạm §2 "đo bằng đồng hồ Core"). */
+                            st.counter += want_up ? 1 : -1;
+                            st.start_ns = now_ns;
+                        }
+                    }
+                }
+                outs[0].i = st.counter;
+                outs[1].i = target;
+                outs[2].i = st.counter >= 16 ? 0xFFFF : ((1 << st.counter) - 1);
+                break;
+            }
+            case StFbType::PULSE_GEN: {
+                /* Issue #801 §3.3. Mốc đảo pha CỘNG DỒN (không nạp lại theo
+                 * scan), nên sai số không tích luỹ. Tối đa hai lần đảo pha mỗi
+                 * lần gọi (WCET tĩnh): pha độ dài 0 được bỏ qua trong cùng chu
+                 * kỳ thay vì hiện ra một chu kỳ sai. TICK = TRUE đúng một lần
+                 * mỗi chu kỳ T_ON + T_OFF, tại lúc chu kỳ đó HOÀN TẤT. */
+                const bool run = ins[0].b;
+                const int64_t t_on = ins[1].t;
+                const int64_t t_off = ins[2].t;
+                if (t_on + t_off <= 0) ST_FAULT(st_diag_code::kRtLimitMinMax);
+                bool tick = false;
+                if (!run) {
+                    st.timing = false;
+                    st.q = false;
+                } else {
+                    if (!st.timing) {
+                        st.timing = true;
+                        st.q = t_on > 0;
+                        st.start_ns = now_ns + (t_on > 0 ? t_on : t_off);
+                    }
+                    for (int step = 0; step < 2 && now_ns >= st.start_ns; ++step) {
+                        if (st.q) {
+                            st.q = false;
+                            st.start_ns += t_off;
+                        } else {
+                            st.q = t_on > 0;
+                            st.start_ns += t_on > 0 ? t_on : t_off;
+                            tick = true;
+                            if (st.counter < INT32_MAX) st.counter += 1;
+                        }
+                    }
+                }
+                outs[0].b = st.q;
+                outs[1].b = tick;
+                outs[2].i = st.counter;
+                break;
+            }
+            case StFbType::WORD_TO_BITS: {
+                const int32_t word = ins[0].i;
+                for (int bit = 0; bit < 16; ++bit) outs[bit].b = ((word >> bit) & 1) != 0;
                 break;
             }
             case StFbType::PID: {

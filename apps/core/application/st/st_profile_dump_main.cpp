@@ -112,6 +112,8 @@ nlohmann::json standard_function_blocks()
         core::StFbType::TON, core::StFbType::TOF, core::StFbType::R_TRIG,
         core::StFbType::F_TRIG, core::StFbType::PID, core::StFbType::TP,
         core::StFbType::CTU, core::StFbType::CTD, core::StFbType::HYSTERESIS,
+        core::StFbType::RELAY_GUARD, core::StFbType::STAGER, core::StFbType::PULSE_GEN,
+        core::StFbType::WORD_TO_BITS,
     };
     nlohmann::json list = nlohmann::json::array();
     for (core::StFbType fb : kAll) {

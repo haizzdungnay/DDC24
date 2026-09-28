@@ -1268,6 +1268,21 @@ private:
             if (!require(1, StType::UINT)) return false;
             e.result_type = StType::UINT;
             break;
+        case StFunc::BITS_TO_WORD:
+            for (std::size_t i = 0; i < ts.size(); i++)
+                if (!require(i, StType::BOOL)) return false;
+            e.result_type = StType::UINT;
+            break;
+        case StFunc::UPTIME:
+            /* Issue #801 Q4 — `UPTIME()` phụ thuộc thời gian, nên FUNCTION
+             * người dùng (phải thuần, `ST-POU-002`) không được gọi nó. */
+            if (prog_->kind == StPouKind::FUNCTION)
+                return fail(st_diag_code::kPouFunctionNotPure,
+                            "UPTIME() depends on time and cannot be called from a FUNCTION; "
+                            "call it in a PROGRAM or FUNCTION_BLOCK",
+                            e.line, e.column, e.length);
+            e.result_type = StType::TIME;
+            break;
         }
 
         *out = TypeInfo::make(e.result_type);

@@ -415,7 +415,7 @@ private:
              * Giữ NGƯỠNG TRÊN là một hằng đọc được thay vì số trần: loader phải
              * từ chối một fb_type mà chính binary này chưa biết cách chạy, chứ
              * không im lặng nhận rồi rơi vào nhánh `default`. */
-            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::HYSTERESIS))
+            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::WORD_TO_BITS))
                 return fail(st_ir_error::kBadTable, "invalid FB type");
             f.fb_type = static_cast<StFbType>(ft);
             f.input_slot_base = rd_u16(p + 66);
@@ -715,6 +715,7 @@ private:
         case StOp::LIMIT:        *s = mk(1,1,1,1,0,0, NUMT); return true;
         case StOp::SEL:          *s = mk(1,1,1,1,0,0, ALL);  return true;
         case StOp::SQRT:         *s = mk(1,1,0,0,0,0, R);    return true;
+        case StOp::UPTIME:       *s = mk(1,0,0,0,0,0, T);    return true;
         case StOp::CVT_I2R: case StOp::CVT_R2I:
         case StOp::CVT_T2R: case StOp::CVT_R2T:
         case StOp::CVT_I2D: case StOp::CVT_I2U:

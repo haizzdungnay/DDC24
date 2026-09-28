@@ -108,6 +108,8 @@ enum class StOp : uint8_t {
     LIMIT        = 0x53,
     SEL          = 0x54,
     SQRT         = 0x55,
+    /* Issue #801 — `UPTIME()`: dst (TIME) = now − mốc lần thực thi đầu. */
+    UPTIME       = 0x56,
     CVT_I2R      = 0x60,
     CVT_R2I      = 0x61,
     CVT_T2R      = 0x62,

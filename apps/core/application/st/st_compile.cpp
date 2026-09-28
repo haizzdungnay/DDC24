@@ -1052,6 +1052,23 @@ private:
             pc = emit(StOp::SHL, type_raw(StType::UINT), dst, argv[0], argv[1]); break;
         case StFunc::SHR:
             pc = emit(StOp::SHR, type_raw(StType::UINT), dst, argv[0], argv[1]); break;
+        case StFunc::BITS_TO_WORD: {
+            /* Issue #801 — KHAI TRIỂN, không opcode riêng (16 toán hạng):
+             * OUT = OR_k SEL(Bk, 0, 2^k). Mọi đối số đều được đánh giá (§4.4). */
+            const uint8_t uint = type_raw(StType::UINT);
+            const uint16_t zero = const_slot(StValue::make_uint(0));
+            emit(StOp::MOV, uint, dst, zero);
+            const uint16_t bit = push_temp();
+            for (std::size_t k = 0; k < argv.size(); ++k) {
+                emit(StOp::SEL, uint, bit, argv[k], zero,
+                     const_slot(StValue::make_uint(static_cast<uint16_t>(1u << k))));
+                pc = emit(StOp::OR, uint, dst, dst, bit);
+            }
+            pop_temp();
+            break;
+        }
+        case StFunc::UPTIME:
+            pc = emit(StOp::UPTIME, type_raw(StType::TIME), dst); break;
         }
         note_source(pc, e.line, e.column);
         *out_slot = dst;

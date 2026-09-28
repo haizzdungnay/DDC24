@@ -229,6 +229,18 @@ bool build_snapshot_payload(const StLoadedProgram& program, uint64_t now_ns,
         case StFbType::HYSTERESIS:
             dst[0] = state.q ? 1 : 0;
             break;
+        /* Issue #801 — chỉ giữ SỐ ĐẾM của quy trình (số lần đóng relay, số
+         * chu kỳ nhịp) và số bậc; mốc thời gian và Q không qua restart (§3). */
+        case StFbType::RELAY_GUARD:
+        case StFbType::PULSE_GEN:
+            put_u32(dst, static_cast<uint32_t>(state.counter));
+            break;
+        case StFbType::STAGER:
+            dst[0] = static_cast<uint8_t>(state.counter);
+            break;
+        case StFbType::WORD_TO_BITS:
+            dst[0] = 0;
+            break;
         case StFbType::CTU:
         case StFbType::CTD:
             dst[0] = state.prev_clk ? 1 : 0;
@@ -300,6 +312,16 @@ bool validate_payload(const StLoadedProgram& program, const uint8_t* payload,
             break;
         case StFbType::HYSTERESIS:
             if (src[0] > 1) return false;
+            break;
+        case StFbType::RELAY_GUARD:
+        case StFbType::PULSE_GEN:
+            if (static_cast<int32_t>(rd_u32(src)) < 0) return false;
+            break;
+        case StFbType::STAGER:
+            if (src[0] > 16) return false;
+            break;
+        case StFbType::WORD_TO_BITS:
+            if (src[0] != 0) return false;
             break;
         case StFbType::CTU:
         case StFbType::CTD:
@@ -380,6 +402,18 @@ void apply_payload(StLoadedProgram* program, const uint8_t* payload, uint64_t no
         case StFbType::CTD:
             state.prev_clk = src[0] != 0;
             state.counter = static_cast<int16_t>(rd_u16(src + 1));
+            break;
+        case StFbType::RELAY_GUARD:
+        case StFbType::PULSE_GEN:
+            state.counter = static_cast<int32_t>(rd_u32(src));
+            state.timing = false;
+            state.q = false;
+            break;
+        case StFbType::STAGER:
+            state.counter = src[0];
+            state.timing = false;
+            break;
+        case StFbType::WORD_TO_BITS:
             break;
         case StFbType::NONE:
             break;
