@@ -254,11 +254,15 @@ export interface ProgrammingRuntimeSignalPage {
   items: ProgrammingRuntimeSignal[]
 }
 
+/** U-09 — `ON_CHANGE` chỉ giữ mẫu Core có ô đổi; vắng = `EVERY_SAMPLE`. */
+export type ProgrammingTraceSampleMode = 'EVERY_SAMPLE' | 'ON_CHANGE'
+
 export interface ProgrammingTraceRequest {
   schemaVersion: '1.0'
   variableIds: string[]
   durationMs: number
   samplePeriodMs: number
+  sampleMode?: ProgrammingTraceSampleMode
 }
 
 export interface ProgrammingTraceAccepted {
@@ -306,8 +310,14 @@ export interface ProgrammingTrace {
   startedAt: string
   updatedAt: string
   stopReason: 'DURATION_REACHED' | 'QUOTA_REACHED' | 'USER_STOPPED' | 'SOURCE_UNAVAILABLE' | null
+  /** U-02 — nguồn mẫu: `CORE` từng chu kỳ; `MONITOR_POLL` xấp xỉ (Core không
+   *  nhận phiên). Vắng khi Core chưa trả lời hoặc server đời cũ. */
+  source?: 'CORE' | 'MONITOR_POLL'
+  /** U-09 — chế độ giữ mẫu của phiên; server đời cũ không gửi. */
+  sampleMode?: ProgrammingTraceSampleMode
   droppedSamples: number
-  samples: Array<{ sequence: number; observedAt: string; values: ProgrammingTraceValue[] }>
+  /** `cycle` — số thứ tự mẫu trong ring Core (chỉ mẫu Core). */
+  samples: Array<{ sequence: number; observedAt: string; cycle?: number; values: ProgrammingTraceValue[] }>
 }
 
 /** Data Model §3.3 — Program document. `document` là source ST (string) khi

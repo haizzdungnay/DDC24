@@ -471,8 +471,12 @@ if [ "$ENABLE" -eq 1 ]; then
     fi
 
     # Xác minh tiến trình thực sự chạy binary mới, không còn giữ inode đã xoá.
+    # `mkddc-reload-helper` và `mkddc-time-helper` chạy CHUNG binary
+    # `/opt/mkddc-web/mkddc-web` với `mkddc-web-pi`: chỉ restart web thì hai
+    # helper tiếp tục chạy bản cũ `(deleted)` mà không có dấu hiệu nào
+    # (U-21, REC-DDC-FIELD-USE-20260927 — gặp trên Foxlinx 2026-09-27).
     stale=0
-    for unit in mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi; do
+    for unit in mkddc-iobus mkddc-core mkddc-netcfg mkddc-reload-helper mkddc-time-helper mkddc-web-pi; do
         pid="$(sysctl_do show "$unit" -p MainPID --value)"
         [ -n "$pid" ] && [ "$pid" != "0" ] || continue
         if readlink "/proc/$pid/exe" 2>/dev/null | grep -q '(deleted)'; then

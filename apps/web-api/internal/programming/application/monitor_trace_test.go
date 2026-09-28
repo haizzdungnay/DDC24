@@ -527,6 +527,14 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 	if second.ProgramValue != nil || second.Quality != "BAD" || second.Freshness != "UNAVAILABLE" {
 		t.Fatalf("ô không đo được bị trình bày như giá trị thật: %+v", second)
 	}
+	// U-03: freshness phải nằm trong enum OpenAPI (LIVE | STALE | UNAVAILABLE).
+	if first.Freshness != "LIVE" {
+		t.Fatalf("freshness mẫu Core = %q, muốn LIVE", first.Freshness)
+	}
+	// U-02: người xem phải biết mẫu đến từ Core, từng chu kỳ.
+	if view.Source != traceSourceCore {
+		t.Fatalf("source = %q, muốn %q", view.Source, traceSourceCore)
+	}
 	// Số mẫu rơi (khoảng hụt số thứ tự) phải hiện ra, không bị giấu.
 	if view.DroppedSamples != 3 {
 		t.Fatalf("droppedSamples=%d, phải bằng khoảng hụt số thứ tự của ring", view.DroppedSamples)
@@ -568,6 +576,10 @@ func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
 	// là tệ hơn.
 	if len(view.Samples) == 0 {
 		t.Fatal("đường dự phòng poll monitor không chạy khi Core từ chối")
+	}
+	// U-02: dữ liệu xấp xỉ phải tự nói mình là xấp xỉ.
+	if view.Source != traceSourceMonitorPoll {
+		t.Fatalf("source = %q, muốn %q", view.Source, traceSourceMonitorPoll)
 	}
 }
 

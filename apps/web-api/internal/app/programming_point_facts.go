@@ -95,6 +95,9 @@ func (adapter programmingPointFactsAdapter) ResolvePointBindingFacts(
 			MinValue:      item.MinValue,
 			MaxValue:      item.MaxValue,
 		}
+		if item.BoundPointID != "" {
+			facts.BoundPointID = canonicalBoundPointID(item.BoundPointID)
+		}
 		snapshot.Virtual[strings.ToUpper(item.ID)] = facts
 		/* Binding có thể mang mã slot (`AV-01`) thay vì mã điểm ảo (`VP1`):
 		 * tab Ánh xạ phát mã slot cho category VP (`pointCatalogPointID`).

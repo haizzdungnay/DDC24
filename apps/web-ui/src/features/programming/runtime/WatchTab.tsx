@@ -19,6 +19,7 @@ import type {
   ProgrammingTrace,
   ProgrammingTraceAccepted,
   ProgrammingTraceRequest,
+  ProgrammingTraceSampleMode,
   ProgrammingTraceValue
 } from '../model/types'
 import { formatProgrammingPeriod } from '../model/cyclePeriods'
@@ -46,6 +47,9 @@ export function WatchTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [durationMs, setDurationMs] = useState(60_000)
   const [samplePeriodMs, setSamplePeriodMs] = useState(1_000)
+  /* U-09 — `ON_CHANGE` chỉ giữ mẫu khi có biến đổi giá trị: cùng trần 10 000 ô
+   * nhưng ghi được lâu hơn nhiều (27 biến ở 100 ms trước chỉ đủ ≈ 37 s). */
+  const [sampleMode, setSampleMode] = useState<ProgrammingTraceSampleMode>('EVERY_SAMPLE')
   const [trace, setTrace] = useState<ProgrammingTrace | null>(null)
   const [traceError, setTraceError] = useState<string | null>(null)
   const [traceBusy, setTraceBusy] = useState(false)
@@ -99,7 +103,10 @@ export function WatchTab() {
     if (selectedAvailable.length === 0) return
     setTraceBusy(true)
     setTraceError(null)
-    const body: ProgrammingTraceRequest = { schemaVersion: '1.0', variableIds: selectedAvailable, durationMs, samplePeriodMs }
+    const body: ProgrammingTraceRequest = {
+      schemaVersion: '1.0', variableIds: selectedAvailable, durationMs, samplePeriodMs,
+      ...(sampleMode === 'ON_CHANGE' ? { sampleMode } : {}),
+    }
     try {
       const accepted = await client.request<ProgrammingTraceAccepted, ProgrammingTraceRequest>('createProgrammingTrace', {
         body,
@@ -217,6 +224,12 @@ export function WatchTab() {
               ))}
             </select>
           </label>
+          <label className="text-xs text-[var(--c-text-dim)]">{pick('Giữ mẫu', 'Keep samples')}
+            <select className="mt-1 block rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1.5 text-sm text-[var(--c-text)]" value={sampleMode} disabled={!canTrace || traceRunning} onChange={(event) => setSampleMode(event.target.value as ProgrammingTraceSampleMode)}>
+              <option value="EVERY_SAMPLE">{pick('Mọi chu kỳ', 'Every cycle')}</option>
+              <option value="ON_CHANGE">{pick('Khi giá trị đổi (ghi được lâu hơn)', 'On change (records longer)')}</option>
+            </select>
+          </label>
           <span className="pb-2 text-xs text-[var(--c-text-dim)]">{selectedAvailable.length}/32 {pick('biến', 'variables')}</span>
           {canTrace && !traceRunning && <Button size="sm" icon={<TimerReset className="h-4 w-4" aria-hidden="true" />} loading={traceBusy} disabled={selectedAvailable.length === 0} onClick={() => void startTrace()}>{pick('Bắt đầu trace', 'Start trace')}</Button>}
           {canTrace && traceRunning && <Button size="sm" variant="danger" icon={<Square className="h-4 w-4" aria-hidden="true" />} loading={traceBusy} onClick={() => void stopTrace()}>{pick('Dừng trace', 'Stop trace')}</Button>}
@@ -250,7 +263,26 @@ export function WatchTab() {
                 · {trace.droppedSamples} {pick('mẫu rơi', 'dropped samples')}
               </span>
               {trace.stopReason && <span>· {trace.stopReason}</span>}
+              {trace.source === 'CORE' && (
+                <span data-testid="trace-source">· {pick('nguồn Core, từng chu kỳ', 'Core source, every cycle')}</span>
+              )}
+              {trace.sampleMode === 'ON_CHANGE' && (
+                <span data-testid="trace-sample-mode">· {pick('chỉ giữ mẫu khi giá trị đổi; cột # ghi chu kỳ Core, chu kỳ bị bỏ giống mẫu trước', 'kept only on change; # shows the Core cycle, skipped cycles equal the previous sample')}</span>
+              )}
             </div>
+            {/* U-02 (REC-DDC-FIELD-USE-20260927): Core chỉ phục vụ một phiên Trace
+                tại một thời điểm. Phiên khác rơi về đọc snapshot monitor — dữ liệu
+                xấp xỉ, không phải từng chu kỳ. Trên bo, phiên như vậy nhận 1 mẫu mỗi
+                132–1 065 ms dù hiển thị "mỗi 100 ms". Phải nói ra, nếu không người
+                đọc sẽ chấm đồ thị như dữ liệu từng chu kỳ. */}
+            {trace.source === 'MONITOR_POLL' && (
+              <p role="status" data-testid="trace-source" className="mt-1 rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+                {pick(
+                  'Dữ liệu xấp xỉ: Core không nhận phiên này (thường vì đang có một phiên Trace khác), nên mẫu lấy từ snapshot monitor và KHÔNG đủ từng chu kỳ. Các chu kỳ không có mẫu được tính vào "mẫu rơi". Dừng phiên kia rồi tạo lại để có dữ liệu từng chu kỳ.',
+                  'Approximate data: Core did not accept this session (usually because another Trace is running), so samples come from monitor snapshots and do NOT cover every cycle. Cycles without a sample are counted as dropped. Stop the other session and start again for per-cycle data.',
+                )}
+              </p>
+            )}
             {/* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau:
                 mất nguồn, và nguồn ĐỔI THÀNH chương trình khác. Với phiên có
                 pin, nói rõ vế thứ hai — nếu không người đọc sẽ đi tìm một sự cố
@@ -463,7 +495,7 @@ function TraceTable({ trace, itemByVariableId, pick }: { trace: ProgrammingTrace
           const owner = effectiveTraceOwner(value, item, pick)
           return (
             <tr key={`${sample.sequence}-${value.variableId}`} className="border-t border-[var(--c-border)] align-top">
-              <td>{index === 0 ? `${sample.sequence} · ${formatObservedAt(sample.observedAt, pick).text}` : ''}</td>
+              <td>{index === 0 ? `${sample.cycle !== undefined ? `${pick('chu kỳ', 'cycle')} ${sample.cycle}` : sample.sequence} · ${formatObservedAt(sample.observedAt, pick).text}` : ''}</td>
               <th scope="row" className="font-normal"><span className="text-[var(--c-text)]">{item?.variableName ?? shortId(value.variableId)}</span><br/><span className="font-mono text-[var(--c-text-dim)]">{shortId(value.variableId)}</span></th>
               <td className="font-mono">{isKnownInput ? <NotApplicable pick={pick} /> : <Value value={value.programValue} unit={item?.unit} pick={pick} />}</td>
               <td className="font-mono"><Value value={value.actualValue} unit={item?.unit} unavailable={actualIsUnavailable(value.quality, value.freshness)} pick={pick} /></td>

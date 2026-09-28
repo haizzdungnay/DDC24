@@ -53,6 +53,10 @@ type VirtualPointFacts struct {
 	HasInitial    bool
 	MinValue      *float64
 	MaxValue      *float64
+	// BoundPointID — slot Core mà điểm đã được cấp (`AV-2`, `BV-1`, `MSV-1`…),
+	// rỗng khi chưa gắn slot. Slot quyết định kiểu biến ST, xem
+	// `virtualSTTypeForSlot`.
+	BoundPointID string
 }
 
 // PointBindingSnapshot là ảnh chụp MỘT LẦN cho cả package.
@@ -155,15 +159,19 @@ func checkVirtualBinding(snapshot *PointBindingSnapshot, pointID, direction, dat
 				"vòng đối chiếu sẽ kéo giá trị về cấu hình mỗi 10 giây và không bên nào thắng hẳn — "+
 				"đổi chủ sở hữu điểm sang PROGRAM rồi Check lại", pointID)
 		}
-		if !facts.Writable {
-			return fmt.Sprintf("điểm ảo %s khai chỉ đọc (writable=false) nhưng chương trình đang GHI vào nó", pointID)
-		}
+		/* U-05 (REC-DDC-FIELD-USE-20260927): KHÔNG đòi `writable` ở đây.
+		 * `writable` là trục operator ("người vận hành sửa được không"); với
+		 * VP do PROGRAM sở hữu, người vận hành vốn không ghi được (web-api từ
+		 * chối, UI khoá), còn quyền ghi của CHƯƠNG TRÌNH đến từ `source` —
+		 * đúng như catalog báo cho compiler (`pointCatalogDirection`). Bản cũ
+		 * đòi thêm `writable=true`, nên muốn khoá VP trạng thái khỏi người vận
+		 * hành thì Check FAILED; trên bo, 3 VP trạng thái bị chặn như vậy. */
 	}
-	if want, ok := virtualSignalTypeForST(dataType); ok && facts.SignalType != "" &&
-		!strings.EqualFold(facts.SignalType, want) {
-		return fmt.Sprintf("điểm ảo %s khai kiểu tín hiệu %q nhưng biến ST là %s (cần %q); "+
-			"lệch kiểu ở đây cho ra một phép đổi ngầm chứ không phải một lỗi",
-			pointID, facts.SignalType, dataType, want)
+	if want, ok := virtualSTType(pointID, facts); ok &&
+		!strings.EqualFold(strings.TrimSpace(dataType), want) {
+		return fmt.Sprintf("điểm ảo %s (kiểu tín hiệu %q) tới chương trình dưới dạng %s nhưng biến ST là %s; "+
+			"đổi kiểu biến thành %s — lệch kiểu ở đây cho ra một phép đổi ngầm chứ không phải một lỗi",
+			pointID, facts.SignalType, want, dataType, want)
 	}
 	if facts.MinValue != nil && facts.MaxValue != nil && *facts.MinValue > *facts.MaxValue {
 		return fmt.Sprintf("điểm ảo %s khai biên kỹ thuật đảo ngược (min %g > max %g): mọi lệnh ghi "+
@@ -186,18 +194,57 @@ func hasConfiguredSignalType(signalType string) bool {
 	return trimmed != "" && trimmed != "none"
 }
 
-// virtualSignalTypeForST đổi kiểu biến ST sang kiểu tín hiệu VP tương ứng.
-//
-// `false` = kiểu ST không ràng buộc kiểu tín hiệu nào (ví dụ STRING/TIME), nên
-// không có gì để đối chiếu — im lặng ở đó là đúng, khác hẳn im lặng vì bỏ sót.
-func virtualSignalTypeForST(dataType string) (string, bool) {
-	switch strings.ToUpper(strings.TrimSpace(dataType)) {
-	case "BOOL":
-		return "boolean", true
-	case "REAL", "LREAL":
-		return "float", true
-	case "INT", "DINT", "UINT", "UDINT", "SINT", "USINT":
-		return "integer", true
+/* virtualSTType — kiểu biến ST mà Core THẬT SỰ cấp cho một điểm ảo.
+ *
+ * TRIỆU CHỨNG trước bản vá: Check đòi REAL ↔ `float` và UINT ↔ `integer`. Nhưng
+ * bộ cấp slot CỐ Ý đặt VP `integer` lên slot `AV` (float trong `plc_shm.av[]`)
+ * và VP `multistate` lên slot `MSV` (`ISS-PIO-17`), còn `st_io_map.cpp` khoá cứng
+ * `AV ⇒ REAL`, `BV ⇒ BOOL`, `MSV ⇒ UINT`. Hai luật không có giao điểm, nên VP
+ * `integer` và VP `multistate` KHÔNG bind được vào biến nào: tab Ánh xạ (theo
+ * catalog `virtualPointDataType`) gợi ý REAL/UINT, rồi Check từ chối chính gợi
+ * ý đó. Đo trên bo Foxlinx 2026-09-27: `DO16_MODE` (multistate, `MSV-01`) và
+ * `DO16_MANUAL_MASK` (integer, `AV-02`) đều FAILED với `PIO-SRC-001`.
+ *
+ * Đây là lần thứ tư cùng một lớp lỗi (`ISS-PIO-33`, `ISS-PIO-34` ở catalog):
+ * để thuộc tính KHAI BÁO (`signalType`) quyết định kiểu, trong khi kiểu chỉ
+ * được nói đúng CÁCH CORE LƯU điểm. Nên slot đứng trước; `signalType` chỉ dùng
+ * khi điểm chưa có slot, và khi đó ánh xạ theo đúng pool mà allocator sẽ chọn.
+ *
+ * `false` = không suy được kiểu nào (ví dụ `string`), nên không có gì để đối
+ * chiếu — im lặng ở đó là đúng, khác hẳn im lặng vì bỏ sót.
+ */
+func virtualSTType(pointID string, facts VirtualPointFacts) (string, bool) {
+	for _, slot := range []string{facts.BoundPointID, pointID} {
+		if want, ok := virtualSTTypeForSlot(slot); ok {
+			return want, true
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(facts.SignalType)) {
+	case "boolean":
+		return "BOOL", true
+	case "integer", "float":
+		return "REAL", true
+	case "multistate":
+		return "UINT", true
+	default:
+		return "", false
+	}
+}
+
+// virtualSTTypeForSlot — cùng bảng với `st_io_map.cpp` và catalog
+// `virtualPointDataType`; ba nơi phải nói cùng một câu.
+func virtualSTTypeForSlot(slot string) (string, bool) {
+	prefix, _, ok := splitPointPrefix(slot)
+	if !ok {
+		return "", false
+	}
+	switch prefix {
+	case "AV":
+		return "REAL", true
+	case "BV":
+		return "BOOL", true
+	case "MSV":
+		return "UINT", true
 	default:
 		return "", false
 	}

@@ -13,6 +13,12 @@
  *        Mặc định Rev A là HASH_ONLY, không dùng khoá test. `--key` chỉ là
  *        đường tương thích có kiểm soát cho profile SIGNATURE_REQUIRED sau
  *        này; khi dùng, chữ ký vẫn được verify chặt bởi loader.
+ *
+ *        `--check-only` (U-16, REC-DDC-FIELD-USE-20260927): chỉ biên dịch để
+ *        kiểm lỗi, KHÔNG sinh artifact, nên không cần khoá ký kể cả khi profile
+ *        đòi SIGNATURE_REQUIRED. Kết quả kèm `usage` — mức dùng slot/lệnh/
+ *        instance so với trần profile — để người viết chương trình biết còn dư
+ *        bao nhiêu mà không phải dò bằng biến giả.
  */
 #include <algorithm>
 #include <cctype>
@@ -947,6 +953,59 @@ bool apply_worker_sandbox(std::string* error)
 #endif
 }
 
+/* U-16 — kết quả của `--check-only`: cùng khung JSON một dòng như lệnh biên
+ * dịch thường (`ok`, `diagnostics`, `programName`, `symbols`…), không có trường
+ * artifact nào, thêm `usage` so với trần profile. */
+int print_check_only_result(const core::StArtifactBuildResult& build,
+                            const std::vector<core::StLinkedPouInfo>& linked_pous,
+                            const std::string& source_id, const std::string& language)
+{
+    const core::StIrModule& module = build.module;
+    nlohmann::json symbols = nlohmann::json::array();
+    for (const core::StIrVariable& v : module.variables) {
+        const char* dir = nullptr;
+        if (v.storage == core::StStorage::VAR_INPUT) dir = "input";
+        else if (v.storage == core::StStorage::VAR_OUTPUT) dir = "output";
+        if (!dir) continue;
+        symbols.push_back({{"name", v.name}, {"direction", dir},
+                           {"type", core::st_type_name(v.type)}, {"slot", v.slot}});
+    }
+    auto used = [](std::size_t value, std::size_t limit) {
+        return nlohmann::json{{"used", value}, {"limit", limit}};
+    };
+    namespace profile = core::st_profile_generated;
+    nlohmann::json j;
+    j["ok"] = true;
+    j["checkOnly"] = true;
+    nlohmann::json diagnostics = nlohmann::json::array();
+    if (g_bag != nullptr && !g_bag->empty()) {
+        g_bag->finalize();
+        for (const core::StDiagnostic& diagnostic : g_bag->items())
+            diagnostics.push_back(diagnostic_json(diagnostic, source_id));
+    }
+    j["diagnostics"] = diagnostics;
+    j["programName"] = module.program_name;
+    j["sourceId"] = source_id;
+    j["language"] = language;
+    j["symbols"] = symbols;
+    j["linkedPous"] = nlohmann::json::array();
+    for (const core::StLinkedPouInfo& linked : linked_pous)
+        j["linkedPous"].push_back({{"name", linked.name},
+                                    {"kind", core::st_pou_kind_name(linked.kind)},
+                                    {"instructionCount", linked.instruction_count},
+                                    {"fromLibrary", linked.from_library}});
+    j["usage"] = {
+        {"instructions", used(module.code.size(), profile::kMaxInstructions)},
+        {"writableSlots", used(module.var_slot_count, profile::kMaxWritableSlots)},
+        {"slots", used(module.slot_count, profile::kMaxSlots)},
+        {"constants", used(module.constants.size(), profile::kMaxConstants)},
+        {"fbInstances", used(module.fb_instances.size(), profile::kMaxFunctionBlocks)},
+        {"bindings", used(module.io_bindings.size(), profile::kMaxBindings)},
+    };
+    std::printf("%s\n", j.dump().c_str());
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -965,6 +1024,7 @@ int main(int argc, char** argv)
     std::string library_lock_path;
     std::string signal_manifest_path;
     bool sandbox = false;
+    bool check_only = false;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -983,6 +1043,7 @@ int main(int argc, char** argv)
         else if (a == "--library-lock" && i + 1 < argc) library_lock_path = argv[++i];
         else if (a == "--signal-manifest" && i + 1 < argc) signal_manifest_path = argv[++i];
         else if (a == "--warnings-as-errors") warnings_as_errors = true;
+        else if (a == "--check-only") check_only = true;
         else if (a == "--sandbox") sandbox = true;
         else if (a == "--version") {
             std::printf("compiler_version=%s profile_id=%s profile_sha256=%s "
@@ -998,7 +1059,7 @@ int main(int argc, char** argv)
                         "[--source-id <opaque>] [--key <hexfile>] [--gen-device-key <dir>] [--out <artifact>] "
                         "[--manifest-out <json>] [--io-map-in <json>] [--sandbox] "
                         "[--pou-manifest <json>] [--library-lock <json>] "
-                        "[--signal-manifest <json>] "
+                        "[--signal-manifest <json>] [--check-only] "
                         "[--version]\n");
             return 0;
         } else {
@@ -1009,6 +1070,12 @@ int main(int argc, char** argv)
         return fail("ST-CLI-ARGS", "usage: mkddc-st-compile --source <path>", 2);
     if (language != "ST" && language != "FBD")
         return fail("ST-CLI-ARGS", "--language must be ST or FBD", 2);
+    /* `--check-only` không sinh artifact. Nhận kèm `--out`/`--manifest-out`/
+     * `--key` thì hoặc phải lặng lẽ bỏ qua chúng (người gọi tưởng đã có file),
+     * hoặc phải sinh artifact (không còn là "chỉ kiểm") — cả hai đều sai. */
+    if (check_only && (!out_path.empty() || !manifest_out_path.empty() || !key_path.empty()))
+        return fail("ST-CLI-ARGS",
+                    "--check-only khong sinh artifact: khong dung kem --out, --manifest-out, --key", 2);
     /* T59-607 — worker sandbox nay ĐƯỢC ký.
      *
      * Ràng buộc cũ "sandbox không nhận khoá" sinh ra ở thời Rev A `HASH_ONLY`,
@@ -1026,7 +1093,7 @@ int main(int argc, char** argv)
      * sinh ra đều bị loader từ chối. Báo tại đây để lỗi chỉ đúng vào cấu hình,
      * thay vì lòi ra ở bước dựng manifest dưới dạng "artifact is not signed". */
     if (core::st_profile_integrity_mode() == core::StIntegrityMode::SIGNATURE_REQUIRED &&
-        key_path.empty()) {
+        key_path.empty() && !check_only) {
         return fail("ST-CLI-KEY-REQUIRED",
                     "profile yeu cau SIGNATURE_REQUIRED: phai truyen --key <hexfile> "
                     "(khoa thiet bi, xem ADR-052)",
@@ -1136,6 +1203,9 @@ int main(int argc, char** argv)
         return fail(core::st_diag_code::kWarnUnusedVariable,
                     "warnings promoted to errors by target profile policy", 1, source_id);
     }
+
+    if (check_only)
+        return print_check_only_result(build, linked_pous, source_id, language);
 
     if (!key_path.empty() && !core::sign_st_artifact(&build.artifact, secret))
         return fail("ST-CLI-KEY", "failed to sign artifact", 2);

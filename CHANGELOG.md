@@ -8,6 +8,75 @@
 
 ## [Unreleased]
 
+### Added — Nhóm "Sprint kế" của báo cáo sử dụng thực tế: --check-only, mkddc-st-sim, Trace ON_CHANGE, tự khai dependency thư viện, CASE dải rộng (2026-09-27)
+
+- Phạm vi: `apps/core/application/st/{st_compile_main.cpp,st_parser.cpp}`, `apps/core/application/programming/{programming_st_sim_main.cpp,simulation/sim_scenario.*}`, `apps/core/CMakeLists.txt` (target `mkddc-st-sim`, thư viện `core_sim_scenario`), `apps/web-api/internal/programming/application/{trace.go,draft.go,projects.go,library_dependency_inference.go}`, `apps/web-api/internal/app/points.go`, `contracts/openapi/openapi.yaml` (1.44.0 → 1.45.0), re-pin `openapiSha256`, FE `runtime/WatchTab.tsx`, `docs/06_operations/RUN_PROJECT_LOCAL_PROGRAMMING.md` §5; `REC-DDC-FIELD-USE-20260927` lên 1.2. PR #803, xếp chồng lên #797.
+- U-16/U-08: `mkddc-st-compile --check-only` kiểm lỗi không cần khoá ký, không sinh artifact, trả `usage` so với trần profile (trên `PRG_DO16_MODBUS`: lệnh 1576/4096, slot ghi 467/512, instance FB 43/64). Công cụ host `mkddc-st-sim` chạy package theo kịch bản JSON trên đúng `SimSession` của chế độ SIMULATE, xuất CSV mỗi lần Program release. Công cụ không cài lên bo.
+- U-11: nhãn `CASE` lưu dạng khoảng, nên `16..32767:` hợp lệ; nhãn chồng vẫn bị từ chối; trần đếm theo số nhãn (vẫn giữ luật WCET của ADR-054 §2).
+- U-15: `replaceProgramSource` (op chỉ sửa mã, giữ `locals`/`interface`) nhận `objectId` theo hợp đồng PGM-02, `programId` là alias; thêm test.
+- U-06: lưu Draft có đổi mã thì web-api tự thêm `dependencies` cho lời gọi vào khối Thư viện PROJECT (POU trùng tên thắng, chỉ thêm).
+- U-09: Trace `sampleMode = ON_CHANGE` chỉ giữ mẫu Core có ô đổi, mỗi mẫu có `cycle`; FE thêm ô "Giữ mẫu".
+- U-19: lệnh ghi VP ≥ 1 s log `WARN points.vp_write_slow` kèm phân rã lock/read/persist/core.
+- Cần thiết kế hoặc quyết định, đã mở Issue kèm bằng chứng: U-04 #798, U-08 (dùng chung slot) #799, U-10 #800 (+ #367), U-12 #801, U-13 #802, U-20 (#384).
+- Kiểm chứng: `cmake --fresh` (MODBUS/BACNET/HMI=ON) exit 0, build exit 0, ctest 1639/1639; `go vet` exit 0, `go test ./... -count=1` 21 package ok; vitest 267 file / 3478 test exit 0; `npm run lint`/`npm run build` exit 0; `verify-project.sh --component layout` exit 0; `verify_programming_sim_worker_boundary.py` PASS (tĩnh + nhị phân); guard đóng gói 14/14. Test đỏ → xanh: CASE dải rộng trên parser cũ, suy dependency khi bỏ hook. Chưa deploy lên bo.
+
+### Fixed — Nhóm "Ngay" của báo cáo sử dụng thực tế: Trace trung thực, VP writable, lỗi 409 rõ trường, deploy helper, hướng dẫn FBD (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/{trace.go,point_binding_facts.go,projects.go}`, `transport/http/projects.go`, `contracts/openapi/openapi.yaml` (1.43.0 → 1.44.0), `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}` (re-pin `openapiSha256`), FE `runtime/WatchTab.tsx`, `points/VirtualIoPage.tsx`, `shared/components/Toast.tsx`, `platform/packaging/install.sh`, `docs/03_implementation/DEPLOY_FOXLINX.md`, `FBD_CREATION_AND_ACTIVATION_GUIDE.md` (1.1.0); `REC-DDC-FIELD-USE-20260927` lên 1.1. PR #797.
+- U-02: Trace thêm `source` (`CORE` / `MONITOR_POLL`). Phiên bị Core từ chối rơi về poll monitor; mọi chu kỳ lọt giữa hai snapshot nay được cộng vào `droppedSamples` (trên bo trước đây: 111 mẫu/55,5 s mà vẫn báo 0 mẫu rơi). FE cảnh báo "Dữ liệu xấp xỉ".
+- U-03: mẫu Core gửi `freshness = LIVE` thay cho `FRESH` nằm ngoài enum OpenAPI.
+- U-05: Check không đòi `writable` (quyền của người vận hành) cho VP do PROGRAM sở hữu; quyền ghi của chương trình đến từ `source`, khớp catalog. UI khoá ô Writable kèm giải thích.
+- U-14: sai `baseRevisionId` vẫn là `409 PRG-ERR-CONFLICT-001` nhưng có `field = baseRevisionId` và `args = {expected, actual}`.
+- U-17: hướng dẫn FBD theo ADR-061 (8 chu kỳ) và ADR-062; `acknowledgements` = mọi key `PRESENT`.
+- U-21: `install.sh` kiểm `(deleted)` cho cả hai helper chạy chung binary web; runbook deploy kiểm exe của cả ba unit.
+- Ngoài danh sách: `ToastProvider` huỷ timer khi unmount. Trước đây cả bộ vitest exit 1 vì lỗi unhandled "window is not defined" dù mọi test PASS.
+- Kiểm chứng: `go vet` exit 0; `go test ./... -count=1` 21 package ok; vitest 267 file / 3 476 test, exit 0; `npm run lint` và `npm run build` exit 0; `verify-project.sh --component layout` exit 0; guard packaging 14/14; `docs_iso_harness --expect` PASS; `candidate_pin_check` 17/17. Test đỏ → xanh: đếm chu kỳ rơi ở đường poll, guard U-21, `Toast.test.tsx`. Chưa deploy lên bo.
+
+### Added — Báo cáo vấn đề cần nâng cấp mã nguồn DDC-24 qua sử dụng thực tế (2026-09-27)
+
+- Thêm `docs/07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md` (`REC-DDC-FIELD-USE-20260927`): 21 vấn đề rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo lab. Mỗi vấn đề có mức, kịch bản hỏng, dẫn chứng `file:dòng` và tiêu chí đóng; kèm lộ trình 4 đợt. Những vấn đề đáng chú ý:
+  - Check lệch kiểu VP (đã sửa ở PR #795, chờ merge).
+  - Trace: phiên thứ hai âm thầm lấy mẫu thưa nhưng vẫn báo 100 ms; `freshness = FRESH` ngoài OpenAPI; mẫu có thể trộn đầu vào mới với đầu ra cũ.
+  - Modbus không gộp FC15; trần 512 slot/Program.
+  - Ngôn ngữ ST thiếu ARRAY/toán tử bit/hằng; thư viện hệ thống thiếu khối DDC; `PID` bị cổng review chặn.
+- Đăng ký trong `docs/07_records/reviews/README.md` (v1.28) và `docs/README.md`. Sửa nhận định DO16-O3 trong `EV-PROG-DO16-MB-20260927`: phiên Trace thứ hai không dừng sớm mà chạy đủ thời lượng với mẫu thưa ~500 ms. Chỉ thêm tài liệu, không đổi mã hay runtime.
+
+### Added — `PRG_DO16_MODBUS` 1.3: chế độ AUTO tự chạy lần lượt mọi chế độ, đang chạy trên bo (2026-09-27)
+
+- Phạm vi: `PRG_DO16_MODBUS` trong `docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md` (bản 1.3: bảng vòng AUTO, T13, S16, lỗi 9); hồ sơ `EV-PROG-DO16-MB-20260927` (mục "Chế độ AUTO"); bo lab: VP `DO16_MODE` thêm trạng thái `10 = AUTO`, Revision Active `a0f107fa…`, `DO16_MODE = 10`.
+- AUTO (`CmdMode = 10`): OFF 12 s → STAGGER 22 s → CHASE 12 s → BLINK 10 s → MANUAL 8 s → TEST 12 s → PULSE 8 s → OFF 12 s → STAGING 40 s, lặp lại (≈ 137 s/vòng). Tham số do chương trình tự sinh, tự "bấm nút" cho TEST/PULSE. `CmdReverse`, `CmdLockMask`, `InPermit` vẫn có hiệu lực; mất cho phép hoặc Program khởi động lại thì bắt đầu lại từ OFF. Sau mất điện `DO16_MODE` vẫn về OFF (chính sách của VP).
+- Lỗi bắt được trên host trước khi lên bo và đã sửa: bật AUTO sẵn lúc Program khởi động thì bỏ qua bước OFF (`AutoDur = T#0s` ở chu kỳ đầu).
+- Kiểm chứng: host biên dịch 0 diagnostic; S16 3 361 chu kỳ 0 vi phạm; S1–S15 giống hệt bản 1.2. Trên bo: Check PASSED 0 diagnostic, Commission SUCCEEDED 0,46 s; Trace Core theo từng chu kỳ 1 665 chu kỳ, đủ 8 chế độ con trọn vẹn, **0 vi phạm**; Program 0 lỡ nhịp, 0 lỗi; task 0 overrun. Ghi nhận thêm: Core chỉ nhận một phiên Trace dù web cho 4; phiên thứ hai âm thầm chuyển sang poll thưa (~500 ms/mẫu) mà API vẫn báo chu kỳ 100 ms (DO16-O3).
+
+### Fixed — `PRG_DO16_MODBUS` 1.2: kiểm từng chu kỳ trên bo, sửa STAGING giảm bậc (2026-09-27)
+
+- Phạm vi: `FB_STAGER` trong `docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md` (bản 1.2); hồ sơ `EV-PROG-DO16-MB-20260927` (mục "Kiểm theo từng chu kỳ"); bo lab: Revision Active `9b40a15e…` (chỉ thay `FB_STAGER` trên Revision `104ded61` do người dùng Commission; Draft sạch và Active được kiểm ngay trước khi ghi).
+- Triệu chứng: Trace Core 100 ms theo từng chu kỳ (1 767 chu kỳ, 8 chế độ) cho thấy STAGING khi giảm bậc có "lỗ" (vd `0x01DF`) trong 33 chu kỳ, và hai relay nhả cách nhau 3–9 chu kỳ, trái với đặc tả "cách nhau ≥ `CmdStepSec`". Mọi chế độ khác 0 vi phạm.
+- Nguyên nhân gốc: `Hold` của `FB_STAGER` chỉ chặn chiều tăng. Chiều giảm vẫn trừ bậc đều, trong khi relay còn bị giữ bởi thời gian đóng tối thiểu, nên relay nhả theo thứ tự hết giờ giữ và dồn lại.
+- Cách sửa: `Hold` chặn cả chiều giảm, nên bậc chỉ đổi khi đầu ra thật đã theo kịp (đóng sau – nhả trước, không lỗ). Thêm kịch bản mô phỏng S15; hướng dẫn thêm §9.6 và ghi khoảng nghỉ đổi chế độ ≈ 2,1 s.
+- Kiểm chứng: host 15 kịch bản 0 lỗi runtime; S15 tái hiện được lỗi trên bản 1.1 và sạch trên 1.2. Trên bo: Check PASSED 0 diagnostic, Commission SUCCEEDED 0,47 s; kiểm lại 1 768 + 352 = 2 120 chu kỳ liên tiếp (mỗi chế độ ≥ 127 chu kỳ ổn định), 0 mẫu rơi, **0 vi phạm thiết kế**; Program `missedRelease` 0, `faultCount` 0; task 0 overrun. 11/11 POU trên bo trùng byte với tài liệu.
+
+### Added — Triển khai `PRG_DO16_MODBUS` lên bo lab Foxlinx và nghiệm thu T1–T12 (2026-09-27)
+
+- Phạm vi: bo lab `OK1126B-buildroot`, Project "CHUONG CONTROLLER" của người dùng (giữ nguyên `DEMO_1` và `VP1`); `docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md` lên bản 1.1; hồ sơ mới `docs/07_records/test-evidence/programming/2026-09-27-do16-modbus-target-deploy.md` (`EV-PROG-DO16-MB-20260927`); `docs/README.md`.
+- Trên bo: tạo 11 Virtual Point (8 lệnh `WEB`, 3 trạng thái `PROGRAM`), 11 POU, 27 binding. Revision `5d2ae6c4…` là Active, `PRG_DO16_MODBUS` đang RUNNING ở `DO16_MODE=0`. Web thay bằng build của PR #795 (`c71616de…`); sao lưu ở `/data/mkddc/deploy-backups/2026-09-27T1106Z-web-vp-slot-type/`.
+- Lỗi phát hiện và đã sửa: (1) mã đề xuất giữ relay của chế độ cũ thêm ~10 s khi chuyển sang chế độ tải 2/5 — bản 1.1 chỉ áp thời gian đóng tối thiểu khi chế độ đã ổn định; (2) Check của sản phẩm từ chối VP `integer`/`multistate` — PR #795.
+- Kiểm chứng (TARGET): Check PASSED 0 diagnostic, Commission SUCCEEDED 0,45 s. Nghiệm thu 12 mục PASS: 342 FC05 100 % ACK (28,0–29,8 ms/giao dịch), CHASE 0,9/1,0/1,1 s mỗi bước, Disable → 16 DO về giá trị an toàn trong 0,43 s. Program chạy 43–57 µs, 0 lỡ nhịp, 0 lỗi; task 10 ms 0 overrun, jitter tối đa 49 µs; bus 0 timeout/CRC. Host: 14 kịch bản mô phỏng 0 lỗi runtime; 11/11 khối mã trong tài liệu trùng byte với bản đang chạy. **NOT RUN:** đo điện tại tiếp điểm relay.
+
+### Added — Đề xuất chương trình ST điều khiển 16 DO Modbus kèm hướng dẫn tự nhập (2026-09-27)
+
+- Thêm `docs/06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md` (`GUIDE-PROG-ST-DO16-001`): Program `PRG_DO16_MODBUS` điều khiển 16 relay CK508-04/05 với 8 kiểu chạy (OFF, MANUAL, STAGGER, CHASE, BLINK, STAGING, TEST, PULSE), 5 FUNCTION + 5 FUNCTION_BLOCK người dùng và 17 mục thư viện hệ thống (`TON`, `TP`, `R_TRIG`, `F_TRIG`, `CTU`, `HYSTERESIS`, `SCALE`, `DEADBAND`…). Tài liệu gồm ràng buộc nền tảng đối chiếu mã nguồn, danh sách Virtual Point, bảng ánh xạ 27 biến, các bước Check/Commission/Enable, bảng nghiệm thu, tải bus FC05 và bảng lỗi thường gặp. Đăng ký trong `docs/README.md`. Chỉ thêm tài liệu, không đổi mã, contract hay runtime.
+- Trong lúc kiểm đã tìm và sửa 6 lỗi của chính bản đề xuất trước khi đưa vào tài liệu: nhãn `CASE 16..32767` bị từ chối, tên `tOn` trùng từ khoá `TON`, nhịp bước trôi 1,0 → 1,2 s, STAGGER đóng dồn 7 relay cùng lúc khi chờ thời gian nghỉ, STAGING đóng dồn 3 bậc, và PULSE tự kích khi nút đã để sẵn TRUE.
+- Kiểm chứng (HOST): `mkddc-st-compile` (`fwsom-st-1.2.0`, profile `revA-1t-1-5-30` v2.2) biên dịch Program + 10 khối PASS, 0 diagnostic; IR 1463/4096 lệnh, 453/512 slot ghi, 42/64 instance FB. Harness mô phỏng liên kết `libst_compiler_lib`/`libcore_runtime` chạy 12 kịch bản ở chu kỳ 100 ms: 0 lỗi runtime, nhịp CHASE/BLINK đúng 1,0 s, STAGGER đóng đúng một relay mỗi bước. Trích ngược 11 khối mã từ chính file `.md`: trùng byte 11/11 và biên dịch lại PASS. Luật phụ thuộc thư viện kiểm bằng CLI: thiếu `requiresLibrary` → `ST-LIB-001`, khai đủ → PASS. **NOT RUN:** Check/Commission trên bo, FC05 thật, relay vật lý.
+
+### Fixed — Check từ chối mọi binding vào Virtual Point `integer` và `multistate` (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/point_binding_facts.go` (+ test), `apps/web-api/internal/app/programming_point_facts.go` (+ test).
+- Triệu chứng: khi triển khai `PRG_DO16_MODBUS` lên bo Foxlinx, Check FAILED với `PRG-ERR-MAP-003`/`PIO-SRC-001`. VP `multistate` `MSV-01` bị từ chối với biến UINT ("cần integer"), VP `integer` `AV-02`/`AV-03` bị từ chối với biến REAL ("cần float"). Trong khi đó tab Ánh xạ và Point Catalog gợi ý đúng UINT/REAL cho chính các điểm này.
+- Nguyên nhân gốc: `virtualSignalTypeForST` (ISS-PIO-28) suy kiểu từ `signalType` khai báo, với REAL ↔ `float` và UINT ↔ `integer`. Nhưng bộ cấp slot cố ý đặt VP `integer` lên `AV` và VP `multistate` lên `MSV` (ISS-PIO-17), còn `st_io_map.cpp` khoá cứng `AV ⇒ REAL`, `BV ⇒ BOOL`, `MSV ⇒ UINT`. Hai luật không có giao điểm, nên hai kiểu VP này không bind được vào biến nào. Đây là lần thứ tư cùng một lớp lỗi với ISS-PIO-33/34: để thuộc tính khai báo quyết định kiểu thay vì cách Core lưu điểm.
+- Cách sửa: Check suy kiểu biến ST từ **slot Core** (`BoundPointID` hoặc mã slot trong binding), dùng cùng bảng với Core và catalog. Chỉ khi VP chưa có slot mới rơi về `signalType`, và khi đó ánh xạ theo pool mà allocator sẽ chọn (`integer`/`float` → REAL, `multistate` → UINT, `boolean` → BOOL). Lý do chặn nay nói rõ kiểu cần đổi thành. Adapter facts chở thêm `BoundPointID`.
+- Kiểm chứng: test mới `TestVirtualBindingTypeFollowsCoreSlot` (12 ca) đỏ 10/12 trên mã cũ, xanh trên mã mới; `go vet ./...` sạch; `go test ./... -count=1` PASS toàn bộ package.
+
 ### Changed — Hợp nhất các bản rà tài liệu đang chờ ở checkout gốc vào `main@12af1082`; đối chiếu mã finding và trạng thái (2026-09-27)
 
 - **Phạm vi:** bốn entry ngay dưới (đề xuất tính năng, tăng cường bảo vệ bo lab, rà kiến trúc, rà Product Spec/kế hoạch đóng release) được viết trên mốc cũ `0f5d46f3`; nay đưa lên `main`. Không đổi mã nguồn.

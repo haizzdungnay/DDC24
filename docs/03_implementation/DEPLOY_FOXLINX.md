@@ -159,12 +159,18 @@ $SSH $FOXLINX '
   systemctl start mkddc-reload-helper mkddc-time-helper mkddc-web-pi
   sleep 20   # web cần ~16 s mới listen
   systemctl is-active mkddc-web-pi && echo SYSTEMD_OK || echo SYSTEMD_FAIL
-  p=$(systemctl show -p MainPID --value mkddc-web-pi); sha256sum /proc/$p/exe
+  for u in mkddc-web-pi mkddc-reload-helper mkddc-time-helper; do
+    p=$(systemctl show -p MainPID --value $u)
+    echo "$u $(readlink /proc/$p/exe) $(sha256sum /proc/$p/exe | cut -c1-16)"
+  done
 '
 ```
 
-Kỳ vọng: `SYSTEMD_OK` và sha256 của `/proc/<MainPID>/exe` trùng bản vừa build.
-`is-active` chưa đủ: tiến trình mồ côi còn chạy binary cũ vẫn có thể giữ cổng.
+Kỳ vọng: `SYSTEMD_OK`; cả **ba** unit trỏ `/opt/mkddc-web/mkddc-web` (không có
+đuôi `(deleted)`) và cùng sha256 với bản vừa build. `is-active` chưa đủ: tiến
+trình mồ côi còn chạy binary cũ vẫn có thể giữ cổng. Hai helper chạy chung binary
+với web, nên chỉ restart `mkddc-web-pi` thì chúng vẫn chạy bản cũ (U-21 của
+`REC-DDC-FIELD-USE-20260927`).
 
 ### Bước 7: Smoke test
 

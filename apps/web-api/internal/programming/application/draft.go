@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	canonicaljson "mkddc-web/internal/programming/canonicaljson"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -122,19 +123,35 @@ func applyDraftOperation(document map[string]any, operation string, raw []byte) 
 		project["functionalTags"] = tags
 		return nil
 	case "replaceProgramSource":
+		// Chỉ đổi `language` + `source` của MỘT POU; `locals`, `interface`,
+		// `dependencies`, binding giữ nguyên. Đây là đường sửa mã qua API mà U-15
+		// (REC-DDC-FIELD-USE-20260927) cần: `upsertObject` thay TOÀN BỘ object,
+		// nên sửa mã bằng nó mà quên gửi kèm `locals` là mất hết biến và kéo theo
+		// hỏng binding.
 		var value struct {
 			Op        string `json:"op"`
-			ProgramID string `json:"programId"`
+			ObjectID  string `json:"objectId,omitempty"`
+			ProgramID string `json:"programId,omitempty"`
 			Language  string `json:"language"`
 			Source    string `json:"source"`
 		}
-		if err := decodeStrict(raw, &value); err != nil || !isUUID(value.ProgramID) || (value.Language != "ST" && value.Language != "FBD") || len(value.Source) > 65536 {
+		if err := decodeStrict(raw, &value); err != nil || (value.Language != "ST" && value.Language != "FBD") || len(value.Source) > domain.MaxSourceBytes {
 			return ErrInvalidRequest
 		}
-		// v2: nguồn nằm ở POU (`objects`), không nằm ở cấu hình Program. Tham số
-		// vẫn tên `programId` để client cũ không phải đổi, nhưng nó phân giải
-		// theo `objectId` — cùng một identity sau migration.
-		object, found := objectByID(document, "objects", "objectId", value.ProgramID)
+		// Hợp đồng PGM-02 (`pgm02_workspace_v1.json`): định danh là `objectId`;
+		// `programId` là alias cũ giữ một major cho client đang chạy (FE hiện gửi
+		// `programId`, cùng giá trị sau migration v2). Bản cũ chỉ nhận `programId`,
+		// nên client làm đúng hợp đồng nhận 400. Gửi cả hai là mơ hồ: từ chối.
+		identity := value.ObjectID
+		if identity == "" {
+			identity = value.ProgramID
+		} else if value.ProgramID != "" {
+			return ErrInvalidRequest
+		}
+		if !isUUID(identity) {
+			return ErrInvalidRequest
+		}
+		object, found := objectByID(document, "objects", "objectId", identity)
 		if !found {
 			return ErrInvalidRequest
 		}

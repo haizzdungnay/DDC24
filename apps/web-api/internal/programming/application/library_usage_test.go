@@ -359,9 +359,17 @@ func TestDraftUsageMeasuresRealDraftDocument(t *testing.T) {
 		objectID := fmt.Sprintf("99999999-9999-4999-8999-%012d", index+1)
 		programID := fmt.Sprintf("88888888-8888-4888-8888-%012d", index+1)
 		name := fmt.Sprintf("AHU_%d", index+1)
+		// POU "không dùng" thì mã cũng KHÔNG gọi entry. Bản cũ chép cùng một dòng
+		// `SCALE_LIN(1.0)` cho cả ba POU; từ U-06 lưu Draft tự khai dependency cho
+		// mọi lời gọi vào Thư viện PROJECT, nên POU đó thành POU dùng entry — và
+		// với luật cũ nó vốn đã bị Check chặn `ST-LIB-001`.
+		body := "Y := SCALE_LIN(1.0);"
+		if len(dependencies) == 0 {
+			body = "Y := 1.0;"
+		}
 		operations = append(operations, op(map[string]any{"op": "upsertObject", "object": map[string]any{
 			"objectId": objectID, "kind": "PROGRAM", "name": name, "language": "ST",
-			"source":       "PROGRAM " + name + "\nVAR_OUTPUT Y : REAL; END_VAR\nY := SCALE_LIN(1.0);\nEND_PROGRAM\n",
+			"source":       "PROGRAM " + name + "\nVAR_OUTPUT Y : REAL; END_VAR\n" + body + "\nEND_PROGRAM\n",
 			"dependencies": dependencies,
 		}}), programOp(programID, objectID, 1000))
 	}
