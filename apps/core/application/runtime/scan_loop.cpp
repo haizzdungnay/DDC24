@@ -390,7 +390,7 @@ void ScanLoop::step()
          * mẫu phải là trạng thái đã ổn định của chu kỳ, không phải trạng thái
          * giữa chừng. */
         if (d_.value_trace != nullptr)
-            d_.value_trace->on_boundary(*d_.st_sched, clock.monotonic_ns);
+            d_.value_trace->on_boundary(*d_.st_sched, clock.monotonic_ns, d_.table);
     }
     record_phase(ScanPhase::LOGIC, &phase_mark);
 

@@ -192,6 +192,20 @@ bool commit_outputs(const std::array<OutputProposal, st_ir::kMaxIoBindings>& pro
 
 } // namespace
 
+bool st_output_readback(const StIrIoBinding& binding, const PointTable& table, uint64_t now_ns,
+                        StCell* value, uint32_t* age_ms)
+{
+    if (!value || !age_ms || !binding.is_output) return false;
+    PointId id{};
+    if (!to_point_id(binding, &id)) return false;
+    const Point point = table.get(id);
+    if (point.quality != KX_Q_GOOD || !to_cell(binding, point.value, value)) return false;
+    const uint64_t age_ns = now_ns > point.ts_ns ? now_ns - point.ts_ns : 0;
+    const uint64_t age = age_ns / 1000000ull;
+    *age_ms = age > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(age);
+    return true;
+}
+
 bool st_load_inputs(StProgramInstance* instance, const PointTable& table, uint64_t generation,
                     StIoBridgeStats* stats)
 {

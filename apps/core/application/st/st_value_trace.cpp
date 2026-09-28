@@ -3,6 +3,7 @@
 #include <cstring>
 #include <thread>
 
+#include "st/st_process_image.hpp"
 #include "st/st_scheduler.hpp"
 
 namespace core {
@@ -118,6 +119,7 @@ void StValueTrace::resolve_locked(const StScheduler& scheduler)
         StTraceVariable& variable = variables_[index];
         variable.resolved = false;
         variable.slot = 0;
+        variable.output_binding = -1;
         const StProgramInstance* instance =
             const_cast<StScheduler&>(scheduler).find_program(variable.instance_id);
         if (instance == nullptr || !instance->runtime.loaded()) continue;
@@ -129,11 +131,20 @@ void StValueTrace::resolve_locked(const StScheduler& scheduler)
             variable.resolved = true;
             break;
         }
+        if (!variable.resolved) continue;
+        for (std::size_t binding = 0; binding < program->io_bindings.size(); ++binding) {
+            if (!program->io_bindings[binding].is_output ||
+                program->io_bindings[binding].slot != variable.slot)
+                continue;
+            variable.output_binding = static_cast<int16_t>(binding);
+            break;
+        }
     }
     resolve_pending_ = false;
 }
 
-void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns)
+void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns,
+                               const PointTable* table)
 {
     if (!guard_.try_lock()) {
         /* Luồng IPC đang giữ trace (start/stop/đọc). KHÔNG chờ: bỏ lượt, mẫu
@@ -141,11 +152,23 @@ void StValueTrace::on_boundary(const StScheduler& scheduler, uint64_t now_ns)
         contended_boundaries_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
-    sample_locked(scheduler, now_ns);
+    sample_locked(scheduler, now_ns, table);
     guard_.unlock();
 }
 
-void StValueTrace::sample_locked(const StScheduler& scheduler, uint64_t now_ns)
+namespace {
+
+/* Program có đang ở trạng thái được dispatch (sẽ còn release) không. */
+bool releases(const StProgramInstance& instance)
+{
+    return instance.runtime.loaded() && (instance.state == StProgramState::RUNNING ||
+                                         instance.state == StProgramState::WAITING);
+}
+
+} // namespace
+
+void StValueTrace::sample_locked(const StScheduler& scheduler, uint64_t now_ns,
+                                 const PointTable* table)
 {
     if (state_ != StTraceState::RUNNING) return;
     if (resolve_pending_) resolve_locked(scheduler);
@@ -154,6 +177,29 @@ void StValueTrace::sample_locked(const StScheduler& scheduler, uint64_t now_ns)
         return;
     }
     if (now_ns < next_sample_ns_) return;
+
+    /* Issue #798 — lấy mẫu TẠI RELEASE. Ở boundary mà Program không chạy, slot
+     * của nó mang đầu vào vừa nạp cho lần chạy SAU cạnh đầu ra của lần chạy
+     * TRƯỚC; hoãn mẫu tới boundary có Program được theo dõi vừa chạy thì mọi cặp
+     * (vào, ra) trong mẫu đến từ đúng một lần chạy. Không Program nào còn được
+     * dispatch (FAULTED, STOPPED, không phân giải được) thì lấy mẫu ngay — chờ
+     * một release không bao giờ đến là để phiên đứng im không dấu vết. */
+    const uint64_t base_step = scheduler.base_step_count();
+    bool any_released = false;
+    bool any_live = false;
+    for (std::size_t index = 0; index < variable_count_; ++index) {
+        const StTraceVariable& variable = variables_[index];
+        if (!variable.resolved) continue;
+        const StProgramInstance* instance =
+            const_cast<StScheduler&>(scheduler).find_program(variable.instance_id);
+        if (instance == nullptr || !releases(*instance)) continue;
+        any_live = true;
+        if (instance->last_release_base_step == base_step && instance->run_count > 0) {
+            any_released = true;
+            break;
+        }
+    }
+    if (!any_released && any_live && now_ns - next_sample_ns_ < kMaxTraceReleaseDeferNs) return;
     /* Bù trôi theo mốc LÝ THUYẾT, cùng lý do với `st_program_due`: bám thời điểm
      * thật sẽ làm chu kỳ lấy mẫu trôi dần và trục thời gian của đồ thị sai. */
     const uint64_t period_ns = static_cast<uint64_t>(sample_period_ms_) * 1000000ull;
@@ -182,16 +228,35 @@ void StValueTrace::sample_locked(const StScheduler& scheduler, uint64_t now_ns)
     const std::size_t base = write_index * variable_count_;
     for (std::size_t index = 0; index < variable_count_; ++index) {
         const StTraceVariable& variable = variables_[index];
-        cells_[base + index] = StCell{};
-        valid_[base + index] = 0u;
+        const std::size_t cell = base + index;
+        cells_[cell] = StCell{};
+        valid_[cell] = static_cast<uint8_t>(StTraceCellReason::UNRESOLVED);
+        release_seq_[cell] = 0;
+        readback_[cell] = StCell{};
+        readback_age_ms_[cell] = 0;
         if (!variable.resolved) continue;
         const StProgramInstance* instance =
             const_cast<StScheduler&>(scheduler).find_program(variable.instance_id);
         if (instance == nullptr || !instance->runtime.loaded()) continue;
         const StLoadedProgram* program = instance->runtime.program();
         if (program == nullptr || variable.slot >= program->slots.size()) continue;
-        cells_[base + index] = program->slots[variable.slot];
-        valid_[base + index] = 1u;
+        release_seq_[cell] = instance->run_count;
+        StTraceReadback readback = StTraceReadback::NONE;
+        if (variable.output_binding >= 0 &&
+            static_cast<std::size_t>(variable.output_binding) < program->io_bindings.size()) {
+            readback = StTraceReadback::UNAVAILABLE;
+            if (table != nullptr &&
+                st_output_readback(program->io_bindings[static_cast<std::size_t>(variable.output_binding)],
+                                   *table, now_ns, &readback_[cell], &readback_age_ms_[cell]))
+                readback = StTraceReadback::VALID;
+        }
+        const bool released =
+            instance->last_release_base_step == base_step && instance->run_count > 0;
+        const StTraceCellReason reason =
+            released ? StTraceCellReason::OK : StTraceCellReason::NOT_RELEASED;
+        if (released) cells_[cell] = program->slots[variable.slot];
+        valid_[cell] = static_cast<uint8_t>(static_cast<uint8_t>(reason) |
+                                            (static_cast<uint8_t>(readback) << 2));
     }
 }
 
@@ -204,8 +269,14 @@ StTraceSample StValueTrace::sample_locked_at(std::size_t index) const
     out.timestamp_ns = timestamps_[ring_index];
     const std::size_t base = ring_index * variable_count_;
     for (std::size_t variable = 0; variable < variable_count_; ++variable) {
-        out.values[variable] = cells_[base + variable];
-        out.valid[variable] = valid_[base + variable] != 0u;
+        const std::size_t cell = base + variable;
+        out.values[variable] = cells_[cell];
+        out.reason[variable] = static_cast<StTraceCellReason>(valid_[cell] & 0x3u);
+        out.valid[variable] = out.reason[variable] == StTraceCellReason::OK;
+        out.release_seq[variable] = release_seq_[cell];
+        out.readback_state[variable] = static_cast<StTraceReadback>((valid_[cell] >> 2) & 0x3u);
+        out.readback[variable] = readback_[cell];
+        out.readback_age_ms[variable] = readback_age_ms_[cell];
     }
     return out;
 }
