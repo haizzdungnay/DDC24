@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### Added — Báo cáo riêng trình PM quyết định cải thiện hiệu năng Forlinx (2026-09-28)
+
+- Thêm `docs/07_records/reviews/FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md` (`REC-FORLINX-PERF-PM-20260928` 1.0, In Review): hiện trạng theo audit ngày 28/09, 9 nhóm finding, các phương án/lợi ích/rủi ro/độ phức tạp tương đối, ba đợt triển khai, tiêu chí thử nghiệm đề xuất và phiếu D01–D07 để PM giao owner/lịch/phạm vi.
+- Số đo liên kết JSON/audit gốc, không giả định nguyên nhân jitter/seq error, thời gian/cost hoặc PM đã phê duyệt. Đăng ký hai chỉ mục; không đổi code, cấu hình, Program/output, không deploy hoặc nâng gate release.
+- Kiểm chứng: hai sub-agent rà số đo/phương án OS/Core/IOP và API/Modbus/FE; làm rõ 200 GET không gồm `/points`, n20 p95=mẫu 19, FC15 n7 p95=max và tải 5–6 GET/s là tải tổng có mix route/client. Đối chiếu JSON/số mẫu/D01–D07 chưa phê duyệt PASS; `docs_iso_harness.py --expect` PASS (0 link/anchor/metadata lệch), `git diff --check` sạch. Không chạy build/browser/target mới vì chỉ thêm tài liệu.
+
+### Added — Audit hiệu năng hệ thống và phần mềm Forlinx (2026-09-28)
+
+- Phạm vi: bổ sung §13 vào `REC-PROG-RUNTIME-PERF-COMP-001` (1.2), một agent quản lý và hai sub-agent đọc OS/Core, API/Modbus, browser; dữ liệu target mới tách khỏi snapshot 04/09.
+- Baseline target 61 mẫu/323,62 s: Core 2,253%, IOBus 5,531%, Web 24,773% của một CPU; Core có 9 lần jitter >100 µs trước audit và thêm 5 trong phút audit, không missed/scan overrun; IOBus poll 2 ms có jitter tới 16,345 ms, cơ chế chạy bù chưa skip tick trễ. Phân biệt với Programming task 10 ms, execution overrun/missed giữ 0.
+- Finding ưu tiên: 206 `/points` HTTP503 do SHM ở PID hiện tại; API status chờ 100 ms; log Wi-Fi/audit đọc/GET dày; assets không nén (5 body gzip6 giảm 73,2% byte trên host) và login preload charts; manifest cũ dù artifact live IOBus/Web/FE khớp bản FC15. Có 200 GET mới thành công và 4/4 Modbus online, lỗi bus không tăng; FC15 có thật, p95 31,103 ms trên 7 frame.
+- Thêm JSON số đo đã lọc; raw log nén/trace/script/ảnh lưu riêng ngoài repo với SHA256. Chỉ giữ khoảng 21h54 lịch sử, không phải soak trọn 24 giờ. Giữ nguyên cấu hình, Program/output và dịch vụ; không deploy phương án tối ưu, không nâng physical HIL hoặc RELEASE_READY.
+- Kiểm chứng: `docs_iso_harness.py --expect` PASS (0 link/anchor/metadata lệch), `git diff --check` sạch; JSON/mẫu và kiểm mẫu token PASS; SHA256 archive 51/51, đọc gzip 22/22 PASS. Không chạy build/unit/E2E vì không đổi mã thực thi; Chrome DevTools MCP đã đo login thật, luồng UI sau đăng nhập chưa chạy.
+
 ### Deploy — Bo lab Foxlinx lên `main@e3072983` (toàn bộ finding đã merge của báo cáo sử dụng thực tế) (2026-09-28)
 
 - Phạm vi: bo lab `OK1126B-buildroot`. Web `mkddc-web` (`7c58fab0…`, version `main-pr804-74d92415`; cây của head #804 trùng từng byte với `main@e3072983`), `dist` FE (`npm run build:release`, `VITE_PROGRAMS_WORKSPACE_V2=1`), `mkddc-iobus` (`dc8cad5b…`), `mkddc-st-compile` (`d3aec043…`), `mkddc-st-package`. Tool cross-build với khoá phát hành: `--st-key-info` báo `RELEASE`, fingerprint `2fb77aa42e7fe446`; GLIBCXX ≤ 3.4.29. Core giữ `9621cb52…`, vì runtime/domain/bootstrap/adapters không đổi kể từ RC `f86150e3`; profile (`1cb61fec…`) và SHM magic không đổi. Không đụng Programming (Active của người dùng `0c29f4f1…` giữ nguyên, Draft sạch).
