@@ -107,7 +107,7 @@ Binary web vẫn là bản của phiên này. Theo quy tắc không ghi đè vi�
 
 ### 5.4 Jitter trong lúc đo
 
-Từ 09:45 tới 09:49Z Core ghi 6 lần wake-up jitter > 100 µs (cửa sổ phút lớn nhất 177 µs), đúng các phút chạy Trace và SSH/`wget` dồn dập. Để so sánh, Core cũ ghi 18 lần trong 4 ngày. Trong cùng khoảng: 0 overrun, 0 lỡ base step, 0 lỡ release. Task báo `DEGRADED` thoáng qua rồi về `HEALTHY` (cửa sổ sau 47 µs). Chưa tách được phần do tải phiên đo với phần do bản mới; cần đo lại khi bo yên (không SSH, không Trace) theo quy trình ADR-061.
+Từ 09:45 tới 09:49Z Core ghi 6 lần wake-up jitter > 100 µs (cửa sổ phút lớn nhất 177 µs), đúng các phút chạy Trace và SSH/`wget` dồn dập. Để so sánh, Core cũ ghi 18 lần trong 4 ngày. Trong cùng khoảng: 0 overrun, 0 lỡ base step, 0 lỡ release. Task báo `DEGRADED` thoáng qua rồi về `HEALTHY` (cửa sổ sau 47 µs). Đo lại khi bo yên (không Trace, chỉ 5 phiên SSH đọc log), 09:49:30–09:57:22Z: 8 cửa sổ phút có jitter tối đa 39–66 µs, bộ đếm vi phạm giữ nguyên 6 (không thêm lần nào), 0 overrun, 0 lỡ base step. Vậy 6 lần vượt 100 µs trùng với lúc phiên đo chạy Trace + SSH dồn dập, không phải nền của bản mới. Đây chưa phải phép đo soak theo ADR-061 (VS-PROG-009).
 
 ## 6. Chưa chạy (NOT RUN)
 
@@ -118,4 +118,5 @@ Từ 09:45 tới 09:49Z Core ghi 6 lần wake-up jitter > 100 µs (cửa sổ ph
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.1 | 2026-09-28 | §5.4: số đo jitter khi bo yên (09:49–09:57Z: tối đa 39–66 µs, 0 vi phạm mới) |
 | 1.0 | 2026-09-28 | Bản đầu: deploy `main@4c49e78b` + Core `1602b2fd`; Trace 100 ms/10 ms trên bo; lỗi đọc lại EXT phát hiện và sửa; lỗi manifest sim worker; U-22 (#827) |

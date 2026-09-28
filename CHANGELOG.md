@@ -21,7 +21,7 @@
   - Trace 10 ms: `releaseSeq` +1 ở 1 499/1 499 khoảng.
   - `actualValue` = `readbackValue` 0 ô lệch.
   - Health 6/6 ok, Programming READY, toolchain ok, Active `0c29f4f1…` không đổi.
-- **Phát hiện, chưa sửa:** mỗi lần Core khởi động, Program có đầu vào VP bị `FAULTED ST-RT-008` trước lần chạy đầu (hai lần tái hiện), lệch `DDD-CTRL-PROG-001` §5/§9 — Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) (U-22), chờ chốt ngưỡng. Hai lần đều đã khôi phục bằng Disable → Enable.
+- **Phát hiện, chưa sửa:** mỗi lần Core khởi động, Program có đầu vào VP bị `FAULTED ST-RT-008` trước lần chạy đầu (hai lần tái hiện), lệch `DDD-CTRL-PROG-001` §5/§9 — Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) (U-22), chờ chốt ngưỡng. Hai lần đều đã khôi phục bằng Disable → Enable. Jitter: 6 lần > 100 µs chỉ trong lúc chạy Trace + SSH dồn dập; khi bo yên 09:49–09:57Z tối đa 39–66 µs, 0 vi phạm mới, 0 overrun (hồ sơ §5.4, bản 1.1).
 - **Kiểm chứng host:** `cmake --fresh` (Modbus+BACnet+HMI ON) configure/build exit 0, `ctest` **1741/1741**; `verify-project.sh --component layout` exit 0; `docs_iso_harness --expect` PASS. Go/FE không đổi ở nhánh này.
 - **Refs:** Issue #798, #827, `EV-PROG-TRACE-798-TARGET`, `SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI` §9, Plan 63 T63-002.
 
