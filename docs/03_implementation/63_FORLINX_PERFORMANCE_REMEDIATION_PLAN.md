@@ -434,7 +434,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | Finding | Mức | Task | Kiểm chứng chính | Cổng | Trạng thái | Evidence |
 |---|---|---|---|---|---|---|
 | `F-PRG-PERF-001` | P0 | T63-301, T63-302, T63-303 | Tái hiện 16 Program @10 ms trên bo; test budget từng Program | G-D2 | T63-301 IN-PROGRESS — HOST: 16 × 4.095 @10 ms bị Check từ chối `ST-WORKER-CRASH` sau 61,8 s vì kết quả Check trần 1 MiB (finding [#815](https://github.com/Mekong-HCM/MK-DDC-24/issues/815)), không phải nhờ admission; lớn nhất còn qua 16 × 301, `budgetUs` 124, thực thi p95 63,4 µs; Active khôi phục đúng; TARGET NOT_RUN. T63-302 DONE — CR [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) Proposed (khuyến nghị B2 quy lỗi + C2 cảnh báo admission), chờ G-D2. T63-303 BLOCKED(G-D2) | [evidence §6](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) · [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) |
-| `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | TODO | |
+| `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | IN-PROGRESS — `state.snap` ghi trên worker `core-snapshot` (SCHED_OTHER, rời CPU quét); luồng quét chỉ bàn giao qua triple buffer (0 cấp phát sau prewarm); SIGHUP mang persist state trong bộ nhớ; worker kẹt không chặn quét, bản mới thay bản chưa ghi; chi phí luồng quét p50 ≈ 10–16 µs (trước: save 0,36–0,98 ms p50, max 9,6 ms) [HOST]; ctest 1697/1697; đo 2 × 30 phút TARGET NOT_RUN. Còn lại ngoài AC: parse cấu hình khi SIGHUP vẫn trên luồng quét (finding riêng) | `apps/core/adapters/persistence/test_state_snapshot_worker.cpp` |
 | `F-PRG-PERF-003` | — | — | Giữ `SEQUENTIAL` | — | N/A(NO-ACTION) | §2.1 |
 | `F-PRG-PERF-004` | P2 | T63-304 | Check 32 Program lần đầu/lặp; jitter không xấu hơn | — | TODO | |
 | `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
@@ -478,7 +478,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 |---|---|
 | PR rất lớn, khó review, dễ xung đột | Commit theo task, checkpoint mỗi wave trên Issue, rebase theo wave |
 | Bỏ mốc IOBus làm giảm số giao dịch, dữ liệu cũ hơn | G-D1 chốt freshness; counter `missed_ticks`; test Fake MCU trễ |
-| Worker snapshot làm mất trạng thái khi mất điện | Giữ trình tự ghi nguyên tử và flush khi SIGTERM; ghi rõ cửa sổ mất dữ liệu tối đa |
+| Worker snapshot làm mất trạng thái khi mất điện | Giữ trình tự ghi nguyên tử và flush khi SIGTERM; ghi rõ cửa sổ mất dữ liệu tối đa. **Số của T63-203:** khi mất điện, phần mất là tiến triển counter (giờ chạy `RuntimeCounter`, xung `PulseCounter`) kể từ lần ghi xong gần nhất: tối đa ≈ 60 s nhịp snapshot (như trước) + độ trễ đánh thức worker (tức thời khi có `notify`, ≤ 1 s nếu lỡ tín hiệu) + thời gian ghi; tức chỉ thêm tối đa ≈ 1 s. eMMC treo thì không dồn hàng, chỉ bản mới nhất được ghi. SIGTERM: `stop_and_flush` rồi ghi đồng bộ bản cuối. Rollback: revert commit T63-203, định dạng `state.snap` không đổi |
 | Giảm log làm mất dấu vết điều tra | G-D3; giữ 100% lỗi/mutation/security; dòng tổng hợp có số đếm |
 | Nén sẵn sai `Range`/`ETag` | Chỉ phục vụ `.gz` khi không có `Range`; test header; client không nén nhận identity |
 | CR budget đổi ngữ nghĩa runtime | G-D2; không code trước khi duyệt |
