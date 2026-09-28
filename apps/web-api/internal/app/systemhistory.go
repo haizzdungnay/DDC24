@@ -69,6 +69,10 @@ func NewSystemHistoryRing(now time.Time) *SystemHistoryRing {
 // riêng: trang Chẩn đoán vốn poll endpoint đó, nên dữ liệu đã đi qua đây rồi.
 // Thêm một vòng lặp nền để lấy lại đúng số đó là thêm một vòng đời phải quản lý
 // mà không thêm thông tin nào.
+//
+// T63-103: số đo mà endpoint đó trả nay là bản chụp của OSMetricsCollector (nền,
+// 1 s). Bản chụp `unknown`/`stale` có mọi con trỏ nil, nên vào vòng nhớ thành
+// null chứ không thành 0.
 func (r *SystemHistoryRing) Observe(now time.Time, metrics OSMetrics) {
 	if r == nil {
 		return

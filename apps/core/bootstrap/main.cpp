@@ -41,6 +41,7 @@
 #include "runtime/scan_loop.hpp"
 #include "runtime/thread_policy.hpp"
 #include "persistence/state_snapshot.hpp"
+#include "persistence/state_snapshot_worker.hpp"
 #include "ipc/program_ipc_unix.hpp"
 #include "programming/programming_cutover.hpp"
 #include "st/st_public_key.hpp"
@@ -588,6 +589,12 @@ int main(int argc, char** argv)
     graph.load(graph_path);
     /* COR-010: restore persist state ngay sau load boot */
     graph.restore_persist_state(snap.load());
+    /* T63-203 (F-PRG-PERF-002): `state.snap` chỉ được GHI trên worker non-RT.
+     * Luồng quét bàn giao qua triple buffer (xem state_snapshot_worker.hpp);
+     * làm ấm cả ba vùng theo graph lúc boot để lần bàn giao đầu không cấp phát. */
+    StateSnapshotWorker snapshot_worker(
+        [&snap](const std::vector<PersistEntry>& entries) { return snap.save(entries); });
+    snapshot_worker.prewarm(graph);
 
     /* Đồng bộ base step — 1 nguồn sự thật:
      * - Programming runtime BẬT (đường sản phẩm): base step là của NỀN TẢNG,
@@ -861,6 +868,8 @@ int main(int argc, char** argv)
         AlarmRuntime* alarms;
         ScheduleRuntime* schedules;
         StateSnapshot* snap;
+        StateSnapshotWorker* snapshot_worker;
+        std::vector<PersistEntry> carry;
     } rctx{};
     rctx.spec.graph_path = graph_path;
     rctx.spec.safe_cfg_path = safe_cfg_path;
@@ -874,15 +883,25 @@ int main(int argc, char** argv)
     rctx.alarms = &alarms;
     rctx.schedules = &schedules;
     rctx.snap = &snap;
+    rctx.snapshot_worker = &snapshot_worker;
     auto on_reload = [](void* p) {
         ReloadCtx* c = static_cast<ReloadCtx*>(p);
         std::fprintf(stderr, "INFO  core.reload SIGHUP (ranh giới scan)\n");
-        /* GAP-07: lưu persist state trước swap, restore sau */
-        if (c->graph->dirty() || c->graph->loaded())
-            c->snap->save(c->graph->get_persist_state());
+        /* GAP-07: mang persist state qua lần swap graph.
+         *
+         * T63-203: TRONG BỘ NHỚ thay cho vòng `save` → `load` qua đĩa trên luồng
+         * quét. Bản trước ghi `state.snap` (open/write/fsync/rename/fsync thư
+         * mục) rồi đọc lại ngay tại ranh giới scan; nay chỉ chép giá trị rồi bàn
+         * giao bản sau reload cho worker ghi. Graph chưa từng nạp (boot thiếu
+         * graph.json, sau đó mới deploy + SIGHUP) thì vẫn ĐỌC `state.snap` như
+         * cũ để khôi phục counter đã lưu — đường hiếm, và chỉ đọc. */
+        const bool had_graph = c->graph->loaded();
+        if (had_graph) c->graph->fill_persist_state(&c->carry);
         if (!reload_configs(c->spec, c->resolver, c->graph, c->alarms, c->schedules))
             std::fprintf(stderr, "WARN  core.reload co phan fail — phan do giu config cu\n");
-        c->graph->restore_persist_state(c->snap->load());
+        if (had_graph) c->graph->restore_persist_state(c->carry);
+        else c->graph->restore_persist_state(c->snap->load());
+        if (c->graph->loaded()) c->snapshot_worker->publish_from(*c->graph);
         c->graph->clear_dirty();
     };
     loop.set_reload_hook(&g_reload, on_reload, &rctx);
@@ -914,9 +933,9 @@ int main(int argc, char** argv)
         IntervalGate watchdog{kWatchdogKickMinIntervalNs};
         IntervalGate snapshot{kGraphSnapshotIntervalNs};
         GraphRuntime*  graph;
-        StateSnapshot* snap;
+        StateSnapshotWorker* snapshot_worker;
     } nctx{false, IntervalGate{kWatchdogKickMinIntervalNs},
-           IntervalGate{kGraphSnapshotIntervalNs}, &graph, &snap};
+           IntervalGate{kGraphSnapshotIntervalNs}, &graph, &snapshot_worker};
     auto after_scan = [](void* p) {
         NotifyCtx* c = static_cast<NotifyCtx*>(p);
         struct timespec ts {};
@@ -932,10 +951,12 @@ int main(int argc, char** argv)
         if (c->watchdog.due(now)) notify_systemd("WATCHDOG=1");
         /* GAP-08: ghi snapshot mỗi 60 s NẾU dirty. Trước ADR-061 là "mỗi 60 scan"
          * và chỉ đúng 60 s vì base step là 1 s; ở 10 ms nó thành ghi flash mỗi
-         * 0,6 s. Đo bằng đồng hồ, không bằng số vòng quét. */
+         * 0,6 s. Đo bằng đồng hồ, không bằng số vòng quét.
+         *
+         * T63-203: luồng quét chỉ BÀN GIAO; worker `core-snapshot` ghi đĩa. */
         if (c->snapshot.due(now)) {
             if (c->graph->dirty()) {
-                c->snap->save(c->graph->get_persist_state());
+                c->snapshot_worker->publish_from(*c->graph);
                 c->graph->clear_dirty();
             }
         }
@@ -961,9 +982,15 @@ int main(int argc, char** argv)
      * để yêu cầu đến sớm chỉ chờ tối đa một base step cho snapshot đầu tiên.
      * Không tạo được thread thì IPC chạy inline như trước (log ERROR). */
     (void)web.start_service_thread("web-ipc");
+    /* T63-203: worker ghi `state.snap`. Không tạo được thì `publish_from` ghi
+     * đồng bộ như trước (log ERROR) — mất offload, không mất dữ liệu. */
+    (void)snapshot_worker.start("core-snapshot");
 
     loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
     web.stop_service_thread();
+    /* Ghi nốt bản đã bàn giao rồi dừng worker TRƯỚC lần ghi đồng bộ cuối bên
+     * dưới: hai bên không được cùng ghi `state.snap.tmp`. */
+    snapshot_worker.stop_and_flush();
     remove_pid_file_if_owned(pid_path, self_pid);
 
     if (programming_ipc_thread.joinable()) programming_ipc_thread.join();

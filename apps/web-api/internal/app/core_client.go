@@ -185,6 +185,31 @@ func (c *CoreClient) readPLCShm() ([]byte, error) {
 	return c.plcSeg.read(c.PLCShm, kxPlcShmMinLen)
 }
 
+// SHMReaderMetrics là bộ đếm tích luỹ của reader seqlock trong tiến trình web
+// (T63-101, PERF-API-01), công bố ở `GET /api/v1/system/status` → `shm_reader`.
+// `Failures` tăng đúng khi một lần đọc hết `DeadlineUS` mà không có snapshot
+// nhất quán — nguyên nhân `/points` trả 503 "không đọc được snapshot nhất quán".
+// Bộ đếm sống theo tiến trình: `Since` là lúc web khởi động, nên giá trị nhỏ đi
+// giữa hai lần đọc nghĩa là web đã restart, không phải bộ đếm giảm.
+type SHMReaderMetrics struct {
+	DeadlineUS uint64            `json:"deadline_us"`
+	Since      string            `json:"since,omitempty"`
+	IO         SHMSegmentMetrics `json:"io"`
+	PLC        SHMSegmentMetrics `json:"plc"`
+}
+
+type shmReaderMetricsSource interface {
+	SHMReaderMetrics() SHMReaderMetrics
+}
+
+func (c *CoreClient) SHMReaderMetrics() SHMReaderMetrics {
+	return SHMReaderMetrics{
+		DeadlineUS: uint64(shmSeqlockDeadline / time.Microsecond),
+		IO:         c.ioSeg.metrics(),
+		PLC:        c.plcSeg.metrics(),
+	}
+}
+
 type CoreStatus struct {
 	CoreAvailable bool
 	IobusPresent  bool

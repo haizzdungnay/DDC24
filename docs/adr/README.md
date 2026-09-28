@@ -54,3 +54,4 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-051](ADR-051-programming-ttl-hold-last-60s.md) | TTL hold-last Program = 60 s đồng hồ (đóng blocker `DDD-CTRL-PROG-001` §15) | Accepted |
 | [ADR-061](ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md) | Chu kỳ bộ điều khiển 10 ms, bộ chu kỳ Program {10…50000} ms, I/O mở rộng spec riêng | Accepted |
 | [ADR-062](ADR-062-programming-intent-enable-di-cung-activate.md) | Intent Enable đã lưu đi cùng ACTIVATE, áp tại safe boundary kích hoạt gói (F13 về 0 ms) | Accepted |
+| [ADR-063](ADR-063-programming-ngan-sach-tung-program.md) | Ngân sách thời gian từng Program: `budget_us` tới instance, quy lỗi vượt ngân sách về đúng Program, cảnh báo admission ở Check (CR T63-302 của Plan 63) | **Proposed** — chờ cổng G-D2 trên Issue #809 |

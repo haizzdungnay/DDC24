@@ -74,6 +74,11 @@ public:
 
     /* COR-010: persist state interface. */
     std::vector<PersistEntry> get_persist_state() const;
+    /* T63-203: điền persist state vào `out` TẠI CHỖ, dùng lại sức chứa sẵn có
+     * của vector và của từng chuỗi `id`/`type`. Khi `out` đã từng được điền cho
+     * cùng graph (hoặc graph có số node persist và độ dài id không lớn hơn) thì
+     * không cấp phát — đường bàn giao snapshot trên luồng quét dựa vào điều này. */
+    void fill_persist_state(std::vector<PersistEntry>* out) const;
     void restore_persist_state(const std::vector<PersistEntry>& entries);
     bool dirty() const { return dirty_; }
     void clear_dirty() { dirty_ = false; }

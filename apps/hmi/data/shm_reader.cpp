@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <sched.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/statvfs.h>
@@ -73,63 +74,143 @@ void ShmReader::detach()
 
 /* ---- Seqlock reads ---- */
 
-bool ShmReader::seqlock_read_io(const volatile kx_io_shm_t* s, DataCache* out)
+namespace {
+
+uint64_t monotonic_now_ns()
 {
-    if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) return false;
-    for (int i = 0; i < 5; i++) {
-        const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
-        if (v1 & 1u) continue;
-        /* Copy volatile struct via memcpy to avoid UB */
-        kx_io_shm_t local;
-        std::memcpy(&local, const_cast<const kx_io_shm_t*>(s), sizeof(local));
-        const uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
-        if (v1 != v2) continue;
-        /* Populate DataCache from local */
-        out->ts_ns        = local.ts_ns;
-        out->iop_status   = local.iop_status;
-        out->fault_flags  = local.fault_flags;
-        out->mcu_temp_x10 = local.mcu_temp_x10;
-        out->iop_rx       = local.iop_rx;
-        out->iop_crc_err  = local.iop_crc_err;
-        out->iop_timeout  = local.iop_timeout;
-        std::memcpy(out->ui_value,    local.ui_value,    sizeof(local.ui_value));
-        std::memcpy(out->ui_quality,  local.ui_quality,  sizeof(local.ui_quality));
-        std::memcpy(out->ui_unit,     local.ui_unit,     sizeof(local.ui_unit));
-        std::memcpy(out->di_state,    local.di_state,    sizeof(local.di_state));
-        std::memcpy(out->di_counter,  local.di_counter,  sizeof(local.di_counter));
-        std::memcpy(out->ao_setpoint, local.ao_setpoint, sizeof(local.ao_setpoint));
-        std::memcpy(out->ao_mode,     local.ao_mode,     sizeof(local.ao_mode));
-        std::memcpy(out->do_cmd,      local.do_cmd,      sizeof(local.do_cmd));
-        std::memcpy(out->do_feedback, local.do_feedback, sizeof(local.do_feedback));
-        out->io_valid = true;
-        return true;
-    }
-    return false;
+    struct timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-bool ShmReader::seqlock_read_plc(const volatile kx_plc_shm_t* s, DataCache* out)
+uint64_t policy_now(const SeqlockPolicy& p)
+{
+    return p.now_ns ? p.now_ns(p.ctx) : monotonic_now_ns();
+}
+
+/* nanosleep nhả CPU thật cho writer chạy cùng CPU; EINTR thì ngủ nốt phần còn
+ * lại chứ không ngủ lại từ đầu. */
+void policy_sleep(const SeqlockPolicy& p, uint64_t ns)
+{
+    if (p.sleep_ns) {
+        p.sleep_ns(p.ctx, ns);
+        return;
+    }
+    struct timespec ts{};
+    ts.tv_sec = static_cast<time_t>(ns / 1000000000ull);
+    ts.tv_nsec = static_cast<long>(ns % 1000000000ull);
+    while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
+    }
+}
+
+void policy_yield(const SeqlockPolicy& p)
+{
+    if (p.yield) p.yield(p.ctx);
+    else sched_yield();
+}
+
+/* T63-102: thử lại tới `p.deadline_ns` (xem SeqlockPolicy). Trình tự theo hợp
+ * đồng mkddc_shm.h: seq (acquire) → bỏ nếu LẺ → memcpy cả struct → seq lại →
+ * khác thì thử lại. Fence acquire trước lần đọc seq thứ hai: load acquire chỉ
+ * chặn các lệnh SAU nó; không có fence, trên aarch64 các load của memcpy có thể
+ * được thực hiện sau lần đọc seq thứ hai và lọt qua kiểm tra dù dữ liệu bị xé. */
+template <typename Shm>
+bool seqlock_copy_within(const volatile Shm* s, Shm* local, const SeqlockPolicy& p,
+                         SeqlockSegmentStats* st)
+{
+    ++st->reads;
+    const uint64_t start = policy_now(p);
+    uint64_t retries = 0;
+    bool ok = false;
+    for (int attempt = 0;; ++attempt) {
+        const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+        if ((v1 & 1u) == 0u) {
+            /* Copy volatile struct via memcpy to avoid UB */
+            std::memcpy(local, const_cast<const Shm*>(s), sizeof(*local));
+            __atomic_thread_fence(__ATOMIC_ACQUIRE);
+            const uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+            if (v1 == v2) {
+                ok = true;
+                break;
+            }
+        }
+        const uint64_t now = policy_now(p);
+        const uint64_t elapsed = now > start ? now - start : 0;
+        if (elapsed >= p.deadline_ns) break;
+        const uint64_t remaining = p.deadline_ns - elapsed;
+        ++retries;
+        if (attempt < p.spin_yields || remaining < p.backoff_ns + p.sleep_slack_ns)
+            policy_yield(p);
+        else
+            policy_sleep(p, p.backoff_ns);
+    }
+    const uint64_t end = policy_now(p);
+    const uint64_t waited_us = (end > start ? end - start : 0) / 1000ull;
+    st->retries += retries;
+    if (waited_us > st->max_wait_us) st->max_wait_us = waited_us;
+    if (!ok) ++st->failures;
+    return ok;
+}
+
+} // namespace
+
+bool ShmReader::seqlock_read_io(const volatile kx_io_shm_t* s, DataCache* out,
+                                const SeqlockPolicy& policy, SeqlockSegmentStats* stats)
 {
     if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) return false;
-    for (int i = 0; i < 5; i++) {
-        const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
-        if (v1 & 1u) continue;
-        kx_plc_shm_t local;
-        std::memcpy(&local, const_cast<const kx_plc_shm_t*>(s), sizeof(local));
-        const uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
-        if (v1 != v2) continue;
-        std::memcpy(out->ai, local.ai, sizeof(local.ai));
-        std::memcpy(out->bi, local.bi, sizeof(local.bi));
-        std::memcpy(out->ao, local.ao, sizeof(local.ao));
-        std::memcpy(out->bo, local.bo, sizeof(local.bo));
-        std::memcpy(out->ext, local.ext, sizeof(local.ext));
-        out->ext_count   = local.ext_count;
-        out->plc_running = local.plc_running;
-        out->scan_count  = local.scan_count;
-        out->plc_ts_ns   = local.ts_ns;
-        out->plc_valid   = true;
-        return true;
-    }
-    return false;
+    kx_io_shm_t local;
+    if (!seqlock_copy_within(s, &local, policy, stats)) return false;
+    /* Populate DataCache from local */
+    out->ts_ns        = local.ts_ns;
+    out->iop_status   = local.iop_status;
+    out->fault_flags  = local.fault_flags;
+    out->mcu_temp_x10 = local.mcu_temp_x10;
+    out->iop_rx       = local.iop_rx;
+    out->iop_crc_err  = local.iop_crc_err;
+    out->iop_timeout  = local.iop_timeout;
+    std::memcpy(out->ui_value,    local.ui_value,    sizeof(local.ui_value));
+    std::memcpy(out->ui_quality,  local.ui_quality,  sizeof(local.ui_quality));
+    std::memcpy(out->ui_unit,     local.ui_unit,     sizeof(local.ui_unit));
+    std::memcpy(out->di_state,    local.di_state,    sizeof(local.di_state));
+    std::memcpy(out->di_counter,  local.di_counter,  sizeof(local.di_counter));
+    std::memcpy(out->ao_setpoint, local.ao_setpoint, sizeof(local.ao_setpoint));
+    std::memcpy(out->ao_mode,     local.ao_mode,     sizeof(local.ao_mode));
+    std::memcpy(out->do_cmd,      local.do_cmd,      sizeof(local.do_cmd));
+    std::memcpy(out->do_feedback, local.do_feedback, sizeof(local.do_feedback));
+    out->io_valid = true;
+    return true;
+}
+
+bool ShmReader::seqlock_read_plc(const volatile kx_plc_shm_t* s, DataCache* out,
+                                 const SeqlockPolicy& policy, SeqlockSegmentStats* stats)
+{
+    if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) return false;
+    kx_plc_shm_t local;
+    if (!seqlock_copy_within(s, &local, policy, stats)) return false;
+    std::memcpy(out->ai, local.ai, sizeof(local.ai));
+    std::memcpy(out->bi, local.bi, sizeof(local.bi));
+    std::memcpy(out->ao, local.ao, sizeof(local.ao));
+    std::memcpy(out->bo, local.bo, sizeof(local.bo));
+    std::memcpy(out->ext, local.ext, sizeof(local.ext));
+    out->ext_count   = local.ext_count;
+    out->plc_running = local.plc_running;
+    out->scan_count  = local.scan_count;
+    out->plc_ts_ns   = local.ts_ns;
+    out->plc_valid   = true;
+    return true;
+}
+
+int format_seqlock_stats_line(char* buf, std::size_t size, const SeqlockStats& st)
+{
+    using ull = unsigned long long;
+    return std::snprintf(buf, size,
+                         "hmi.shm_reader io_reads=%llu io_retries=%llu io_failures=%llu"
+                         " io_max_wait_us=%llu plc_reads=%llu plc_retries=%llu"
+                         " plc_failures=%llu plc_max_wait_us=%llu",
+                         static_cast<ull>(st.io.reads), static_cast<ull>(st.io.retries),
+                         static_cast<ull>(st.io.failures), static_cast<ull>(st.io.max_wait_us),
+                         static_cast<ull>(st.plc.reads), static_cast<ull>(st.plc.retries),
+                         static_cast<ull>(st.plc.failures), static_cast<ull>(st.plc.max_wait_us));
 }
 
 ReadStatus ShmReader::read_all(DataCache* out) const
@@ -143,7 +224,7 @@ ReadStatus ShmReader::read_all(DataCache* out) const
     /* F-03 fail-safe: reset các field lái annunciation TRƯỚC khi đọc.
      * DataCache được tái dùng qua từng chu kỳ ở main.cpp, nên nếu không reset ở
      * đây thì một lần đọc thất bại (magic chưa set xong lúc iobus restart, hoặc
-     * 5 lần retry seqlock đều trượt) sẽ để iop_status=NORMAL của chu kỳ trước
+     * seqlock hết deadline T63-102) sẽ để iop_status=NORMAL của chu kỳ trước
      * tiếp tục lái quyết định → banner xanh, E001 im lặng.
      *
      * fault_flags reset về 0 chứ không về "có lỗi": khi không đọc được thì ta
@@ -159,8 +240,8 @@ ReadStatus ShmReader::read_all(DataCache* out) const
     out->fault_flags = 0;
 
     ReadStatus st;
-    if (io_)  st.io_ok  = seqlock_read_io(io_, out);
-    if (plc_) st.plc_ok = seqlock_read_plc(plc_, out);
+    if (io_)  st.io_ok  = seqlock_read_io(io_, out, policy_, &stats_.io);
+    if (plc_) st.plc_ok = seqlock_read_plc(plc_, out, policy_, &stats_.plc);
 
     out->age_ns = (out->ts_ns > 0 && now_ns > out->ts_ns)
                   ? (now_ns - out->ts_ns)

@@ -152,6 +152,9 @@ type OverviewResponse struct {
 	Attention         []OverviewAttentionItem `json:"attention"`
 	Capabilities      OverviewCapabilities    `json:"capabilities"`
 	Degraded          []string                `json:"degraded"`
+	// OSMetrics nói `controller.uptimeS` cũ tới đâu (T63-103, collector dùng
+	// chung với `/system/status`). `unknown`/`stale` ⇒ uptimeS vắng mặt.
+	OSMetrics OSMetricsFreshness `json:"osMetrics"`
 }
 
 // OverviewCapabilities nói cho FE biết phần cứng/feature nào CÓ THẬT, để giao
@@ -194,7 +197,10 @@ func (a *App) buildOverview(ctx context.Context) OverviewResponse {
 	}
 
 	core, coreErr := a.core.ReadStatus(ctx)
-	metrics, _ := a.os.ReadMetrics(ctx)
+	// T63-103: trước đây gọi `os.ReadMetrics` ở đây — chờ 100 ms lấy mẫu CPU chỉ
+	// để đọc uptime. Nay đọc bản chụp của collector nền dùng chung.
+	metrics, freshness := a.osMetrics.Snapshot()
+	out.OSMetrics = freshness
 	device, _ := readConfig(a, configGroupDevice, ConfigDevice{})
 	ip, mac := primaryInterface()
 	versions := core.Versions

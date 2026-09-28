@@ -102,7 +102,7 @@ TEST(MbaFieldbusMetrics, GhiDocDongThoiKhongMatBoDem)
     std::atomic<bool> stop{false};
     auto writer = [&](uint8_t slave) {
         for (int i = 0; i < kPerWriter; i++) {
-            metrics.record_bus_transaction(1, static_cast<uint32_t>(100 + i % 50), (i % 7) != 0);
+            metrics.record_bus_transaction(1, static_cast<uint32_t>(100 + i % 50), (i % 7) != 0, TransactionKind::Read);
             metrics.set_bus_state(1, (i % 2) ? "RUNNING" : "PORT_ERROR");
             metrics.update(slave, (i % 5) != 0, static_cast<uint64_t>(i));
             metrics.record_write_failed(slave);

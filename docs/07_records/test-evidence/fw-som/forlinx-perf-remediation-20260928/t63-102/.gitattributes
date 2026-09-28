@@ -1,0 +1,3 @@
+# Bản vá lưu làm bằng chứng: dòng ngữ cảnh rỗng của unified diff là một dấu cách,
+# không phải lỗi khoảng trắng. Tắt kiểm whitespace để `git diff --check` sạch.
+*.patch -whitespace

@@ -45,6 +45,38 @@ type StatusReply struct {
 	ExtCount        int             `json:"ext_count"`
 	Sequence        uint64          `json:"sequence"`
 	Buses           []StatusBusInfo `json:"buses"`
+	// T63-003 (PERF-API-04) — chỉ THÊM. Counter và cửa sổ latency của bus về 0
+	// mỗi lần iobus nạp cấu hình bus (kể cả apply_config, khi ProducerBootID
+	// KHÔNG đổi); BusCountersEpoch tăng đúng những lần đó. iobus trước T63-003
+	// không gửi hai trường này ⇒ 0 = KHÔNG BIẾT, không phải "epoch 0".
+	BusCountersEpoch   uint64 `json:"bus_counters_epoch"`
+	BusCountersSinceMS uint64 `json:"bus_counters_since_ms"`
+	// Counter IOP 64 bit tích luỹ từ lúc tiến trình iobus khởi động. nil =
+	// iobus cũ không gửi.
+	IOP *StatusIOP `json:"iop,omitempty"`
+}
+
+// StatusIOP — counter IOP tích luỹ; epoch là (ProducerBootID, CountersSinceMS).
+type StatusIOP struct {
+	RX        uint64 `json:"rx"`
+	TX        uint64 `json:"tx"`
+	CRCErrors uint64 `json:"crc_errors"`
+	SeqErrors uint64 `json:"seq_errors"`
+	Timeouts  uint64 `json:"timeouts"`
+	Retries   uint64 `json:"retries"`
+	NACKs     uint64 `json:"nacks"`
+}
+
+// StatusLatencyWindow — latency MỘT loại giao dịch (đọc hoặc ghi) trên cửa sổ
+// `SampleCount` giao dịch gần nhất (tối đa `WindowSize`). Total đếm tiếp vượt
+// cửa sổ, tính từ BusCountersEpoch.
+type StatusLatencyWindow struct {
+	P50US       uint32 `json:"p50_us"`
+	P95US       uint32 `json:"p95_us"`
+	MaxUS       uint32 `json:"max_us"`
+	SampleCount uint32 `json:"sample_count"`
+	WindowSize  uint32 `json:"window_size"`
+	Total       uint64 `json:"total"`
 }
 
 type StatusBusInfo struct {
@@ -58,6 +90,11 @@ type StatusBusInfo struct {
 	TimeoutErrors      uint64 `json:"timeout_errors"`
 	CRCErrors          uint64 `json:"crc_errors"`
 	PortReopens        uint64 `json:"port_reopens"`
+	// T63-003 — chỉ THÊM; nil/0 khi iobus trước T63-003.
+	TotalTransactions uint64               `json:"total_transactions"`
+	TotalErrors       uint64               `json:"total_errors"`
+	LatencyRead       *StatusLatencyWindow `json:"latency_read,omitempty"`
+	LatencyWrite      *StatusLatencyWindow `json:"latency_write,omitempty"`
 }
 
 var ErrControlUnavailable = errors.New("iobus không mở kênh điều khiển fieldbus")
@@ -69,16 +106,22 @@ func (c ControlClient) timeout() time.Duration {
 	return 5 * time.Second
 }
 
+// request gửi một dòng JSON và đọc một dòng trả lời. `Timeout` là trần cho TOÀN
+// BỘ lượt hỏi — kết nối + gửi + nhận — tính từ một mốc duy nhất (T63-003).
+// Bản trước đặt hai hạn liền nhau (dial rồi mới tới đọc/ghi) nên một lượt hỏi
+// có thể kéo dài gấp đôi `Timeout`; các GET gọi op `status` cần một trần thật.
 func (c ControlClient) request(payload any, out any) error {
 	if c.SocketPath == "" {
 		return ErrControlUnavailable
 	}
-	conn, err := net.DialTimeout("unix", c.SocketPath, c.timeout())
+	deadline := time.Now().Add(c.timeout())
+	dialer := net.Dialer{Deadline: deadline}
+	conn, err := dialer.Dial("unix", c.SocketPath)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrControlUnavailable, err)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(c.timeout()))
+	_ = conn.SetDeadline(deadline)
 
 	body, err := json.Marshal(payload)
 	if err != nil {

@@ -161,6 +161,8 @@ int main(int argc, char** argv)
     uint64_t next_fast = last_loop;
     uint64_t next_slow = last_loop;
     uint64_t next_alarm = last_loop;
+    /* T63-102: counter reader SHM ra log mỗi 60 s (tích luỹ; probe lấy delta). */
+    uint64_t next_shm_stats_log = last_loop + 60000u;
     hmi::DataCache data;
     hmi::SysSnapshot sys;
     bool io_fault_was_active = false;
@@ -202,6 +204,12 @@ int main(int argc, char** argv)
             fault_banner.update(io_fault ? static_cast<uint8_t>(KX_IOP_FAULT)
                                          : data.iop_status);
             notify.watchdog_kick();
+            if (now >= next_shm_stats_log) {
+                char line[hmi::kSeqlockStatsLineCapacity];
+                hmi::format_seqlock_stats_line(line, sizeof(line), shm.seqlock_stats());
+                std::fprintf(stderr, "INFO  %s\n", line);
+                next_shm_stats_log = now + 60000u;
+            }
             next_fast = now + 1000u;
         }
         if (now >= next_alarm) {

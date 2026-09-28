@@ -89,8 +89,8 @@ if [ -x "$SBIN"/mkddc-core ]; then
     for f in "$SBIN"/mkddc-core "$SBIN"/mkddc-iobus "$SBIN"/mkddc-netcfg \
              "$SBIN"/mkddc-st-compile "$SBIN"/mkddc-st-package \
              "$SBIN"/mkddc-fake-mcu "$SBIN"/mkddc-hmi "$WEBDIR/mkddc-web" \
-             "$WEBDIR/mkddc-schedule-sim" \
-             "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256"; do
+             "$WEBDIR/mkddc-schedule-sim" "$WEBDIR/mkddc-programming-sim-worker" \
+             "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256" "$SHAREDIR/artifact-manifest.json"; do
         [ -e "$f" ] && cp -a "$f" "$PRE/" || true
     done
     echo "INFO: bản hiện tại ($cur_ver) đã chụp vào $PRE"
@@ -116,9 +116,24 @@ restore mkddc-web      "$WEBDIR/mkddc-web"
 # SRC-F-01: rollback bỏ sót binary này thì bản cũ chạy lại với engine simulate
 # của bản mới — hai phiên bản lệch nhau ở đúng chỗ không ai nghĩ tới khi truy sự cố.
 restore mkddc-schedule-sim "$WEBDIR/mkddc-schedule-sim"
+# T63-002: install.sh chụp worker mô phỏng vào snapshot nhưng rollback trước đây
+# không khôi phục nó, nên sau rollback manifest (của snapshot) mô tả worker cũ
+# trong khi đĩa còn worker mới — read-back không bao giờ về 0 lệch.
+restore mkddc-programming-sim-worker "$WEBDIR/mkddc-programming-sim-worker"
 for meta in provenance.json checksums.sha256; do
     [ -e "$SNAP/$meta" ] && inst -m 0644 "$SNAP/$meta" "$SHAREDIR/$meta"
 done
+# T63-002 — manifest từng artifact đi CÙNG binary của snapshot. Snapshot chụp
+# trước T63-002 không có file này: khi đó GỠ manifest hiện tại thay vì để nó mô tả
+# bản vừa bị lùi, để read-back báo NO_MANIFEST (chưa biết) chứ không báo lệch sai
+# hay khớp sai. Không bao giờ sinh lại manifest từ sha256 đang có trên bo.
+if [ -e "$SNAP/artifact-manifest.json" ]; then
+    inst -m 0644 "$SNAP/artifact-manifest.json" "$SHAREDIR/artifact-manifest.json"
+else
+    rm -f "$SHAREDIR/artifact-manifest.json"
+    echo "CẢNH BÁO: snapshot không có artifact-manifest.json; đã gỡ manifest của bản mới." >&2
+    echo "          Read-back (scripts/artifact_manifest.py readback) sẽ báo NO_MANIFEST tới lần cài/deploy kế tiếp." >&2
+fi
 
 # F-P59-ROLLBACK-DB-001 — KHÔI PHỤC STORE PROGRAMMING CÙNG BINARY.
 #

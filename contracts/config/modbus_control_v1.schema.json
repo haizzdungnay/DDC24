@@ -50,7 +50,47 @@
         "counters_since_ms": { "type": "integer", "minimum": 0 },
         "ext_count": { "type": "integer", "minimum": 0 },
         "sequence": { "type": "integer", "minimum": 0 },
+        "bus_counters_epoch": {
+          "type": "integer", "minimum": 0,
+          "description": "T63-003 (PERF-API-04). Tăng mỗi lần counter và cửa sổ latency của bus về 0 — tức mỗi lần iobus nạp cấu hình bus, KỂ CẢ apply_config khi producer_boot_id KHÔNG đổi. Consumer so cặp (producer_boot_id, bus_counters_epoch) trước khi tính delta counter bus. Vắng mặt/0 = iobus trước T63-003 (không biết)."
+        },
+        "bus_counters_since_ms": {
+          "type": "integer", "minimum": 0,
+          "description": "T63-003. Mốc CLOCK_MONOTONIC (ms) trên SOM lúc counter bus về 0 lần gần nhất. Chỉ để hiển thị/đối chiếu; so epoch bằng bus_counters_epoch."
+        },
+        "iop": { "$ref": "#/$defs/IopCounters" },
         "buses": { "type": "array", "items": { "$ref": "#/$defs/BusStatus" } }
+      },
+      "additionalProperties": false
+    },
+    "IopCounters": {
+      "title": "T63-003 — counter IOP tích luỹ 64 bit",
+      "description": "Đếm từ lúc tiến trình iobus khởi động; chỉ reset khi iobus restart, nên epoch của chúng là (producer_boot_id, counters_since_ms). SHM `iop_*` vẫn uint32 theo hợp đồng SHM; đây là bản không tràn.",
+      "type": "object",
+      "required": ["rx", "tx", "crc_errors", "seq_errors", "timeouts", "retries", "nacks"],
+      "properties": {
+        "rx": { "type": "integer", "minimum": 0 },
+        "tx": { "type": "integer", "minimum": 0 },
+        "crc_errors": { "type": "integer", "minimum": 0 },
+        "seq_errors": { "type": "integer", "minimum": 0 },
+        "timeouts": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "nacks": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "LatencyWindow": {
+      "title": "T63-003 — latency MỘT loại giao dịch kèm nhãn cửa sổ",
+      "description": "p50/p95/max tính trên CÙNG cửa sổ sample_count giao dịch gần nhất (tối đa window_size). sample_count = 0 ⇒ p50/p95/max = 0 nghĩa là CHƯA ĐO, consumer phải hiện không biết. total đếm tiếp vượt cửa sổ, kể từ bus_counters_epoch.",
+      "type": "object",
+      "required": ["p50_us", "p95_us", "max_us", "sample_count", "window_size", "total"],
+      "properties": {
+        "p50_us": { "type": "integer", "minimum": 0 },
+        "p95_us": { "type": "integer", "minimum": 0 },
+        "max_us": { "type": "integer", "minimum": 0 },
+        "sample_count": { "type": "integer", "minimum": 0 },
+        "window_size": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     },
@@ -66,12 +106,25 @@
           "enum": ["CLOSED", "OPENING", "RUNNING", "PORT_ERROR", "DRAINING", "SWAPPING", "CONFIG_ERROR"],
           "description": "Vòng đời BusWorker theo FW_SOM_DESIGN §3."
         },
-        "latency_p50_us": { "type": "integer", "minimum": 0 },
+        "latency_p50_us": {
+          "type": "integer", "minimum": 0,
+          "description": "Nghĩa cũ giữ nguyên: cửa sổ 128 giao dịch gần nhất TRỘN đọc lẫn ghi. Số tách loại ở latency_read/latency_write (T63-003)."
+        },
         "latency_p95_us": { "type": "integer", "minimum": 0 },
         "utilization_pct_x100": { "type": "integer", "minimum": 0, "maximum": 10000 },
         "timeout_errors": { "type": "integer", "minimum": 0 },
         "crc_errors": { "type": "integer", "minimum": 0 },
-        "port_reopens": { "type": "integer", "minimum": 0 }
+        "port_reopens": { "type": "integer", "minimum": 0 },
+        "total_transactions": {
+          "type": "integer", "minimum": 0,
+          "description": "T63-003. Tổng giao dịch trên dây kể từ bus_counters_epoch."
+        },
+        "total_errors": {
+          "type": "integer", "minimum": 0,
+          "description": "T63-003. Tổng giao dịch lỗi trên dây (mọi nguyên nhân) kể từ bus_counters_epoch."
+        },
+        "latency_read": { "$ref": "#/$defs/LatencyWindow" },
+        "latency_write": { "$ref": "#/$defs/LatencyWindow" }
       },
       "additionalProperties": false
     },

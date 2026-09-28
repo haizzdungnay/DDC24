@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { Suspense, lazy, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, type ReactNode } from 'react'
 import {
   ForcePasswordChangePage,
   LoginPage,
@@ -70,6 +70,7 @@ const SchedulerRuntimePage = lazy(() => import('../features/scheduler').then((mo
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
+import { preloadTrendChart } from '../shared/components/TrendChart'
 import { useI18n } from '../shared/i18n'
 import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
@@ -79,6 +80,13 @@ const ProgrammingRoutes = lazy(() => import('../features/programming').then((mod
 function ProtectedShell() {
   const { isAuthenticated, session } = useAuth()
   const location = useLocation()
+  /* T63-109 (PERF-FE-02): thư viện biểu đồ không còn trong đồ thị khởi động nên
+     trang đăng nhập không tải nó. Ngay khi đã xác thực thì bắt đầu tải, để chunk
+     về SONG SONG với dữ liệu của Dashboard chứ không nối đuôi sau nó. Chưa xác
+     thực thì KHÔNG tải: nhánh đó chỉ chuyển hướng về `/login`. */
+  useEffect(() => {
+    if (isAuthenticated) void preloadTrendChart().catch(() => undefined)
+  }, [isAuthenticated])
   if (!isAuthenticated) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`
     return <Navigate to="/login" replace state={{ from: returnTo }} />

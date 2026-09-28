@@ -21,6 +21,14 @@
  *        không nghỉ đúng lúc nó đang quá tải, và làm "10 ms" của Program co lại
  *        thành vài trăm µs.
  *
+ *        T63-005 (PERF-SYS-01): histogram lệch đánh thức theo phút, 6 ô cố định
+ *        `le25 / le50 / le100 / le200 / le500 / gt500` (µs). Các ô RỜI NHAU —
+ *        `le50` là số lần 25 < lệch <= 50 µs, không cộng dồn kiểu Prometheus —
+ *        nên tổng 6 ô bằng `count` của `core.jitter` cùng phút, và
+ *        `le200 + le500 + gt500` đúng bằng số vi phạm C4 (> 100 µs) của phút đó.
+ *        Biên so theo ns với cùng phép so của `kJitterLimitNs`, nên 100,4 µs rơi
+ *        vào `le200` giống như nó được đếm là vi phạm.
+ *
  *        Không cấp phát, không khoá: mọi trạng thái là mảng tĩnh; gọi từ luồng
  *        RT mỗi base step.
  */
@@ -41,6 +49,22 @@ struct BaseStepTimingSnapshot {
     uint64_t wake_count = 0;
 };
 
+/* T63-005: biên trên (ns, bao gồm) của 5 ô đầu histogram; ô thứ 6 là "> 500 µs". */
+inline constexpr std::array<uint64_t, 5> kWakeHistUpperNs = {25000ull, 50000ull, 100000ull,
+                                                             200000ull, 500000ull};
+inline constexpr std::size_t kWakeHistBins = kWakeHistUpperNs.size() + 1u;
+/* Tên khoá log của từng ô, cùng thứ tự với `wake_hist`. */
+inline constexpr std::array<const char*, kWakeHistBins> kWakeHistKeys = {
+    "le25", "le50", "le100", "le200", "le500", "gt500"};
+
+/* Ô của một lần lệch `jitter_ns`: ô đầu tiên có biên trên >= jitter. */
+inline std::size_t wake_hist_bin(uint64_t jitter_ns) noexcept
+{
+    std::size_t bin = 0;
+    while (bin < kWakeHistUpperNs.size() && jitter_ns > kWakeHistUpperNs[bin]) ++bin;
+    return bin;
+}
+
 /* Thống kê giữa hai lần log phút `core.jitter` — tách khỏi metric tích luỹ vì
  * log reset mỗi phút còn metric thì không. */
 struct BaseStepJitterMinute {
@@ -48,6 +72,8 @@ struct BaseStepJitterMinute {
     uint64_t min_ns = 0;
     uint64_t max_ns = 0;
     uint64_t sum_ns = 0;
+    /* T63-005: histogram lệch đánh thức của phút (mảng tĩnh, ô rời nhau). */
+    std::array<uint64_t, kWakeHistBins> wake_hist{};
 };
 
 class BaseStepPacer {
@@ -154,6 +180,7 @@ private:
         if (jitter_ns > minute_.max_ns) minute_.max_ns = jitter_ns;
         minute_.sum_ns += jitter_ns;
         ++minute_.count;
+        ++minute_.wake_hist[wake_hist_bin(jitter_ns)];
     }
 
     uint64_t base_step_ns_;

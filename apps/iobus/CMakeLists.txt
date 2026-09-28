@@ -100,6 +100,7 @@ set(MODBUS_SOURCES
     adapters/modbus_rtu/fieldbus_metrics.cpp
     adapters/modbus_rtu/bus_worker.cpp
     adapters/modbus_rtu/control_channel.cpp
+    adapters/modbus_rtu/control_status.cpp
     adapters/modbus_rtu/modbus_master.cpp
     adapters/modbus_rtu/plc_shm_view.cpp
     adapters/modbus_rtu/modbus_tcp.cpp)
@@ -225,6 +226,10 @@ if(IOBUS_BUILD_TESTS)
       tests/test_network_address.cpp
       tests/test_realtime_memlock.cpp
       tests/test_pid_file.cpp
+      tests/test_poll_loop_timing.cpp
+      # Ghi đè new/delete toàn cục cho CẢ binary test (đếm khi được bật) —
+      # đúng một translation unit, xem tests/allocation_probe.hpp.
+      tests/allocation_probe.cpp
       adapters/bacnet/tests/test_bacnet_priority.cpp
       adapters/bacnet/tests/test_bacnet_reliability.cpp
       adapters/bacnet/tests/test_bacnet_object_map.cpp
@@ -242,11 +247,15 @@ if(IOBUS_BUILD_TESTS)
       adapters/modbus_rtu/tests/test_coil_write_batch.cpp
       adapters/modbus_rtu/tests/test_ext_command_watch.cpp
       adapters/modbus_rtu/tests/test_control_channel.cpp
+      adapters/modbus_rtu/tests/test_control_status.cpp
       adapters/modbus_rtu/tests/test_modbus_master_fake.cpp
       adapters/modbus_rtu/tests/test_modbus_audit_20260925.cpp
       adapters/modbus_rtu/tests/test_modbus_tcp.cpp
       adapters/modbus_rtu/tests/test_frame_ring.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
+  # T63-003: fixture hợp đồng op `status` dùng chung với consumer Go.
+  target_compile_definitions(iobus_tests PRIVATE
+      IOBUS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)

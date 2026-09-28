@@ -487,19 +487,38 @@ void ScanLoop::log_missed_base_step(const char* cause, uint64_t late_ns, uint64_
 void ScanLoop::log_minute_stats()
 {
     /* `core.jitter` giữ nguyên các trường cũ (tooling đọc log dựa vào chúng),
-     * nối thêm metric C4 tích luỹ để log và snapshot nói cùng một con số. */
+     * nối thêm metric C4 tích luỹ để log và snapshot nói cùng một con số.
+     *
+     * T63-005: nối `seqlock_fail` (TÍCH LUỸ, `CoreMetrics`) vào CUỐI dòng — trước
+     * đây bộ đếm này tăng ở `step()` nhưng không đi ra log/API/SHM nào, nên
+     * nhánh của T63-102 không đo được trên bo. Dòng `core.wake_hist` (histogram
+     * lệch đánh thức THEO PHÚT, xem base_step_pacer.hpp) đi CÙNG lời gọi
+     * fprintf: không thêm lần khoá FILE hay syscall nào trên luồng quét. */
     const BaseStepJitterMinute& minute = pacer_.minute();
     const BaseStepTimingSnapshot timing = pacer_.snapshot();
     const double avg_us =
         minute.count == 0 ? 0.0 : (static_cast<double>(minute.sum_ns) / minute.count) / 1000.0;
+    const auto& hist = minute.wake_hist;
+    static_assert(kWakeHistBins == 6, "định dạng core.wake_hist in đúng 6 ô");
     std::fprintf(stderr,
                  "INFO  core.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%llu"
-                 " window_max_us=%u violations=%llu missed_steps=%llu base_step_us=%llu\n",
+                 " window_max_us=%u violations=%llu missed_steps=%llu base_step_us=%llu"
+                 " seqlock_fail=%llu\n"
+                 "INFO  core.wake_hist %s=%llu %s=%llu %s=%llu %s=%llu %s=%llu %s=%llu"
+                 " base_step_us=%llu\n",
                  minute.min_ns / 1000.0, minute.max_ns / 1000.0, avg_us,
                  d_.metrics->scan_overrun(), static_cast<unsigned long long>(minute.count),
                  timing.jitter_max_us,
                  static_cast<unsigned long long>(timing.jitter_violation_count),
                  static_cast<unsigned long long>(timing.missed_base_step_count),
+                 static_cast<unsigned long long>(timing.base_step_ns / 1000ull),
+                 static_cast<unsigned long long>(d_.metrics->seqlock_fail()),
+                 kWakeHistKeys[0], static_cast<unsigned long long>(hist[0]),
+                 kWakeHistKeys[1], static_cast<unsigned long long>(hist[1]),
+                 kWakeHistKeys[2], static_cast<unsigned long long>(hist[2]),
+                 kWakeHistKeys[3], static_cast<unsigned long long>(hist[3]),
+                 kWakeHistKeys[4], static_cast<unsigned long long>(hist[4]),
+                 kWakeHistKeys[5], static_cast<unsigned long long>(hist[5]),
                  static_cast<unsigned long long>(timing.base_step_ns / 1000ull));
     pacer_.reset_minute();
 

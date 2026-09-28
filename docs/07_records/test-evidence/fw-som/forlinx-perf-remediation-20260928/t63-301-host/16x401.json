@@ -1,0 +1,35 @@
+{
+  "evidenceLevel": "HOST",
+  "startedAt": "2026-09-28T06:05:35.933517Z",
+  "programs": 16,
+  "statementsPerProgram": 200,
+  "periodMs": 10,
+  "instructionsPerProgram": 401,
+  "activeBefore": "4f42a28c-eb84-454f-9606-2264dc0c92fe",
+  "taskStateBefore": "STOPPED",
+  "project": {
+    "projectId": "cb5c1872-9a3b-4aed-ab29-5f87952d5b9a",
+    "label": "T63-301 max-config 20260928T060535Z"
+  },
+  "check": {
+    "state": "FAILED",
+    "wallMs": 60957.0,
+    "diagnostics": [
+      {
+        "code": "PRG-ERR-UNAVAILABLE-001",
+        "detailCode": "ST-WORKER-CRASH",
+        "severity": "ERROR",
+        "messageKey": "programming.error.unavailable",
+        "location": {}
+      }
+    ],
+    "manifestSource": "checks.result_json (DB host)",
+    "budget": null,
+    "budgetUsPerProgram": [],
+    "periodsMs": [],
+    "programCount": null
+  },
+  "verdict": "CHECK_REJECTED",
+  "hostSeededActive": "4f42a28c-eb84-454f-9606-2264dc0c92fe",
+  "requests": 615
+}

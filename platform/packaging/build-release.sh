@@ -143,4 +143,25 @@ sha256sum \
   "$build_dir/netcfg/mkddc-netcfg" "$web_binary" \
   > "$release_dir/checksums.sha256"
 
+# T63-002 (PERF-PROV-01) — manifest THEO TỪNG ARTIFACT.
+#
+# `provenance.json` ghi MỘT commit cho cả gói, nên từ lần deploy một phần đầu
+# tiên (chỉ web, chỉ tool ST) nó mô tả một bản không còn chạy trên bo. File này
+# ghi sha256 + commit + dirty + thời điểm build + toolchain cho TỪNG artifact;
+# commit lấy từ chính binary (MKDDC_GIT_COMMIT, Go buildinfo), không lấy từ biến
+# `$commit` ở trên. Deploy một phần cập nhật đúng mục của nó bằng
+# `artifact_manifest.py deploy-record`; `artifact_manifest.py readback` so với
+# `/proc/<MainPID>/exe` trên bo (DEPLOY_FOXLINX).
+python3 "$MKDDC_REPOSITORY_ROOT/scripts/artifact_manifest.py" record --fresh \
+  --origin build-release.sh --manifest "$release_dir/artifact-manifest.json" \
+  --artifact mkddc-core="$build_dir/core/mkddc-core" \
+  --artifact mkddc-iobus="$build_dir/iobus/mkddc-iobus" \
+  --artifact mkddc-netcfg="$build_dir/netcfg/mkddc-netcfg" \
+  --artifact mkddc-st-compile="$build_dir/core/mkddc-st-compile" \
+  --artifact mkddc-st-package="$build_dir/core/mkddc-st-package" \
+  --artifact mkddc-schedule-sim="$build_dir/core/mkddc-schedule-sim" \
+  --artifact mkddc-programming-sim-worker="$build_dir/core/mkddc-programming-sim-worker" \
+  --artifact mkddc-web="$web_binary" \
+  --artifact web-ui="$MKDDC_WEB_UI_DIST_REL/index.html"
+
 echo "OK: release=$version commit=$commit_label provenance=$release_dir/provenance.json"

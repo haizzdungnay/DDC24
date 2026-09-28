@@ -1,5 +1,34 @@
-import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Suspense, lazy } from 'react'
 import type { TrendSample } from '../types'
+import { displayTrendValue, formatTrendRaw, formatTrendTime, trendBandKey } from './trendChartFormat'
+
+/* T63-109 (PERF-FE-02, Plan 63 §4.2) — THƯ VIỆN BIỂU ĐỒ TẢI LƯỜI.
+ *
+ * Trước đây file này import `recharts` tĩnh. Sáu trang import TrendChart tĩnh
+ * (Dashboard, Chẩn đoán, Đầu vào, Đầu ra, Điểm ảo, Xu hướng), nên chunk
+ * `charts` (407.319 B thô / 105.076 B gzip) nằm trong đồ thị TĨNH của entry, và
+ * `index.html` modulepreload nó cho MỌI trang, kể cả trang đăng nhập — nơi không
+ * có biểu đồ nào.
+ *
+ * Nay chỉ phần vẽ SVG (`TrendChartPlot.tsx`, nơi duy nhất import `recharts`) đi
+ * qua `import()`. Phần còn lại — bảng dữ liệu, danh sách dấu sự kiện, mốc test —
+ * vẫn render đồng bộ, nên bảng đọc được ngay cả khi chunk biểu đồ chưa về. */
+let plotModule: Promise<typeof import('./TrendChartPlot')> | null = null
+
+/** Bắt đầu tải chunk biểu đồ (một lần; lỗi mạng thì lần sau thử lại). Shell đã
+ *  xác thực gọi hàm này khi mount để chunk về song song với dữ liệu, không nối
+ *  đuôi sau nó — trang đăng nhập KHÔNG gọi. */
+export function preloadTrendChart(): Promise<typeof import('./TrendChartPlot')> {
+  plotModule ??= import('./TrendChartPlot').catch((error: unknown) => {
+    plotModule = null
+    throw error
+  })
+  return plotModule
+}
+
+const TrendChartPlot = lazy(() => preloadTrendChart().then((module) => ({ default: module.TrendChartPlot })))
+
+export { TREND_BAND_SUFFIX, formatTrendTime, trendBandKey } from './trendChartFormat'
 
 /** Dấu sự kiện vẽ trên trục thời gian — `T57-2.6`. Biểu đồ chỉ VẼ; việc quyết
  *  định sự kiện nào đáng đánh dấu thuộc về `features/operations/trendMarkers`. */
@@ -47,14 +76,6 @@ interface TrendChartProps {
   showDots?: boolean
 }
 
-/** Hậu tố khoá của dải min–max trong `TrendSample`. Một chỗ duy nhất định
- *  nghĩa, để nơi dựng dữ liệu và nơi vẽ không trôi khỏi nhau. */
-export const TREND_BAND_SUFFIX = '::band'
-
-export function trendBandKey(seriesKey: string): string {
-  return `${seriesKey}${TREND_BAND_SUFFIX}`
-}
-
 /** Dữ liệu có dải min–max thật hay không.
  *
  *  Ở độ phân giải 1 giây, mỗi mẫu là một điểm đo nên `min === max === value`
@@ -67,60 +88,6 @@ export function hasMinMaxBand(data: TrendSample[], series: TrendSeries[]): boole
     const band = row[trendBandKey(item.key)]
     return Array.isArray(band) && band.length === 2 && typeof band[0] === 'number' && typeof band[1] === 'number' && band[0] !== band[1]
   }))
-}
-
-function displayValue(value: string | number | number[] | null | undefined, kind?: TrendSeries['kind'], stepped?: boolean): string {
-  if (value === null || value === undefined) return 'No value'
-  if (Array.isArray(value)) return value.length === 2 ? `${value[0]} … ${value[1]}` : 'No value'
-  if (typeof value === 'string') return value
-  if (stepped || kind === 'DO' || kind === 'DI') return value ? 'ON' : 'OFF'
-  return String(value)
-}
-
-export function formatTrendTime(value: number | string | number[] | null, timeZone: 'UTC' | 'local' = 'local'): string {
-  if (value === null || Array.isArray(value)) return '—'
-  const date = new Date(value)
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleString('vi-VN', timeZone === 'UTC' ? { timeZone: 'UTC', hour12: false } : undefined)
-    : String(value)
-}
-
-function formatRaw(value: unknown, unit: string): string {
-  if (typeof value !== 'number') return '—'
-  const fixed = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1)
-  return `${fixed} ${unit}`
-}
-
-function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
-  if (!active || !payload?.length) return null
-  /* `T57-2.4` — CON TRỎ ĐỌC GIÁ TRỊ: duyệt theo `series`, không theo `payload`.
-   *
-   * `payload` của recharts chỉ chứa những chuỗi CÓ giá trị ở đúng hàng đang
-   * hover. Với dữ liệu thưa (mỗi điểm một nhịp lấy mẫu riêng), chuỗi thiếu mẫu
-   * ở hàng đó biến mất khỏi tooltip — người dùng không phân biệt được "chuỗi
-   * này không có dữ liệu tại đây" với "chuỗi này không được chọn".
-   *
-   * So sánh setpoint với giá trị thực tại đúng thời điểm sự cố là thao tác chẩn
-   * đoán cơ bản nhất; nó chỉ làm được khi mọi chuỗi cùng xuất hiện tại một mốc.
-   * Chuỗi không có mẫu hiện `—` — đúng luật "thiếu dữ liệu thì nói ra". */
-  const row: TrendSample = payload[0]?.payload ?? { time: String(label ?? '') }
-  return (
-    <div className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-xs shadow-lg">
-      <div className="mb-1 font-semibold">{formatTrendTime(label ?? '', timeZone)}</div>
-      {series.map((item) => {
-        const raw = row[item.key]
-        const missing = raw === undefined || raw === null
-        return (
-          <div key={item.key}>
-            <span style={{ color: item.color }}>■</span>{' '}
-            <span>{item.label}: {missing ? '—' : displayValue(raw as number, item.kind, item.stepped)}{!missing && item.unit ? ` ${item.unit}` : ''}</span>
-            {!missing && <div className="text-[var(--c-text-dim)]">Quality {row[`${item.key}:quality`] ?? '—'} · Source {row[`${item.key}:source`] ?? '—'} · Tier {row[`${item.key}:tier`] ?? '—'}</div>}
-          </div>
-        )
-      })}
-      {rawUnit && payload[0]?.payload?.['__raw'] != null && <div className="mt-1 text-[var(--c-text-dim)]">Raw: {formatRaw(payload[0].payload['__raw'], rawUnit)}</div>}
-    </div>
-  )
 }
 
 /**
@@ -156,68 +123,15 @@ export function assignSecondAxis(series: Array<{ unit?: string; axis?: 'left' | 
 export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false, markers = [] }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
   const bandVisible = showBand && hasMinMaxBand(data, series)
-  const hasRightAxis = series.some((item) => item.axis === 'right')
-  const rightAxisUnit = series.find((item) => item.axis === 'right')?.unit
-  const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    ...(timeZone === 'UTC' ? { timeZone: 'UTC' } : {})
-  })
 
   return (
     <section aria-label="Historical trend chart" className="space-y-3">
       <div style={{ height }} aria-hidden="true">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
-            <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
-            <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="left" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            {hasRightAxis && (
-              <YAxis yAxisId="right" orientation="right" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} label={rightAxisUnit ? { value: rightAxisUnit, position: 'insideTopRight', fontSize: 11, fill: 'var(--c-text-dim)' } : undefined} />
-            )}
-            <Tooltip content={<HistoryTooltip series={series} rawUnit={rawUnit} timeZone={timeZone} />} />
-            {/* Dải min–max vẽ TRƯỚC đường chính để nằm dưới nó. `connectNulls`
-                vẫn false: khoảng trống dữ liệu phải đứt cả dải lẫn đường, không
-                được tô liền qua gap (UX-REQ UC-06). */}
-            {bandVisible && series.map((item) => (
-              <Area
-                key={`${item.key}-band`}
-                type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'}
-                yAxisId={item.axis === 'right' ? 'right' : 'left'}
-                dataKey={trendBandKey(item.key)}
-                name={`${item.key}-band`}
-                stroke="none"
-                fill={item.color}
-                fillOpacity={0.16}
-                isAnimationActive={false}
-                activeDot={false}
-                connectNulls={false}
-              />
-            ))}
-            {/* `T57-2.6` — vạch đứng cho sự kiện, vẽ SAU các đường để nằm trên
-                chúng. Chỉ vẽ khi trục X là thời gian thật: trên trục hạng mục
-                (`category`) không có toạ độ nào để đặt vạch cho đúng chỗ, và
-                đặt sai chỗ thì tệ hơn không vẽ. */}
-            {hasTimeAxis && markers.map((marker) => (
-              <ReferenceLine
-                key={`${marker.kind}-${marker.pointId}-${marker.ts}`}
-                yAxisId="left"
-                x={marker.ts}
-                stroke={marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'}
-                strokeDasharray="4 3"
-                strokeWidth={1.5}
-                label={{
-                  value: marker.kind === 'alarm' ? '!' : '⌾',
-                  position: 'top',
-                  fontSize: 11,
-                  fill: marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'
-                }}
-              />
-            ))}
-            {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
-          </ComposedChart>
-        </ResponsiveContainer>
+        {/* Chỗ giữ đúng chiều cao trong lúc chunk biểu đồ đang về: không nhảy
+            layout, và không vẽ trục/đường giả nào khi chưa có thư viện vẽ. */}
+        <Suspense fallback={<div data-testid="trend-chart-loading" className="h-full w-full rounded bg-[var(--c-surface-2)] opacity-40" />}>
+          <TrendChartPlot data={data} series={series} rawUnit={rawUnit} timeZone={timeZone} hasTimeAxis={hasTimeAxis} bandVisible={bandVisible} showDots={showDots} markers={markers} />
+        </Suspense>
       </div>
       {/* Vạch trên biểu đồ nói CÓ sự kiện; bảng này nói sự kiện GÌ và AI làm.
           Nó cũng là đường duy nhất để người dùng bàn phím hoặc trình đọc màn
@@ -249,7 +163,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
         <table aria-label="Historical trend data" className="w-full border-collapse text-left text-xs">
           <caption className="sr-only">Historical values with quality, source, and storage tier</caption>
           <thead className="bg-[var(--c-surface-2)]"><tr><th className="px-3 py-2">Time{timeZone === 'UTC' ? ' (UTC)' : ''}</th>{series.map((item) => <th key={item.key} className="px-3 py-2">{item.label}</th>)}{rawUnit && <th className="px-3 py-2">Raw</th>}</tr></thead>
-          <tbody>{data.slice(-5).map((row) => <tr key={String(row.__ts ?? row.time)} className="border-t border-[var(--c-border)]"><th className="whitespace-nowrap px-3 py-2 font-normal">{formatTrendTime(row.__ts ?? row.time, timeZone)}</th>{series.map((item) => { const value = row[item.key]; const quality = row[`${item.key}:quality`]; const source = row[`${item.key}:source`]; const tier = row[`${item.key}:tier`]; return <td key={item.key} className="px-3 py-2 align-top"><div>{displayValue(value, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</div><div className="text-[var(--c-text-dim)]">{quality ?? '—'} · {source ?? '—'} · {tier ?? '—'}</div></td> })}{rawUnit && <td className="whitespace-nowrap px-3 py-2 align-top"><div>{formatRaw(row.__raw, rawUnit)}</div></td>}</tr>)}</tbody>
+          <tbody>{data.slice(-5).map((row) => <tr key={String(row.__ts ?? row.time)} className="border-t border-[var(--c-border)]"><th className="whitespace-nowrap px-3 py-2 font-normal">{formatTrendTime(row.__ts ?? row.time, timeZone)}</th>{series.map((item) => { const value = row[item.key]; const quality = row[`${item.key}:quality`]; const source = row[`${item.key}:source`]; const tier = row[`${item.key}:tier`]; return <td key={item.key} className="px-3 py-2 align-top"><div>{displayTrendValue(value, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</div><div className="text-[var(--c-text-dim)]">{quality ?? '—'} · {source ?? '—'} · {tier ?? '—'}</div></td> })}{rawUnit && <td className="whitespace-nowrap px-3 py-2 align-top"><div>{formatTrendRaw(row.__raw, rawUnit)}</div></td>}</tr>)}</tbody>
         </table>
       </div>}
     </section>

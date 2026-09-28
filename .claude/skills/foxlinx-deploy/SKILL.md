@@ -60,6 +60,7 @@ hơn thì treo 30 s rồi `ST-WORKER-CRASH`). Làm theo bước 2b của
 `DEPLOY_FOXLINX.md`: cross-build `mkddc-st-compile`, `mkddc-st-package`,
 `mkddc-st-validate`, backup rồi `install` vào `/usr/sbin`. Profile đổi thì core
 cũng phải cùng bản: dừng lại và deploy cả core/iobus, đừng chỉ deploy web.
+Artifact nào được cài ở bước này thì cũng phải được ghi manifest ở bước 6b.
 
 ### 4. Backup + dừng process trên board
 
@@ -71,6 +72,7 @@ SSH="ssh -p 22 -i ~/.ssh/mkddc24_som -o StrictHostKeyChecking=no -o UserKnownHos
 $SSH $FOXLINX "
   cp /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-web.bak-${TIMESTAMP}
   cp -r /opt/mkddc-web/dist /opt/mkddc-web/dist.bak-${TIMESTAMP} 2>/dev/null || true
+  cp /usr/share/mkddc/artifact-manifest.json /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} 2>/dev/null || true
   rm -rf /opt/mkddc-web/dist
 
   systemctl stop mkddc-web-pi mkddc-reload-helper mkddc-time-helper 2>/dev/null || true
@@ -106,6 +108,35 @@ $SSH $FOXLINX '
 '
 ```
 
+### 6b. Ghi manifest cho ĐÚNG artifact vừa deploy (T63-002)
+
+Chạy từ gốc repo, ngay sau khi chép xong. Script đọc
+`/usr/share/mkddc/artifact-manifest.json` trên bo, thay đúng mục của artifact được
+liệt kê, giữ nguyên mục khác (core, iobus, …), ghi lại nguyên tử rồi đọc lại để
+xác nhận:
+
+```bash
+python3 scripts/artifact_manifest.py deploy-record --ssh "$SSH $FOXLINX" \
+  --artifact mkddc-web=/tmp/mkddc-web-foxlinx \
+  --artifact web-ui=build/web-ui/dist/index.html
+# Có cài tool ST ở bước 3b thì thêm (đường build của bước 2b DEPLOY_FOXLINX):
+#   --artifact mkddc-st-compile=build/fw-aarch64/core/mkddc-st-compile
+#   --artifact mkddc-st-package=build/fw-aarch64/core/mkddc-st-package
+#   --artifact mkddc-st-validate=build/fw-aarch64/core/mkddc-st-validate
+# Có deploy core/iobus thì thêm mkddc-core=…/core/mkddc-core, mkddc-iobus=…/iobus/mkddc-iobus
+```
+
+Commit, dirty, thời điểm build và toolchain lấy từ **file build trên máy này**
+(binary Go/C++ tự mang commit; FE và tool ST phải nằm trong build dir của worktree).
+Script từ chối (exit 2, không ghi gì) khi không xác định được nguồn build. **Không**
+lấy sha256 đang có trên bo điền vào manifest, không sửa manifest bằng tay: làm vậy
+thì bước 7b luôn "0 lệch" mà không chứng minh gì.
+
+Bo cài trước T63-002 chưa có manifest: lần `deploy-record` đầu tạo manifest chỉ với
+artifact vừa deploy, và bước 7b báo `NO_ENTRY` cho core/iobus tới khi chúng được
+deploy kèm `deploy-record` hoặc cài lại bằng `install.sh`. Đó là trạng thái đúng
+("chưa biết"), không phải lỗi cần che.
+
 ### 7. Smoke test
 
 Board không có `curl` — dùng `wget` (busybox), kiểm tra port 8082:
@@ -135,11 +166,30 @@ Kỳ vọng:
 - FE: `<html lang="vi">`
 - Toolchain: `INFO programming.toolchain ok`. Gặp `ERROR programming.toolchain` là chưa xong, quay lại bước 3b.
 
+### 7b. Read-back sha256 với manifest (T63-002, bắt buộc)
+
+Chỉ đọc trên bo: so sha256 `/proc/<MainPID>/exe` của `mkddc-core`, `mkddc-iobus`,
+`mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper`, `index.html` mà web đang
+phục vụ (đường dẫn lấy từ `STATIC_DIR` trong `/proc/<pid>/environ`, kèm một `GET /`
+qua HTTP) và các file khác có trong manifest (tool ST, …):
+
+```bash
+python3 scripts/artifact_manifest.py readback --ssh "$SSH $FOXLINX" \
+  --json /tmp/foxlinx-readback-${TIMESTAMP}.json
+```
+
+Kỳ vọng dòng cuối `READBACK: <n> kiểm, 0 lệch`, exit 0. Exit 1 là còn lệch:
+`STALE_EXE` = unit còn chạy binary đã bị thay (restart lại đúng unit, gồm cả hai
+helper), `SHA_MISMATCH`/`WRONG_PATH` = bo chạy bản khác bản vừa ghi, `NO_ENTRY` =
+manifest chưa có mục đó (xem 6b). Exit 2 là lỗi SSH/manifest. Còn lệch thì **chưa**
+được báo deploy xong.
+
 ### 8. Báo kết quả
 
 Báo user kèm:
 - Commit SHA đã deploy
 - Kết quả health/login/programming
+- Dòng `READBACK: … lệch` của bước 7b (và đường dẫn file JSON)
 - Timestamp backup (để rollback nếu cần)
 
 ## Ràng buộc
@@ -147,7 +197,8 @@ Báo user kèm:
 - **Không merge, không push** — skill này chỉ deploy code hiện có trên local.
 - **Không sửa code** — nếu build thất bại, báo lỗi và dừng.
 - **Không ghi secret** vào repo, command history hay output hiển thị cho user.
-- **Luôn backup** trước khi ghi đè binary/dist.
+- **Luôn backup** trước khi ghi đè binary/dist, kể cả `artifact-manifest.json`.
+- **Manifest chỉ ghi từ file build** (`deploy-record`); không điền sha256 đọc từ bo.
 - **Binary đang chạy** thì `scp` thất bại — phải `pkill` trước.
 
 ## Rollback
@@ -159,6 +210,12 @@ $SSH $FOXLINX "
   cp /opt/mkddc-web/mkddc-web.bak-${TIMESTAMP} /opt/mkddc-web/mkddc-web
   rm -rf /opt/mkddc-web/dist
   mv /opt/mkddc-web/dist.bak-${TIMESTAMP} /opt/mkddc-web/dist
+  # Manifest phải lùi cùng binary; không có bản backup thì gỡ để read-back báo NO_MANIFEST.
+  if [ -f /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} ]; then
+    cp /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} /usr/share/mkddc/artifact-manifest.json
+  else
+    rm -f /usr/share/mkddc/artifact-manifest.json
+  fi
 "
-# Rồi chạy lại bước 6 để khởi động
+# Rồi chạy lại bước 6 để khởi động và bước 7b để read-back
 ```

@@ -804,13 +804,33 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
 std::vector<PersistEntry> GraphRuntime::get_persist_state() const
 {
     std::vector<PersistEntry> result;
-    for (const Node& n : nodes_) {
-        if (n.type == NodeType::RUNTIME_COUNTER)
-            result.push_back({n.id, "RuntimeCounter", n.rt_seconds, 0});
-        else if (n.type == NodeType::PULSE_COUNTER)
-            result.push_back({n.id, "PulseCounter", 0.0, n.pc_count_raw});
-    }
+    fill_persist_state(&result);
     return result;
+}
+
+void GraphRuntime::fill_persist_state(std::vector<PersistEntry>* out) const
+{
+    std::size_t count = 0;
+    for (const Node& n : nodes_)
+        if (n.type == NodeType::RUNTIME_COUNTER || n.type == NodeType::PULSE_COUNTER) ++count;
+    /* resize xuống giữ sức chứa; resize lên chỉ cấp phát khi vượt sức chứa. */
+    out->resize(count);
+    std::size_t i = 0;
+    for (const Node& n : nodes_) {
+        if (n.type == NodeType::RUNTIME_COUNTER) {
+            PersistEntry& e = (*out)[i++];
+            e.id.assign(n.id);
+            e.type.assign("RuntimeCounter");
+            e.run_seconds = n.rt_seconds;
+            e.count_raw = 0;
+        } else if (n.type == NodeType::PULSE_COUNTER) {
+            PersistEntry& e = (*out)[i++];
+            e.id.assign(n.id);
+            e.type.assign("PulseCounter");
+            e.run_seconds = 0.0;
+            e.count_raw = n.pc_count_raw;
+        }
+    }
 }
 
 void GraphRuntime::restore_persist_state(const std::vector<PersistEntry>& entries)

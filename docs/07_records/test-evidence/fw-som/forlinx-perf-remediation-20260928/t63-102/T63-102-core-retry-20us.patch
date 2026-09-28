@@ -1,0 +1,286 @@
+diff --git a/apps/core/adapters/ipc/iobus_reader.cpp b/apps/core/adapters/ipc/iobus_reader.cpp
+index efc18772..14ca8187 100644
+--- a/apps/core/adapters/ipc/iobus_reader.cpp
++++ b/apps/core/adapters/ipc/iobus_reader.cpp
+@@ -3,6 +3,7 @@
+ #include <cerrno>
+ #include <cstdio>
+ #include <cstring>
++#include <ctime>
+ 
+ #include <fcntl.h>
+ #include <sys/mman.h>
+@@ -52,39 +53,97 @@ void IobusReader::detach()
+     }
+ }
+ 
+-bool IobusReader::read_from(const kx_io_shm_t* s, IoSnapshot* out)
++namespace {
++
++uint64_t spin_now(const SeqlockSpinPolicy& p)
++{
++    if (p.now_ns) return p.now_ns(p.ctx);
++    struct timespec ts{};
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
++}
++
++void spin_relax(const SeqlockSpinPolicy& p)
++{
++    if (p.relax) {
++        p.relax(p.ctx);
++        return;
++    }
++#if defined(__aarch64__)
++    __asm__ __volatile__("yield" ::: "memory");
++#elif defined(__x86_64__) || defined(__i386__)
++    __builtin_ia32_pause();
++#else
++    __asm__ __volatile__("" ::: "memory");
++#endif
++}
++
++} // namespace
++
++bool IobusReader::read_from_within(const kx_io_shm_t* s, IoSnapshot* out,
++                                   const SeqlockSpinPolicy& p, SeqlockReadStats* st)
+ {
+     if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC)
+         return false;   /* magic bumped to v4 (0x4B584404): raw live data + reliability */
+-    for (int i = 0; i < 5; i++) {
++    ++st->reads;
++    /* Đồng hồ chỉ đọc khi lần thử đầu trượt: đường nóng (seq chẵn, không ai
++     * ghi) giữ nguyên chi phí cũ, không thêm lần gọi vDSO nào mỗi scan. */
++    uint64_t start = 0;
++    bool timing = false;
++    uint64_t retries = 0;
++    bool ok = false;
++    for (;;) {
+         const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+-        if (v1 & 1u) continue;                    /* đang ghi → thử lại */
+-        out->ts_ns = s->ts_ns;
+-        std::memcpy(out->ui_value, (const void*)s->ui_value, sizeof(out->ui_value));
+-        std::memcpy(out->ui_quality, (const void*)s->ui_quality, sizeof(out->ui_quality));
+-        std::memcpy(out->ui_reliability, (const void*)s->ui_reliability, sizeof(out->ui_reliability));
+-        std::memcpy(out->ui_unit, (const void*)s->ui_unit, sizeof(out->ui_unit));
+-        std::memcpy(out->di_state, (const void*)s->di_state, sizeof(out->di_state));
+-        std::memcpy(out->di_counter, (const void*)s->di_counter, sizeof(out->di_counter));
+-        std::memcpy(out->do_feedback, (const void*)s->do_feedback, sizeof(out->do_feedback));
+-        std::memcpy(out->ao_setpoint, (const void*)s->ao_setpoint, sizeof(out->ao_setpoint));
+-        std::memcpy(out->ao_mode, (const void*)s->ao_mode, sizeof(out->ao_mode));
+-        out->fault_flags  = s->fault_flags;
+-        out->iop_status   = s->iop_status;
+-        out->mcu_temp_x10 = s->mcu_temp_x10;
+-        const uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+-        if (v1 == v2) {
+-            out->valid = true;
+-            return true;                          /* snapshot nhất quán */
++        if ((v1 & 1u) == 0u) {
++            out->ts_ns = s->ts_ns;
++            std::memcpy(out->ui_value, (const void*)s->ui_value, sizeof(out->ui_value));
++            std::memcpy(out->ui_quality, (const void*)s->ui_quality, sizeof(out->ui_quality));
++            std::memcpy(out->ui_reliability, (const void*)s->ui_reliability, sizeof(out->ui_reliability));
++            std::memcpy(out->ui_unit, (const void*)s->ui_unit, sizeof(out->ui_unit));
++            std::memcpy(out->di_state, (const void*)s->di_state, sizeof(out->di_state));
++            std::memcpy(out->di_counter, (const void*)s->di_counter, sizeof(out->di_counter));
++            std::memcpy(out->do_feedback, (const void*)s->do_feedback, sizeof(out->do_feedback));
++            std::memcpy(out->ao_setpoint, (const void*)s->ao_setpoint, sizeof(out->ao_setpoint));
++            std::memcpy(out->ao_mode, (const void*)s->ao_mode, sizeof(out->ao_mode));
++            out->fault_flags  = s->fault_flags;
++            out->iop_status   = s->iop_status;
++            out->mcu_temp_x10 = s->mcu_temp_x10;
++            __atomic_thread_fence(__ATOMIC_ACQUIRE);
++            const uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
++            if (v1 == v2) {
++                out->valid = true;
++                ok = true;                        /* snapshot nhất quán */
++                break;
++            }
+         }
++        const uint64_t now = spin_now(p);
++        if (!timing) {
++            start = now;
++            timing = true;
++        }
++        if (now - start >= p.deadline_ns) break;  /* hết 20 µs: bỏ, dùng snapshot cũ */
++        ++retries;
++        spin_relax(p);
++    }
++    if (timing) {
++        const uint64_t waited = spin_now(p) - start;
++        if (waited > st->max_wait_ns) st->max_wait_ns = waited;
+     }
+-    return false;                                 /* dùng snapshot cũ + đếm metric */
++    st->retries += retries;
++    if (!ok) ++st->failures;
++    return ok;                                    /* false: dùng snapshot cũ + đếm metric */
++}
++
++bool IobusReader::read_from(const kx_io_shm_t* s, IoSnapshot* out)
++{
++    SeqlockReadStats ignored;
++    return read_from_within(s, out, SeqlockSpinPolicy{}, &ignored);
+ }
+ 
+ bool IobusReader::read(IoSnapshot* out) const
+ {
+     if (!shm_) return false;
+-    return read_from(shm_, out);
++    return read_from_within(shm_, out, policy_, &stats_);
+ }
+ 
+ bool IobusReader::contract_valid() const
+diff --git a/apps/core/adapters/ipc/iobus_reader.hpp b/apps/core/adapters/ipc/iobus_reader.hpp
+index 7a47e85e..442b42ff 100644
+--- a/apps/core/adapters/ipc/iobus_reader.hpp
++++ b/apps/core/adapters/ipc/iobus_reader.hpp
+@@ -13,6 +13,26 @@
+ 
+ namespace core {
+ 
++/* T63-102 nhánh "seqlock_fail > 0" (Plan 63 §4.2) — retry giới hạn ≤ 20 µs cho
++ * luồng quét RT. KHÔNG ngủ, KHÔNG sched_yield (luồng FIFO80 trên CPU3 riêng:
++ * yield không nhường cho writer iobus ở CPU khác, chỉ tốn syscall); chỉ quay
++ * với lệnh relax của CPU (`yield` aarch64 / `pause` x86) và đọc đồng hồ vDSO. */
++struct SeqlockSpinPolicy {
++    uint64_t deadline_ns = 20000ull;
++    /* nullptr ⇒ production: CLOCK_MONOTONIC / lệnh relax của CPU. */
++    uint64_t (*now_ns)(void* ctx) = nullptr;
++    void     (*relax)(void* ctx)  = nullptr;
++    void*    ctx                  = nullptr;
++};
++
++/* Bộ đếm tích luỹ của reader (một luồng quét ghi; đọc ở log phút cùng luồng). */
++struct SeqlockReadStats {
++    uint64_t reads       = 0;
++    uint64_t retries     = 0;
++    uint64_t failures    = 0;
++    uint64_t max_wait_ns = 0;
++};
++
+ class IobusReader final : public IoSnapshotReaderPort {
+ public:
+     ~IobusReader() override;
+@@ -24,11 +44,17 @@ public:
+     bool attached() const override { return shm_ != nullptr; }
+     bool contract_valid() const override;
+ 
+-    /* Seqlock read tối đa 5 lần thử; fail → false (dùng snapshot cũ + metric). */
++    /* Seqlock read, thử lại tối đa `SeqlockSpinPolicy::deadline_ns` (20 µs);
++     * fail → false (dùng snapshot cũ + metric). */
+     bool read(IoSnapshot* out) const override;
+ 
+     /* Đọc trực tiếp từ struct (cho unit test, không cần shm thật). */
+     static bool read_from(const kx_io_shm_t* shm, IoSnapshot* out);
++    static bool read_from_within(const kx_io_shm_t* shm, IoSnapshot* out,
++                                 const SeqlockSpinPolicy& policy, SeqlockReadStats* stats);
++
++    SeqlockReadStats seqlock_stats() const { return stats_; }
++    void set_seqlock_policy_for_test(const SeqlockSpinPolicy& policy) { policy_ = policy; }
+ 
+     /* Test hook: dùng buffer ngoài thay vì mmap (KHÔNG munmap khi detach). */
+     void attach_external(kx_io_shm_t* s) { shm_ = s; external_ = true; }
+@@ -39,6 +65,8 @@ public:
+ private:
+     kx_io_shm_t* shm_ = nullptr;
+     bool external_ = false;
++    SeqlockSpinPolicy policy_{};
++    mutable SeqlockReadStats stats_{};
+ };
+ 
+ } // namespace core
+diff --git a/apps/core/adapters/ipc/tests/test_iobus_reader.cpp b/apps/core/adapters/ipc/tests/test_iobus_reader.cpp
+index b79700b4..fbe335a5 100644
+--- a/apps/core/adapters/ipc/tests/test_iobus_reader.cpp
++++ b/apps/core/adapters/ipc/tests/test_iobus_reader.cpp
+@@ -8,6 +8,7 @@
+ #include <atomic>
+ #include <cstring>
+ #include <thread>
++#include <ctime>
+ 
+ #include "ipc/iobus_reader.hpp"
+ 
+@@ -92,3 +93,82 @@ TEST(IobusReader, NoTornReadUnderConcurrentWriter)
+     writer.join();
+     EXPECT_GT(consistent_reads, 0) << "reader phải đọc được ít nhất vài snapshot";
+ }
++
++/* ---- T63-102 nhánh "seqlock_fail > 0" (ĐỀ XUẤT): retry ≤ 20 µs ---- */
++namespace {
++
++struct FakeSpinClock {
++    uint64_t now = 5000000ull;
++    uint64_t start = 5000000ull;
++    int relaxes = 0;
++    kx_io_shm_t* writer = nullptr;
++    int release_after_relaxes = -1;
++
++    static uint64_t now_ns(void* ctx) { return static_cast<FakeSpinClock*>(ctx)->now; }
++    static void relax(void* ctx)
++    {
++        auto* self = static_cast<FakeSpinClock*>(ctx);
++        self->now += 100ull;   /* mỗi vòng quay ≈ 100 ns (vDSO + copy) */
++        ++self->relaxes;
++        if (self->writer && self->relaxes == self->release_after_relaxes) KX_WRITE_END(self->writer);
++    }
++    SeqlockSpinPolicy policy()
++    {
++        SeqlockSpinPolicy p;
++        p.now_ns = &FakeSpinClock::now_ns;
++        p.relax = &FakeSpinClock::relax;
++        p.ctx = this;
++        return p;
++    }
++};
++
++} // namespace
++
++TEST(IobusReaderT63102, WriterHolding5usIsReadWithinSpinBudget)
++{
++    kx_io_shm_t shm = make_shm();
++    shm.iop_status = KX_IOP_NORMAL;
++    KX_WRITE_BEGIN(&shm);
++    FakeSpinClock clock;
++    clock.writer = &shm;
++    clock.release_after_relaxes = 50;   /* 50 × 100 ns = 5 µs */
++    SeqlockReadStats stats;
++    IoSnapshot out;
++    EXPECT_TRUE(IobusReader::read_from_within(&shm, &out, clock.policy(), &stats));
++    EXPECT_EQ(out.iop_status, KX_IOP_NORMAL);
++    EXPECT_EQ(stats.retries, 50u);
++    EXPECT_EQ(stats.failures, 0u);
++}
++
++TEST(IobusReaderT63102, StuckWriterFailsAtTwentyMicroseconds)
++{
++    kx_io_shm_t shm = make_shm();
++    KX_WRITE_BEGIN(&shm);
++    FakeSpinClock clock;
++    SeqlockReadStats stats;
++    IoSnapshot out;
++    EXPECT_FALSE(IobusReader::read_from_within(&shm, &out, clock.policy(), &stats));
++    EXPECT_GE(clock.now - clock.start, 20000ull);
++    EXPECT_LE(clock.now - clock.start, 20000ull + 100ull) << "trần ≤ 20 µs (+1 vòng quay)";
++    EXPECT_EQ(stats.failures, 1u);
++    EXPECT_FALSE(out.valid);
++}
++
++TEST(IobusReaderT63102, StuckWriterOnRealClockIsBounded)
++{
++    kx_io_shm_t shm = make_shm();
++    KX_WRITE_BEGIN(&shm);
++    IobusReader reader;
++    reader.attach_external(&shm);
++    IoSnapshot out;
++    struct timespec a{}, b{};
++    clock_gettime(CLOCK_MONOTONIC, &a);
++    EXPECT_FALSE(reader.read(&out));
++    clock_gettime(CLOCK_MONOTONIC, &b);
++    const uint64_t elapsed = static_cast<uint64_t>(b.tv_sec - a.tv_sec) * 1000000000ull +
++                             static_cast<uint64_t>(b.tv_nsec) - static_cast<uint64_t>(a.tv_nsec);
++    EXPECT_GE(elapsed, 20000ull);
++    EXPECT_LT(elapsed, 5000000ull) << "có giới hạn (trần thật 20 µs; dư cho lịch máy CI)";
++    EXPECT_EQ(reader.seqlock_stats().failures, 1u);
++    EXPECT_GE(reader.seqlock_stats().max_wait_ns, 20000u);
++}

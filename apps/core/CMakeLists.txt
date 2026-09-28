@@ -125,6 +125,7 @@ add_library(core_adapters STATIC
     adapters/ipc/output_writer.cpp
     adapters/ipc/program_ipc_unix.cpp
     adapters/persistence/state_snapshot.cpp
+    adapters/persistence/state_snapshot_worker.cpp
     adapters/bacnet/bacnet_objtable.cpp
     adapters/ipc/web_ipc.cpp
     adapters/diagnostics/core_metrics.cpp)
@@ -384,6 +385,7 @@ if(CORE_BUILD_TESTS)
       domain/graph/tests/test_graph_protocol.cpp
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
+      adapters/persistence/test_state_snapshot_worker.cpp
       adapters/bacnet/tests/test_bacnet_objtable.cpp
       application/schedule/tests/test_schedule_runtime.cpp domain/graph/tests/test_runtime_point_snapshot.cpp
       # ISS-PIO-19: `test_alarm_runtime.cpp` KHÔNG nằm trong target nào kể từ

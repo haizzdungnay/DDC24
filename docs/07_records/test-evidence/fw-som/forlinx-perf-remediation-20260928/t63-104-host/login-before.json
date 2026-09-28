@@ -1,0 +1,145 @@
+{
+  "label": "BEFORE",
+  "baseURL": "http://127.0.0.1:18091",
+  "viewport": "1366x768",
+  "browser": "chromium-1194 (/opt/pw-browsers), playwright 1.61.1",
+  "runs": [
+    {
+      "loadMs": 656,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 1295308,
+      "staticTransferTotal": 1297473,
+      "allTransferTotal": 1337910,
+      "gzipResponses": 0,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    },
+    {
+      "loadMs": 646,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 1295308,
+      "staticTransferTotal": 1297473,
+      "allTransferTotal": 1337910,
+      "gzipResponses": 0,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    },
+    {
+      "loadMs": 643,
+      "requests": 10,
+      "staticRequests": 9,
+      "staticTransferBody": 1295308,
+      "staticTransferTotal": 1297473,
+      "allTransferTotal": 1337910,
+      "gzipResponses": 0,
+      "chartsLoaded": true,
+      "consoleErrors": [],
+      "failed": []
+    }
+  ],
+  "resourcesRun1": [
+    {
+      "url": "/assets/index-CigFnKyz.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 457375,
+      "transferHeaders": 246
+    },
+    {
+      "url": "/assets/charts-CUKRAmjw.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 407319,
+      "transferHeaders": 246
+    },
+    {
+      "url": "/assets/react-BFlICnJl.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 172785,
+      "transferHeaders": 246
+    },
+    {
+      "url": "/assets/auth-BTeL5hvl.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 131715,
+      "transferHeaders": 246
+    },
+    {
+      "url": "/assets/index-2QZewsSc.css",
+      "type": "stylesheet",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/css; charset=utf-8",
+      "transferBody": 85118,
+      "transferHeaders": 238
+    },
+    {
+      "url": "/assets/icons-C-qQUh_t.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 34447,
+      "transferHeaders": 245
+    },
+    {
+      "url": "/assets/crypto-BpMLuNFX.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 4564,
+      "transferHeaders": 244
+    },
+    {
+      "url": "/login",
+      "type": "document",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "no-cache",
+      "contentType": "text/html; charset=utf-8",
+      "transferBody": 1269,
+      "transferHeaders": 211
+    },
+    {
+      "url": "/assets/rolldown-runtime-hePW80VL.js",
+      "type": "script",
+      "status": 200,
+      "encoding": "identity",
+      "vary": "",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/javascript; charset=utf-8",
+      "transferBody": 716,
+      "transferHeaders": 243
+    }
+  ]
+}
