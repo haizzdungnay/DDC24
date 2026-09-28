@@ -63,6 +63,12 @@ export function restingValue(valueType: ScheduleValueType): ScheduleValue {
   }
 }
 
+export function oppositeValue(val: ScheduleValue, valueType: ScheduleValueType): ScheduleValue {
+  if (valueType === 'BINARY') return val === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+  if (valueType === 'BOOLEAN') return !val
+  return Number(val) === 0 ? 1 : 0
+}
+
 export function activeValue(valueType: ScheduleValueType): ScheduleValue {
   switch (valueType) {
     case 'BINARY': return 'ACTIVE'
@@ -131,16 +137,28 @@ export interface TimeBlock {
  * Time-Value. Giao diện phải hiện được cả hai chiều, nếu không người dùng
  * không hiểu vì sao một khoảng 08:00→18:00 lại sinh HAI sự kiện.
  */
-export function dayToBlocks(day: ScheduleTimeValue[], valueType: ScheduleValueType): TimeBlock[] {
+export function dayToBlocks(
+  day: ScheduleTimeValue[],
+  valueType: ScheduleValueType,
+  defaultValue?: ScheduleValue
+): TimeBlock[] {
   const sorted = sortTimeValues(day)
   const blocks: TimeBlock[] = []
   for (let i = 0; i < sorted.length; i++) {
     const startSec = timeToSeconds(sorted[i].time)
     if (startSec < 0) continue
     const endSec = i + 1 < sorted.length ? timeToSeconds(sorted[i + 1].time) : 86_400
-    // Chỉ vẽ khối cho giá trị khác giá trị nghỉ; khoảng "nghỉ" là nền.
-    if (isActiveValue(sorted[i].value, valueType)) {
-      blocks.push({ startSec, endSec, value: sorted[i].value })
+    // Chỉ vẽ khối cho giá trị khác giá trị nghỉ/mặc định; khoảng "nghỉ" là nền.
+    const isRest = defaultValue !== undefined
+      ? sorted[i].value === defaultValue
+      : !isActiveValue(sorted[i].value, valueType)
+    if (!isRest && endSec > startSec) {
+      const last = blocks[blocks.length - 1]
+      if (last && last.endSec === startSec && last.value === sorted[i].value) {
+        last.endSec = endSec
+      } else {
+        blocks.push({ startSec, endSec, value: sorted[i].value })
+      }
     }
   }
   return blocks
@@ -164,8 +182,174 @@ export function blockToTimeValues(
     return s < startSec || s > endSec
   })
   kept.push({ time: secondsToTime(startSec), value })
-  if (endSec < 86_400) kept.push({ time: secondsToTime(endSec), value: defaultValue })
+  if (endSec < 86_400 && defaultValue !== value) kept.push({ time: secondsToTime(endSec), value: defaultValue })
   return sortTimeValues(kept)
+}
+
+/**
+ * Xoá một khối [startSec, endSec) khỏi ngày, dọn sạch mốc bật và mốc trả về mặc định.
+ */
+export function removeBlockFromDay(
+  day: ScheduleTimeValue[],
+  startSec: number,
+  endSec: number,
+  defaultValue: ScheduleValue
+): ScheduleTimeValue[] {
+  const sorted = sortTimeValues(day)
+  return sorted.filter((e) => {
+    const s = timeToSeconds(e.time)
+    if (s === startSec) return false
+    if (s > startSec && s < endSec) return false
+    if (s === endSec && e.value === defaultValue) return false
+    return true
+  })
+}
+
+
+export function getNextDay(day: ScheduleDayKey): ScheduleDayKey {
+  const i = DAY_KEYS.indexOf(day)
+  return DAY_KEYS[(i + 1) % DAY_KEYS.length]
+}
+
+export function getPrevDay(day: ScheduleDayKey): ScheduleDayKey {
+  const i = DAY_KEYS.indexOf(day)
+  return DAY_KEYS[(i + DAY_KEYS.length - 1) % DAY_KEYS.length]
+}
+
+export interface DayPiece {
+  day: ScheduleDayKey
+  startSec: number
+  endSec: number
+}
+
+export interface OvernightSpan {
+  startDay: ScheduleDayKey
+  startSec: number
+  endDay: ScheduleDayKey
+  endSec: number
+  value: ScheduleValue
+  isOvernight: boolean
+  pieces: DayPiece[]
+}
+
+/**
+ * Áp dụng một khoảng thời gian (kể cả xuyên ngày/qua đêm) vào lịch tuần.
+ */
+export function applySpanToWeekly(
+  weekly: ScheduleWeekly,
+  startDay: ScheduleDayKey,
+  startSec: number,
+  endDay: ScheduleDayKey,
+  endSec: number,
+  val: ScheduleValue,
+  defVal: ScheduleValue
+): ScheduleWeekly {
+  const nextWeekly = { ...weekly }
+  if (startDay === endDay && startSec < endSec) {
+    nextWeekly[startDay] = blockToTimeValues(nextWeekly[startDay] || [], startSec, endSec, val, defVal)
+    return nextWeekly
+  }
+
+  const effectiveEndDay = (startDay === endDay && startSec >= endSec) ? getNextDay(startDay) : endDay
+  const days: ScheduleDayKey[] = []
+  let cur = startDay
+  days.push(cur)
+  while (cur !== effectiveEndDay && days.length <= 7) {
+    cur = getNextDay(cur)
+    days.push(cur)
+  }
+
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i]
+    const dayEvents = nextWeekly[d] || []
+    if (i === 0) {
+      nextWeekly[d] = blockToTimeValues(dayEvents, startSec, 86_400, val, defVal)
+    } else if (i === days.length - 1) {
+      if (endSec > 0) {
+        nextWeekly[d] = blockToTimeValues(dayEvents, 0, endSec, val, defVal)
+      }
+    } else {
+      nextWeekly[d] = blockToTimeValues(dayEvents, 0, 86_400, val, defVal)
+    }
+  }
+  return nextWeekly
+}
+
+/**
+ * Xóa danh sách các mảnh thuộc một sự kiện khỏi lịch tuần.
+ */
+export function removePiecesFromWeekly(
+  weekly: ScheduleWeekly,
+  pieces: DayPiece[],
+  defVal: ScheduleValue
+): ScheduleWeekly {
+  const nextWeekly = { ...weekly }
+  for (const p of pieces) {
+    nextWeekly[p.day] = removeBlockFromDay(nextWeekly[p.day] || [], p.startSec, p.endSec, defVal)
+  }
+  return nextWeekly
+}
+
+/**
+ * Nhận diện một khối có phải là một phần của sự kiện xuyên đêm (ví dụ: 23:00 T2 -> 03:00 T3).
+ */
+export function findOvernightSpan(
+  weekly: ScheduleWeekly,
+  day: ScheduleDayKey,
+  block: TimeBlock,
+  defVal: ScheduleValue,
+  valType: ScheduleValueType
+): OvernightSpan {
+  const nextDay = getNextDay(day)
+  const prevDay = getPrevDay(day)
+
+  if (block.endSec === 86_400) {
+    const nextBlocks = dayToBlocks(weekly[nextDay] || [], valType, defVal)
+    const nextPiece = nextBlocks.find((b) => b.startSec === 0 && b.value === block.value)
+    if (nextPiece) {
+      return {
+        startDay: day,
+        startSec: block.startSec,
+        endDay: nextDay,
+        endSec: nextPiece.endSec,
+        value: block.value,
+        isOvernight: true,
+        pieces: [
+          { day, startSec: block.startSec, endSec: 86_400 },
+          { day: nextDay, startSec: 0, endSec: nextPiece.endSec }
+        ]
+      }
+    }
+  }
+
+  if (block.startSec === 0) {
+    const prevBlocks = dayToBlocks(weekly[prevDay] || [], valType, defVal)
+    const prevPiece = prevBlocks.find((b) => b.endSec === 86_400 && b.value === block.value)
+    if (prevPiece) {
+      return {
+        startDay: prevDay,
+        startSec: prevPiece.startSec,
+        endDay: day,
+        endSec: block.endSec,
+        value: block.value,
+        isOvernight: true,
+        pieces: [
+          { day: prevDay, startSec: prevPiece.startSec, endSec: 86_400 },
+          { day, startSec: 0, endSec: block.endSec }
+        ]
+      }
+    }
+  }
+
+  return {
+    startDay: day,
+    startSec: block.startSec,
+    endDay: day,
+    endSec: block.endSec,
+    value: block.value,
+    isOvernight: false,
+    pieces: [{ day, startSec: block.startSec, endSec: block.endSec }]
+  }
 }
 
 // ── Trạng thái ────────────────────────────────────────────────────────────
