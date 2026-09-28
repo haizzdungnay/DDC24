@@ -1,0 +1,176 @@
+{
+  "evidenceLevel": "HOST",
+  "startedAt": "2026-09-28T06:03:05.635921Z",
+  "programs": 1,
+  "statementsPerProgram": 2047,
+  "periodMs": 10,
+  "instructionsPerProgram": 4095,
+  "activeBefore": "35811924-d997-4802-913d-b54b8c2f34b2",
+  "taskStateBefore": "STOPPED",
+  "project": {
+    "projectId": "5cbacb13-b9fb-4c7a-8575-70396731c05d",
+    "label": "T63-301 max-config 20260928T060305Z"
+  },
+  "check": {
+    "state": "PASSED",
+    "wallMs": 535.0,
+    "diagnostics": [],
+    "manifestSource": "checks.result_json (DB host)",
+    "budget": {
+      "baseStepMs": 10,
+      "maxProgramsEnabled": 16,
+      "maxProgramsTotal": 32,
+      "maxTaskBudgetPercent": 20,
+      "periods": [
+        {
+          "budgetUs": 1999,
+          "periodMs": 10,
+          "programCount": 1
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 50,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 100,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 500,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 1000,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 5000,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 10000,
+          "programCount": 0
+        },
+        {
+          "budgetUs": 1999,
+          "periodMs": 50000,
+          "programCount": 0
+        }
+      ],
+      "source": "PROFILE_CEILING",
+      "stepBudgetUs": 2000,
+      "worstCaseStepUs": 1999
+    },
+    "budgetUsPerProgram": [
+      1999
+    ],
+    "periodsMs": [
+      10
+    ],
+    "programCount": 1
+  },
+  "commission": {
+    "state": "SUCCEEDED",
+    "actualActive": "f83a20b8-3667-467b-ab69-041a8df8fc8f"
+  },
+  "enableWallMs": 25.0,
+  "observe": {
+    "seconds": 3.0,
+    "samples": [
+      {
+        "t_s": 0.01,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 1952,
+        "maxExecNs": 1952,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 1,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      },
+      {
+        "t_s": 0.52,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 34728,
+        "maxExecNs": 34728,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 2,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      },
+      {
+        "t_s": 1.03,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 34728,
+        "maxExecNs": 34728,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 2,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      },
+      {
+        "t_s": 1.54,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 42030,
+        "maxExecNs": 42030,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 3,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      },
+      {
+        "t_s": 2.05,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 42030,
+        "maxExecNs": 42030,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 3,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      },
+      {
+        "t_s": 2.56,
+        "taskState": "RUNNING",
+        "state": "RUNNING",
+        "lastExecNs": 42035,
+        "maxExecNs": 42035,
+        "overrunCount": 0,
+        "consecutiveOverruns": 0,
+        "runCount": 4,
+        "budgetUs": 199000,
+        "missedBaseStepCount": 0
+      }
+    ],
+    "firstFaultAfterEnableS": null,
+    "lastExecUsMedian": 42.03,
+    "maxExecUs": 42.035,
+    "stepBudgetUs": 2000,
+    "overrunCountEnd": 0,
+    "stateEnd": "RUNNING"
+  },
+  "restore": {
+    "state": "SUCCEEDED",
+    "requested": "35811924-d997-4802-913d-b54b8c2f34b2"
+  },
+  "activeAfter": "35811924-d997-4802-913d-b54b8c2f34b2",
+  "activeRestored": true,
+  "verdict": "WITHIN_BUDGET",
+  "finishedAt": "2026-09-28T06:03:10.054236Z",
+  "hostSeededActive": "35811924-d997-4802-913d-b54b8c2f34b2",
+  "requests": 44
+}
