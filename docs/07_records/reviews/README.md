@@ -1,9 +1,9 @@
 # Hồ sơ rà soát — chỉ mục
 
 **ID:** REC-REVIEW-INDEX-001
-**Phiên bản:** 1.30
+**Phiên bản:** 1.32
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-28 (dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.4: mọi PR sửa finding đã merge và bo lab đã lên `main@e3072983`)
+**Cập nhật:** 2026-09-28 (đăng ký báo cáo riêng `REC-FORLINX-PERF-PM-20260928` cho PM quyết định và bổ sung audit Forlinx vào `REC-PROG-RUNTIME-PERF-COMP-001` v1.2; trước đó cập nhật dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.4)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -39,7 +39,8 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Audit Modbus RTU — hiện trạng mã nguồn FE/BE/FW SOM](MODBUS_AUDIT_2026-09-25_SOURCE_STATUS.md) | 2026-09-25 | Record đối chiếu `36c1a863` (`REC-MBA-SRC-001`) | Kiến trúc 3 tiến trình, 3 đường dữ liệu; đường đọc chín, đường ghi dùng cờ mức không danh tính; đối chiếu 20 gap F-FW của thiết kế |
 | [Hiện trạng và đề xuất đại tu Program Property / Inspector](PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md) | 2026-09-09 | **PARTIAL / CHƯA MATCH `d.md` / READY FOR CONTROLLED PLANNING** (`REC-PGM02-PROP-INS-001`) | Rà FE→web-api→Core/FW-SOM theo G-12..G-21: 0/10 đạt đầy đủ; form Property bị lặp; Task/Enable/interface/metadata/reference còn gap; không cần đổi FW-SOM/STM32 cho Rev A |
 | [Authority trực quan Programming PGM-01..06](AUTH-UX-PROG-2026-09-08-01.md) | 2026-09-08 | **APPROVED / ACTIVE** (`AUTH-UX-PROG-2026-09-08-01`) | Gói FE Handoff PNG/HTML là authority composition; loại 15 SVG Programming sai; thay riêng `D61-06`; issue #556 đóng `NOT_PLANNED`; không claim As-Built/runtime/HIL/release |
-| [Hiệu năng Programming/runtime và khả năng cạnh tranh](PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md) | 2026-09-04 | **Source/HOST/TARGET exploratory đã rà; provenance live `PARTIAL`; HIL/release `NO-GO`** (`REC-PROG-RUNTIME-PERF-COMP-001` v1.1) | Hai lượt ARM64, compiler load và runtime live trên Forlinx; bảy finding gồm budget, blocking I/O, multi-core, Check scaling, missed release/health, mismatch identity/cycle và hai unit auto-restart; FakeMCU không phải physical HIL |
+| [Hiệu năng Programming/runtime và khả năng cạnh tranh](PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md) | 2026-09-04; audit 28/09 | **v1.2: snapshot 04/09 giữ riêng; §13 audit TARGET/OS/API/browser; provenance `PARTIAL`, chưa tối ưu/HIL/release** (`REC-PROG-RUNTIME-PERF-COMP-001`) | §13: 61 mẫu/323,62 s, 200 GET, log giữ khoảng 21h54; IOBus late-wake tới 16,345 ms, Core vi phạm jitter, 206 lỗi snapshot Point, API status chờ 100 ms, log dày và assets không nén; phương án chưa deploy |
+| [Báo cáo hiệu năng Forlinx trình PM](FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md) | 2026-09-28 | **In Review, D01–D07 CHỜ QUYẾT ĐỊNH** (`REC-FORLINX-PERF-PM-20260928` 1.0) | Hiện trạng theo audit, 9 nhóm finding, phương án/lợi ích/rủi ro, trình tự/tiêu chí đề xuất và phiếu PM giao owner/lịch/phạm vi; chưa deploy tối ưu |
 | [Gap hệ Point & I/O vs đề bài 3 nguồn Point](POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **b2.3 — APPROVED, 36 issue đã tạo (#375–#410), 33 đã phân công** (`REV-PIO-3SRC-001`) | Chấm Physical/Virtual/Modbus → Canonical Point Catalog → Binding theo 34 mục + 16 UC. Kiến trúc được chấp thuận, không redesign nền. 29 finding (7 Cao — `F-PIO-029` slot `ext` không ổn định). Kế hoạch 36 issue / 7 đợt / 82,0 ngày-người kèm `AC-PIO-ID-01/02/03` trong `ISS-PIO-31`. Đường găng P0 khoá: #375 → #376 → #377 → #378/#379 → #381 → #382. Ba quyết định Owner: DI = A, `AO` giữ trong hợp đồng, `Program Disable` ≠ `Controller Fault`. 33 issue FE/BE gán `@haizzdungnay` |
 | [Gap ST Editor vs chuẩn IEC 61131-3-aligned](ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **APPROVED WITH CONDITIONS** (`REV-STED-IEC-001`) | 18 gate + 12 UC. Lõi ngôn ngữ đạt, đường chẩn đoán từ compiler tới người dùng hỏng ở cả ba tầng. 15 finding, 20 issue; phạm vi ngôn ngữ đã ký bằng `ADR-054` |
 | [Thi hành `DEV-PROG-001..018` giao diện Programming](PROGRAMMING_UI_DEV_PROG_001_018_2026-08-28.md) | 2026-08-28 | Đã thi hành 18/18 (`REC-PGM02-DEVPROG-001`) | 18 mục review giao diện `/eng/programming/programs` của chủ sở hữu; một mục cần ký lại |
@@ -199,3 +200,5 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.28 | 2026-09-27 | Đăng ký `REC-DDC-FIELD-USE-20260927`: 21 vấn đề nâng cấp/cải tiến rút từ sử dụng thực tế trên bo lab; không đổi authority, runtime hoặc release gate |
 | 1.29 | 2026-09-28 | Cập nhật trạng thái dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.3 của record (#795/#797/#803 đã merge, U-07/U-18 ở PR #804); không đổi authority, runtime hoặc release gate |
 | 1.30 | 2026-09-28 | Cập nhật dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.4 (PR #804 đã merge, bo lab lên `main@e3072983`); không đổi authority, runtime hoặc release gate |
+| 1.31 | 2026-09-28 | Nâng record hiệu năng v1.2 bằng audit OS/Core, API/Modbus và browser trên target; giữ riêng snapshot 04/09, chưa deploy phương án tối ưu hoặc nâng release gate |
+| 1.32 | 2026-09-28 | Đăng ký báo cáo riêng trình PM review/quyết định cải thiện hiệu năng Forlinx; giữ trạng thái In Review và D01–D07 chưa phê duyệt |
