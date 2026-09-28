@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Changed — Compiler ST dùng chung khung slot cho lời gọi FUNCTION đã kết thúc (Issue #799, U-08, 2026-09-28)
+
+- **Phạm vi:** `apps/core/application/st/st_compile.cpp`; test mới `apps/core/application/st/tests/test_st_function_frame.cpp` (+ `apps/core/CMakeLists.txt`); `SW-ST-FN-FRAME-SHARING-MK-DDC-24-VI` 0.2; `DECISIONS.md` (Lịch sử cập nhật).
+- **Triệu chứng:** `PRG_DO16_MODBUS` dùng 467/512 slot ghi (91 %); mỗi lời gọi FUNCTION người dùng cấp slot mới cho kết quả và mọi biến của hàm, nên số slot tăng theo số lời gọi.
+- **Nguyên nhân gốc:** `emit_user_function` cấp khung bằng `allocate_variable` (chỉ tăng `next_slot_`, không bao giờ trả) với tên `__fn.<TÊN>.<n>` cho từng lời gọi.
+- **Cách sửa (chủ dự án chấp thuận Q1–Q4 theo đề xuất):** khung cấp theo ngăn xếp sau vùng tạm (`allocate_frame_slot`), trả khi lời gọi kết thúc; kết quả **chép ra slot tạm của người gọi** trước khi trả khung (tránh bẫy `f(f(x), f(y))`); biến khung không vào bảng biến artifact (loader cấm hai biến cùng slot); `kMaxWritableSlots` giữ 512.
+- **Kiểm chứng:** 3 test mới — test "20 lời gọi tuần tự tốn bằng 1 lời gọi" đỏ trên mã cũ; hai test lồng nhau đỏ trên biến thể dùng chung khung nhưng bỏ bước chép kết quả, xanh trên bản sửa. `PRG_DO16_MODBUS` (`--check-only`): slot ghi 467 → 433, lệnh 1576 → 1587. `mkddc-st-sim` 300 s ảo (3001 chu kỳ, 163 lần đổi đầu ra): CSV cũ/mới giống hệt từng byte. C++ `cmake --fresh` (Modbus+BACnet+HMI ON) build exit 0, `ctest` 1661/1661; `verify_programming_g1_contracts.py` 10/10 PASS, `generate_programming_profile.py --check` PASS; `go vet` exit 0, `go test ./... -count=1` 21 package ok.
+- **Refs:** Issue #799, `REC-DDC-FIELD-USE-20260927` U-08.
+
 ### Added — Bản thiết kế/đặc tả chờ duyệt cho U-04, U-08, U-10, U-12 và phiếu quyết định PID U-13 (Issue #798–#802, 2026-09-28)
 
 - **Phạm vi:** chỉ tài liệu. Thêm `docs/02_design/software/{TRACE_RELEASE_COHERENT_SAMPLING_DESIGN,ST_FUNCTION_FRAME_SHARING_DESIGN,ST_LANGUAGE_BITWISE_CONSTANT_INIT_DESIGN}_MK-DDC-24_VI.md`, `docs/02_design/software/SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md`, `docs/07_records/reviews/PID_REVIEW_DECISION_REQUEST_2026-09-28.md`; cập nhật chỉ mục `docs/02_design/software/README.md`, `REC-DDC-FIELD-USE-20260927` 1.5 (§5) và `GUIDE-PROG-ST-DO16-001` 1.6 (ràng buộc 10).

@@ -171,7 +171,6 @@ private:
     std::map<std::string, uint32_t> linked_instruction_counts_;
     std::map<std::string, const StPublishedSignalContract*> signals_;
     std::string program_identity_;
-    uint32_t function_call_serial_ = 0;
     uint16_t next_slot_ = 0;
     /* Slot tạm dùng cho kết quả trung gian của biểu thức. Cấp phát theo kiểu
      * ngăn xếp: tăng khi vào biểu thức con, trả lại khi xong, nên số slot tạm
@@ -179,6 +178,13 @@ private:
     uint16_t temp_base_ = 0;
     uint16_t temp_top_ = 0;
     uint16_t temp_high_water_ = 0;
+    /* Issue #799 — khung của lời gọi FUNCTION người dùng cấp theo NGĂN XẾP,
+     * đặt sau vùng tạm. Hai lời gọi không lồng nhau dùng cùng vị trí slot:
+     * FUNCTION thuần (`ST-POU-002`) không mang trạng thái qua lời gọi và mọi
+     * biến khung được MOV lại mỗi lần gọi. Số slot của vùng này bằng mức nước
+     * cao nhất (độ sâu lồng), không bằng tổng số lời gọi như bản inline cũ. */
+    uint16_t frame_base_ = 0;
+    uint16_t frame_top_ = 0;
 
     struct ConstKey { StValue v; uint16_t slot; };
     std::vector<ConstKey> consts_;
@@ -236,6 +242,26 @@ private:
         variable.init = default_init(type);
         scope->vars[public_name] = slot;
         out_->variables.push_back(std::move(variable));
+        return true;
+    }
+
+    /* Một slot trong khung FUNCTION đang mở (Issue #799). Không ghi
+     * `StIrVariable`: nhiều lời gọi dùng chung slot này, loader cấm hai biến
+     * cùng slot, và giá trị khung không có nghĩa ngoài lời gọi — giống vùng
+     * tạm. `next_slot_` theo mức nước cao nhất để `var_slot_count` đúng. */
+    bool allocate_frame_slot(Scope* scope, const std::string& public_name,
+                             int line, int column)
+    {
+        const uint32_t end = static_cast<uint32_t>(frame_top_) + 1;
+        if (end > st_ir::kMaxVarSlots)
+            return fail(st_diag_code::kPouInstanceLayout,
+                        "inline POU needs " + std::to_string(end) +
+                            " writable slots, limit is " +
+                            std::to_string(st_ir::kMaxVarSlots),
+                        line, column);
+        scope->vars[public_name] = frame_top_;
+        frame_top_ = static_cast<uint16_t>(end);
+        if (frame_top_ > next_slot_) next_slot_ = frame_top_;
         return true;
     }
 
@@ -342,7 +368,10 @@ private:
         temp_base_ = next_slot_;
         temp_top_ = temp_base_;
         uint16_t ignored = 0;
-        return reserve_slots(st_limits::kMaxExprDepth + 8, &ignored);
+        if (!reserve_slots(st_limits::kMaxExprDepth + 8, &ignored)) return false;
+        frame_base_ = next_slot_;
+        frame_top_ = frame_base_;
+        return true;
     }
 
     /* ---- Slot tạm ---- */
@@ -680,12 +709,12 @@ private:
             arguments.push_back(slot);
         }
 
+        /* Đẩy khung SAU khi mọi đối số đã được đánh giá vào slot của người
+         * gọi: lời gọi lồng trong đối số đã đẩy/trả khung của nó xong. */
         Scope function_scope;
-        const std::string prefix = "__fn." + function.name + "." +
-                                   std::to_string(function_call_serial_++);
-        if (!allocate_variable(&function_scope, function.name, prefix + ".return",
-                               function.return_type, StStorage::VAR_LOCAL,
-                               expression.line, expression.column))
+        const uint16_t frame_mark = frame_top_;
+        if (!allocate_frame_slot(&function_scope, function.name,
+                                 expression.line, expression.column))
             return false;
         const uint16_t return_slot = function_scope.vars.at(function.name);
         emit(StOp::MOV, type_raw(function.return_type), return_slot,
@@ -693,9 +722,8 @@ private:
 
         std::size_t input_index = 0;
         for (const StVarDecl& variable : function.vars) {
-            if (!allocate_variable(&function_scope, variable.name,
-                                   prefix + "." + variable.name, variable.type,
-                                   StStorage::VAR_LOCAL, variable.line, variable.column))
+            if (!allocate_frame_slot(&function_scope, variable.name,
+                                     variable.line, variable.column))
                 return false;
             const uint16_t destination = function_scope.vars.at(variable.name);
             if (variable.storage == StStorage::VAR_INPUT) {
@@ -722,8 +750,15 @@ private:
             out_->source_map[index].line = static_cast<uint16_t>(expression.line);
             out_->source_map[index].column = static_cast<uint16_t>(expression.column);
         }
+        /* Chép kết quả ra slot tạm của NGƯỜI GỌI rồi mới trả khung. Trả thẳng
+         * `return_slot` như bản inline cũ sẽ sai ngay khi khung được dùng
+         * chung: trong `f(f(x), f(y))`, `f(y)` đẩy khung ở đúng vị trí vừa trả
+         * và ghi đè kết quả của `f(x)` trước khi lời gọi ngoài kịp đọc. */
+        const uint16_t result = push_temp();
+        emit(StOp::MOV, type_raw(function.return_type), result, return_slot);
         note_linked(function, static_cast<uint32_t>(out_->code.size()) - begin);
-        *out_slot = return_slot;
+        frame_top_ = frame_mark;
+        *out_slot = result;
         return true;
     }
 
