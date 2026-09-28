@@ -688,6 +688,28 @@ TEST(ScanLoop, T63_005_MinuteLogCarriesSeqlockFailAndWakeHist)
         EXPECT_NE(log.find(key), std::string::npos) << "khoá cũ phải còn: " << key;
 }
 
+/* T63-102: `seqlock_fail` của `core.jitter` in đủ 64 bit — cùng kịch bản log
+ * phút của T63-005 nhưng bộ đếm bắt đầu sát biên 2^32. */
+TEST(ScanLoop, T63_102_MinuteLogPrintsSeqlockFailBeyondThirtyTwoBits)
+{
+    Fixture f;
+    f.metrics.set_seqlock_fail_for_test(0xFFFFFFFFull);
+    KX_WRITE_BEGIN(&f.shm);
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 5;
+    time.wake_delay_ns = {0, 0, 0, 61000 * kScanMs};
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, nullptr, nullptr);
+    const std::string log = testing::internal::GetCapturedStderr();
+    KX_WRITE_END(&f.shm);
+    /* 4 step đọc hỏng trước log phút: 2^32 − 1 + 4 = 4294967299. */
+    EXPECT_NE(log.find(" base_step_us=10000 seqlock_fail=4294967299\n"), std::string::npos) << log;
+}
+
 TEST(ScanLoop, NoOverrunWithLightLoad)
 {
     Fixture f;

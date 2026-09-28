@@ -205,7 +205,23 @@ INFO  core.wake_hist le25=.. le50=.. le100=.. le200=.. le500=.. gt500=.. base_st
 | Overhead | HOST | `on_wake+advance` thêm ≈ 2 ns mỗi base step; `step()` không đổi. `mkddc-core-scan-bench --offload` p50 total 25,6–28,2 → 26,9–28,3 µs, nằm trong nhiễu |
 | Đo sạch 2 × 30 phút trên bo: có còn vi phạm > 100 µs ⇒ T63-204 `N/A` hay mở G-D4; delta `seqlock_fail` ⇒ nhánh Core của T63-102 | TARGET | **NOT_RUN** — xem §3 |
 
-## 9. SHA-256
+## 9. T63-102 — nhánh Core chờ số đo `seqlock_fail`
+
+Plan 63 AC T63-102: Core chỉ áp retry giới hạn ≤ 20 µs khi T63-001 đo được
+`seqlock_fail` **> 0** trên bo; nếu **= 0** thì giữ nguyên mã. Số trên bo chưa
+có (TARGET NOT_RUN), nên commit T63-102 **giữ nguyên** retry Core và chỉ nới bộ
+đếm lên 64 bit. Phương án cho nhánh "> 0" được lưu ở đây để áp khi có số:
+
+| File | Nội dung |
+|---|---|
+| `t63-102/T63-102-core-retry-20us.patch` | `apps/core/adapters/ipc/iobus_reader.{hpp,cpp}` + test: quay tới khi đọc được hoặc hết 20 µs (chỉ lệnh relax CPU, không `sched_yield`/ngủ vì luồng FIFO80 ở CPU riêng), đồng hồ chỉ đọc khi lần thử đầu trượt, fence acquire trước lần đọc seq thứ hai, `SeqlockReadStats`; fail-safe giữ nguyên (dùng snapshot cũ + `inc_seqlock_fail`). HOST khi áp tạm: build 0, 66/66 test nhóm reader/scan, `--gtest_repeat=200` 0 đỏ |
+
+Cách dùng: `git apply docs/07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/t63-102/T63-102-core-retry-20us.patch`
+chỉ khi delta `core.jitter seqlock_fail` trong 2 × 30 phút đo sạch > 0; sau đó
+đo lại (delta phải về 0, `core.step_wcet io_us` tăng ≤ ≈ 20 µs ở phút xấu
+nhất, không có `core.base_step_missed` mới).
+
+## 10. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

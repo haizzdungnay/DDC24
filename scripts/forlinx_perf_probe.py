@@ -60,8 +60,9 @@ UNITS = (
     "mkddc-reload-helper",
     "mkddc-time-helper",
 )
-# Unit có log phút được parse sau cửa sổ.
-LOG_UNITS = ("mkddc-core", "mkddc-iobus", "mkddc-web-pi")
+# Unit có log phút được parse sau cửa sổ. HMI là service feature-gated: bo không
+# chạy HMI thì journal trả rỗng, không phải lỗi.
+LOG_UNITS = ("mkddc-core", "mkddc-iobus", "mkddc-web-pi", "mkddc-hmi")
 
 SAMPLE_PERIOD_S = 5  # Plan 63 §6.3: CPU/RSS, MemAvailable mỗi 5 s.
 CLK_TCK = 100  # Buildroot aarch64: sysconf(_SC_CLK_TCK) = 100.
@@ -84,6 +85,13 @@ CUMULATIVE_KEYS = {
     ("core.jitter", "missed_steps"),
     ("core.jitter", "seqlock_fail"),
     ("iobus.jitter", "overruns"),
+    # T63-102: counter reader seqlock của HMI, tích luỹ theo tiến trình HMI.
+    ("hmi.shm_reader", "io_reads"),
+    ("hmi.shm_reader", "io_retries"),
+    ("hmi.shm_reader", "io_failures"),
+    ("hmi.shm_reader", "plc_reads"),
+    ("hmi.shm_reader", "plc_retries"),
+    ("hmi.shm_reader", "plc_failures"),
 }
 
 
@@ -1076,6 +1084,8 @@ FIXTURE_JOURNAL = """2026-09-28T02:54:11+0000 som mkddc-core[1]: INFO  core.jitt
 2026-09-28T02:55:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=2.62 max_us=8629.30 avg_us=19.68 overruns=58 count=30001
 2026-09-28T02:56:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=6.41 max_us=11594.74 avg_us=28.74 overruns=26344 count=30000
 2026-09-28T02:56:31+0000 som mkddc-iobus[2]: INFO  iobus.loop_timing wake_late_max_us=51 work_max_us=16000 io_resp_gap_max_us=16600 late_events=1 catchup_iterations=24 iterations=30000 io_resp_count=29990 period_us=2000
+2026-09-28T02:56:31+0000 som mkddc-hmi[4]: INFO  hmi.shm_reader io_reads=6000 io_retries=10 io_failures=0 io_max_wait_us=120 plc_reads=6000 plc_retries=4 plc_failures=0 plc_max_wait_us=60
+2026-09-28T02:57:31+0000 som mkddc-hmi[4]: INFO  hmi.shm_reader io_reads=12000 io_retries=15 io_failures=1 io_max_wait_us=1003 plc_reads=12000 plc_retries=9 plc_failures=0 plc_max_wait_us=60
 2026-09-28T02:56:32+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/points status=200 dur_ms=12 remote=10.0.0.2:5000
 2026-09-28T02:56:32+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/points status=503 dur_ms=3 remote=10.0.0.2:5000
 2026-09-28T02:56:33+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/system/status status=200 dur_ms=115 remote=10.0.0.2:5001
@@ -1156,13 +1166,16 @@ def selftest() -> int:
     expect("log: iobus.loop_timing work_max", minute["iobus.loop_timing"]["work_max_us"]["max"] == 16000.0)
     expect("log: loop_timing không coi là tích luỹ", "delta" not in minute["iobus.loop_timing"]["late_events"])
     expect("log: bỏ dòng http", "http" not in minute)
+    # T63-102: counter HMI tích luỹ ⇒ delta.
+    expect("log: hmi io_failures delta 1", minute["hmi.shm_reader"]["io_failures"]["delta"] == 1.0)
+    expect("log: hmi io_max_wait max", minute["hmi.shm_reader"]["io_max_wait_us"]["max"] == 1003.0)
     access = summarize_access_log(lines)
     points = access["routes"]["GET /api/v1/points"]
     expect("access: 2 dòng /points", points["n"] == 2)
     expect("access: một 503", points["statuses"].get("503") == 1)
     expect("access: tổng 3 dòng", access["access_lines"] == 3)
     vol = count_lines_per_hour(lines, 1800.0)
-    expect("volume: 10 dòng/30 phút = 20/giờ", vol["lines_per_hour"] == 20.0)
+    expect("volume: 12 dòng/30 phút = 24/giờ", vol["lines_per_hour"] == 24.0)
 
     declared = declared_periods(FIXTURE_REVISION)
     expect("period: khai báo P1=10", declared.get("P1") == 10)
