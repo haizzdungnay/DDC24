@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Fixed — Lane `e2e-real` xanh trở lại: ISS-PGM03-08 (#790), T59-505 (#786), build iobus tắt Modbus (2026-09-28)
+
+- **Phạm vi:** `apps/iobus/adapters/modbus_rtu/bus_worker.cpp`; `apps/web-ui/src/features/programming/api/queries.ts` + `queries.test.tsx`; `apps/web-ui/e2e/programming-real.spec.ts`.
+- **Build iobus (chặn cả lane):** `scripts/run_programming_real_e2e_stack.sh` dựng C++ với Modbus tắt; `find_write_target`, `write_needs_readback`, `write_expired` chỉ được gọi trong nhánh `MKDDC_ENABLE_MODBUS` nên `-Werror=unused-function` làm đỏ build trước khi chạy được test nào. Bọc ba hàm trong `#ifdef MKDDC_ENABLE_MODBUS`; build Modbus OFF và ON đều exit 0.
+- **#790 — triệu chứng:** ISS-PGM03-08 đỏ khi chạy cả lane (3 request `point-catalog` thay vì 2), xanh khi chạy riêng.
+- **#790 — nguyên nhân gốc (đo bằng trace, không phải giả thuyết remount của Issue):** request thứ ba là `GET /point-catalog` **không `limit`** của catalog nạp trễ trong `EditorPane` (`useLazyProgrammingPointCatalog`), tự nạp khi Draft có Binding. Draft seed chỉ có Binding sau khi ISS-PGM03-07 chạy trước, nên chỉ đỏ khi chạy cả lane. Kèm lỗi thật: hook đó đọc đúng một trang (máy chủ cắt 500) và bỏ `nextCursor`, nên canvas FBD/panel chèn nhanh không giải mã được điểm thứ 501 trở đi.
+- **#790 — cách sửa:** hook nạp trễ rút cạn mọi trang với `limit=500` và cùng chốt chặn của `useProgrammingPointCatalog` (cursor lặp, trang không tiến, quá số trang, trang hỏng), vẫn one-shot. Test e2e đo theo chuỗi phân trang của từng consumer: mỗi chuỗi đúng hai request (trang đầu + đúng cursor do trang đầu cấp), tối đa hai consumer, không cursor mồ côi.
+- **#786 — quyết định:** phương án 1 của Issue — giữ hợp đồng `4a2e7ead` (Seal chỉ ghim/phát hành thư viện PROJECT khi Program thật sự dùng). Fixture T59-505 nay có `AHU_MAIN` gọi `SCALE_LIN` (dependency được suy tự động khi Lưu, U-06); các test khác giữ `SOURCE_R1`.
+- **#786 — hai điểm lạc hậu lộ ra khi test lần đầu chạy qua bước Seal kể từ `4a2e7ead`:** helper `commission` chỉ liệt kê 8 khoá impact, thiếu `physicalMappingChanges`/`virtualPointChanges`/`modbusMappingChanges`/`writableOutputsAffected` (Commission nhận 422 `PRG-ERR-ACK-MISSING-001`) — nay theo đúng enum đóng `impactAckKeys`; nút "Thêm chương trình ST" đã được thay bằng menu "Mới" → "Program · ST" + hộp thoại đặt tên — cập nhật bước UI, payload wire giữ nguyên.
+- **Kiểm chứng:** `npm run test:e2e:programming-real` (lane đầy đủ, backend Go + compiler/packager + Core simulator thật): trước sửa **2 failed / 5 skipped / 8 passed**, sau sửa **14 passed / 1 skipped / 0 failed**, exit 0 (ca skip còn lại là điều kiện thiết kế: Check mới nhất khác Revision đang chạy); 2 test hook mới đỏ trên mã cũ, xanh sau sửa; vitest 267 file / 3495 test pass; `npm run lint`, `npm run build` exit 0; C++ `cmake --fresh` (Modbus+BACnet+HMI ON) configure/build exit 0, `ctest` 1658/1658 pass (1 skip memlock do môi trường). Không chạy trên bo.
+- **Refs:** Issue #790, Issue #786, `4a2e7ead`, `T61-202`, U-06.
+
 ### Added — Plan 63 khắc phục hiệu năng Forlinx, cập nhật record hiệu năng và một Issue theo dõi (2026-09-28)
 
 - Phạm vi: chỉ tài liệu. Thêm `docs/03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md` (`PLAN-PERF-FORLINX-063` 1.1, Approved G0); nâng `REC-PROG-RUNTIME-PERF-COMP-001` lên 1.3 (thêm §14) và `REC-FORLINX-PERF-PM-20260928` lên 1.2; đăng ký ở `docs/README.md`, `docs/03_implementation/README.md`, `docs/07_records/reviews/README.md`. Không sửa mã, cấu hình, Program hoặc deploy.

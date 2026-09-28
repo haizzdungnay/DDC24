@@ -32,6 +32,18 @@ Fan := TRUE;
 END_PROGRAM
 `
 const SOURCE_R2 = SOURCE_R1.replace('Fan := TRUE;', 'Fan := FALSE;')
+/* Issue #786 — T59-505 khẳng định Seal phát hành thư viện PROJECT (`SCALE_LIN`
+   PUBLISHED) và Commission phải ack `controlLibrary`. Từ `4a2e7ead` Seal chỉ ghim
+   và phát hành thư viện khi Program THẬT SỰ dùng nó (dependency của POU hoặc
+   `library.projectLibraryRevisionId`); thư viện không ai gọi đúng là ở lại
+   DRAFT. `SOURCE_R1` cũ không gọi `SCALE_LIN`, nên kỳ vọng "PUBLISHED" của test
+   là kỳ vọng của hợp đồng cũ. Bản dưới gọi `SCALE_LIN` thật; Lưu Draft tự suy
+   dependency từ lời gọi (U-06, `library_dependency_inference.go`). Giá trị
+   `SUPPLY_TEMP` công bố không đổi, nên phần Signal/Runtime giữ nguyên ý nghĩa.
+   Chỉ T59-505 có entry `SCALE_LIN`, nên các test khác giữ `SOURCE_R1`. */
+const SOURCE_T505_R1 = SOURCE_R1
+  .replace('END_VAR\nSIGNAL_PUBLISH', 'END_VAR\nVAR\n  ScaledTemp : REAL;\nEND_VAR\nScaledTemp := SCALE_LIN(SupplyTemp);\nSIGNAL_PUBLISH')
+const SOURCE_T505_R2 = SOURCE_T505_R1.replace('Fan := TRUE;', 'Fan := FALSE;')
 
 type JsonObject = Record<string, unknown>
 
@@ -257,6 +269,11 @@ async function commission(
   const changes = await responseJSON(changesResponse, 200)
   const impact = changes.impact as JsonObject
   console.info('[T59-811] changes keys=', Object.keys(changes), 'impact keys=', Object.keys(impact ?? {}))
+  /* Enum ĐÓNG của khoá ack, khớp `impactAckKeys` ở
+     `apps/web-api/internal/programming/application/operations.go`. Bản cũ chỉ
+     liệt kê 8 khoá; bốn nhóm thêm sau (ánh xạ vật lý/VP/Modbus, đầu ra ghi được)
+     bị bỏ qua nên Commission có Binding vật lý nhận 422 `PRG-ERR-ACK-MISSING-001`
+     (Issue #786, lộ ra khi T59-505 lần đầu chạy tới đây kể từ `4a2e7ead`). */
   const keys = [
     'retain',
     'activeOverrides',
@@ -265,7 +282,11 @@ async function commission(
     'publishedSignals',
     'controlLibrary',
     'programSet',
-    'enableIntent'
+    'enableIntent',
+    'physicalMappingChanges',
+    'virtualPointChanges',
+    'modbusMappingChanges',
+    'writableOutputsAffected'
   ]
   const acknowledgements = keys.filter((key) => {
     const group = impact[key] as JsonObject
@@ -554,7 +575,15 @@ test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và c
     }), 200)
   }
 
-  const catalogResponses: Array<{ url: string; body: JsonObject }> = []
+  /* Issue #790 — trang này có HAI consumer của `GET /point-catalog`: bảng Ánh xạ
+     (`useProgrammingPointCatalog`) và catalog nạp trễ của `EditorPane`, tự nạp
+     khi Draft đã có Binding. Draft seed chỉ có Binding sau khi ISS-PGM03-07 chạy
+     trước, nên bản đếm tổng "đúng 2 request" đỏ khi chạy cả lane (3 request) và
+     xanh khi chạy riêng. Đo đúng bất biến cần đo: MỖI consumer rút cạn 504 mục
+     bằng đúng hai request (trang đầu + đúng một trang cursor do chính trang đầu
+     cấp), và không có consumer nào đọc thiếu trang. Thứ tự ghi là thứ tự phản
+     hồi đến, gán đồng bộ trước khi đọc body. */
+  const catalogResponses: Array<{ order: number; url: string; body?: JsonObject }> = []
   const consoleErrors: string[] = []
   const failedRequests: string[] = []
   const serverErrors: string[] = []
@@ -564,10 +593,28 @@ test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và c
     const url = new URL(response.url())
     if (response.status() >= 500) serverErrors.push(`${response.status()} ${url.pathname}`)
     if (url.pathname !== '/api/v1/programming/point-catalog' || response.status() !== 200) return
-    void response.json().then((body: JsonObject) => {
-      catalogResponses.push({ url: response.url(), body })
-    })
+    const entry: { order: number; url: string; body?: JsonObject } = { order: catalogResponses.length, url: response.url() }
+    catalogResponses.push(entry)
+    void response.json().then((body: JsonObject) => { entry.body = body })
   })
+  /* Ghép phản hồi thành chuỗi phân trang: request không cursor mở chuỗi mới,
+     request có cursor nối vào chuỗi mà trang cuối cấp đúng cursor đó. Cursor
+     không ai cấp là "mồ côi" — dấu hiệu consumer đọc lệch generation. */
+  const catalogChains = () => {
+    const chains: Array<typeof catalogResponses> = []
+    const orphans: string[] = []
+    for (const entry of catalogResponses) {
+      const cursor = new URL(entry.url).searchParams.get('cursor')
+      if (cursor === null) { chains.push([entry]); continue }
+      const owner = chains.find((chain) => {
+        const last = chain[chain.length - 1]
+        return last.body !== undefined && last.body.nextCursor === cursor
+      })
+      if (owner) owner.push(entry)
+      else orphans.push(entry.url)
+    }
+    return { chains, orphans }
+  }
 
   await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
   const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
@@ -578,26 +625,34 @@ test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và c
   }
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
   await expect(page.getByText('Catalog 504 · đã đủ', { exact: true })).toBeVisible()
-  await expect.poll(() => catalogResponses.length, {
-    message: 'UI phải đọc đúng hai trang trước khi công bố complete'
-  }).toBe(2)
+  // Chờ mọi phản hồi đã đọc xong body và mọi chuỗi đã tới trang cuối.
+  await expect.poll(() => {
+    const { chains, orphans } = catalogChains()
+    const settled = catalogResponses.every((entry) => entry.body !== undefined) &&
+      chains.every((chain) => (chain[chain.length - 1].body?.nextCursor ?? null) === null)
+    return settled ? { chainLengths: chains.map((chain) => chain.length), orphans } : 'đang rút trang'
+  }, {
+    message: 'mỗi consumer phải rút cạn Catalog bằng đúng hai trang trước khi công bố complete'
+  }).toEqual({ chainLengths: expect.arrayContaining([2]), orphans: [] })
+  const { chains } = catalogChains()
+  // Bảng Ánh xạ + tối đa một lần nạp trễ của EditorPane; mỗi chuỗi đúng hai trang.
+  expect(chains.length).toBeGreaterThanOrEqual(1)
+  expect(chains.length).toBeLessThanOrEqual(2)
+  for (const chain of chains) {
+    expect(chain.map((entry) => new URL(entry.url).searchParams.get('limit'))).toEqual(['500', '500'])
+  }
 
-  const first = catalogResponses.find((entry) => !new URL(entry.url).searchParams.has('cursor'))
-  const second = catalogResponses.find((entry) => new URL(entry.url).searchParams.has('cursor'))
-  expect(first, 'thiếu request trang đầu không mang cursor').toBeTruthy()
-  expect(second, 'thiếu request trang sau').toBeTruthy()
-  const firstURL = new URL(first!.url)
-  const secondURL = new URL(second!.url)
-  expect(firstURL.searchParams.get('limit')).toBe('500')
+  const [first, second] = chains[0]
+  const firstURL = new URL(first.url)
+  const secondURL = new URL(second.url)
   expect(firstURL.searchParams.has('cursor')).toBe(false)
-  expect(secondURL.searchParams.get('limit')).toBe('500')
-  expect(secondURL.searchParams.get('cursor')).toBe(first!.body.nextCursor)
+  expect(secondURL.searchParams.get('cursor')).toBe(first.body!.nextCursor)
 
-  const firstItems = first!.body.items as JsonObject[]
-  const secondItems = second!.body.items as JsonObject[]
+  const firstItems = first.body!.items as JsonObject[]
+  const secondItems = second.body!.items as JsonObject[]
   expect(firstItems).toHaveLength(500)
   expect(secondItems).toHaveLength(4)
-  expect(second!.body.nextCursor ?? null).toBeNull()
+  expect(second.body!.nextCursor ?? null).toBeNull()
   const allItems = [...firstItems, ...secondItems]
   const keys = new Set(allItems.map((item) =>
     `${String(item.category)}\u0000${String(item.deviceId ?? '')}\u0000${String(item.pointId)}`))
@@ -736,7 +791,7 @@ test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Tra
       operations: [
         {
           op: 'upsertProgram',
-          program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_R1 }
+          program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_T505_R1 }
         },
         {
           op: 'upsertSignal',
@@ -869,7 +924,10 @@ test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Tra
   ])
   const publishedLibraryRevisionId = (publishedLibrary.items as JsonObject[])[0].libraryRevisionId as string
   expect(publishedLibraryRevisionId).toMatch(/^[0-9a-f-]{36}$/)
-  await commission(request, token, 'none', r1.revisionID, r1.checkID, ['publishedSignals', 'programSet', 'controlLibrary'])
+  /* Issue #786 — Binding `SupplyTemp → UI-01` là thay đổi ánh xạ vật lý thật so
+     với 'none': impact phải báo `physicalMappingChanges` PRESENT. */
+  await commission(request, token, 'none', r1.revisionID, r1.checkID,
+    ['publishedSignals', 'programSet', 'controlLibrary', 'physicalMappingChanges'])
 
   const enableResponse = await request.put(
     `/api/v1/programming/projects/${projectID}/programs/${PROGRAM_ID}/runtime-intent`,
@@ -918,7 +976,7 @@ test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Tra
       operations: [
         {
           op: 'upsertProgram',
-          program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_R2 }
+          program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_T505_R2 }
         }
       ]
     }
@@ -1039,7 +1097,7 @@ test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Tra
   const pouTree = page.getByRole('navigation', { name: 'Cây POU' })
   await expect(page.getByRole('navigation', { name: 'Cây ứng dụng' })).toHaveCount(0)
   await pouTree.getByRole('button', { name: 'Mở AHU_MAIN' }).click()
-  await expect(page.getByLabel('Mã nguồn ST của AHU_MAIN')).toHaveValue(SOURCE_R2)
+  await expect(page.getByLabel('Mã nguồn ST của AHU_MAIN')).toHaveValue(SOURCE_T505_R2)
 
   // Hồi quy bắt trên Chrome DevTools: ST+ từng serialize cả view model
   // (`executionOrder`/`functionalTags`) và dùng tên có khoảng trắng, khiến
@@ -1051,7 +1109,15 @@ test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Tra
     return response.request().method() === 'PATCH' &&
       url.pathname === `/api/v1/programming/projects/${projectID}/draft`
   })
-  await page.getByTitle(/Thêm chương trình ST|Add ST program/i).click()
+  /* Issue #786 — nút "Thêm chương trình ST" cũ đã được thay bằng menu "Mới" của
+     Cây POU (Program/Function/Function Block × ST/FBD) và hộp thoại đặt tên.
+     Bước này không được chạy tới kể từ `4a2e7ead` nên không ai thấy nó lạc hậu.
+     Payload trên wire giữ nguyên hợp đồng (`upsertProgram` + `setTask`). */
+  await page.getByRole('button', { name: 'Mới', exact: true }).click()
+  await page.getByRole('menu', { name: 'Tạo POU mới' }).getByRole('menuitem', { name: 'Program · ST' }).click()
+  const createDialog = page.getByRole('dialog', { name: 'Tạo chương trình mới' })
+  await createDialog.getByLabel('Tên POU').fill('NewProgram')
+  await createDialog.getByRole('button', { name: 'Tạo', exact: true }).click()
   const uiDraftMutation = await uiDraftMutationResponse
   expect(uiDraftMutation.status(), await uiDraftMutation.text()).toBe(200)
   const uiMutationBody = uiDraftMutation.request().postDataJSON() as JsonObject

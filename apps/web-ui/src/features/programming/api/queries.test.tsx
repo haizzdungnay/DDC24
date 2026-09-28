@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   useLazyProgrammingLibraryCatalog,
+  useLazyProgrammingPointCatalog,
   useProgrammingLibraryPaged,
   useProgrammingRevision,
   useProgrammingRevisionComparison,
@@ -507,6 +508,54 @@ describe('useLazyProgrammingLibraryCatalog — nạp trễ nhưng ĐẦY ĐỦ T
     // Số TUYỆT ĐỐI: hai lần gọi = trang đầu + đúng một lần thử trang hai.
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
     await act(async () => { await Promise.resolve() })
+    expect(client.request).toHaveBeenCalledTimes(2)
+  })
+})
+
+function pointPageOf(start: number, count: number, nextCursor: string | null) {
+  return {
+    schemaVersion: '1.0',
+    items: Array.from({ length: count }, (_, index) => ({ category: 'VP', pointId: `VP${start + index}` })),
+    nextCursor,
+  }
+}
+
+describe('useLazyProgrammingPointCatalog — nạp trễ nhưng ĐẦY ĐỦ (Issue #790)', () => {
+  beforeEach(() => { client.request.mockReset() })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('chưa ai hỏi ⇒ không request; hỏi rồi ⇒ rút cạn mọi trang với limit 500', async () => {
+    client.request
+      .mockResolvedValueOnce(pointPageOf(1, 500, 'cursor-2'))
+      .mockResolvedValueOnce(pointPageOf(501, 4, null))
+
+    const { result } = renderHook(() => useLazyProgrammingPointCatalog())
+    await act(async () => { await Promise.resolve() })
+    expect(client.request).not.toHaveBeenCalled()
+    expect(result.current.status).toBe('idle')
+
+    await act(async () => { result.current.ensureLoaded() })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    // Mục thứ 501..504 là đúng phần mà bản cũ (một request không phân trang) làm rơi.
+    expect(result.current.data?.items).toHaveLength(504)
+    expect(result.current.data?.items.at(-1)).toMatchObject({ pointId: 'VP504' })
+    expect(client.request).toHaveBeenCalledTimes(2)
+    expect(client.request).toHaveBeenNthCalledWith(1, 'getProgrammingPointCatalog', { query: { limit: 500 } })
+    expect(client.request).toHaveBeenNthCalledWith(2, 'getProgrammingPointCatalog', { query: { limit: 500, cursor: 'cursor-2' } })
+
+    // Gọi lại khi đã `ready` không tạo request mới (one-shot).
+    await act(async () => { result.current.ensureLoaded() })
+    expect(client.request).toHaveBeenCalledTimes(2)
+  })
+
+  it('cursor lặp ⇒ dừng với lỗi, không quay vô hạn', async () => {
+    client.request
+      .mockResolvedValueOnce(pointPageOf(1, 500, 'cursor-2'))
+      .mockResolvedValueOnce(pointPageOf(501, 4, 'cursor-2'))
+
+    const { result } = renderHook(() => useLazyProgrammingPointCatalog())
+    await act(async () => { result.current.ensureLoaded() })
+    await waitFor(() => expect(result.current.status).toBe('error'))
     expect(client.request).toHaveBeenCalledTimes(2)
   })
 })
