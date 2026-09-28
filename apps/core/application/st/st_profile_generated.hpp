@@ -13,7 +13,7 @@ inline constexpr uint16_t kProfileCode = 1u;
 inline constexpr uint32_t kTargetAbi = 3841u;
 inline constexpr uint16_t kProfileMajor = 2u;
 inline constexpr uint16_t kProfileMinor = 2u;
-inline constexpr const char* kProfileSha256 = "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2";
+inline constexpr const char* kProfileSha256 = "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf";
 inline constexpr const char* kLibraryVersion = "rev-a.6";
 inline constexpr const char* kIntegrityMode = "SIGNATURE_REQUIRED";
 inline constexpr uint8_t kBoolWireCode = 1u;
@@ -65,7 +65,7 @@ struct ReviewGatedFeature {
     std::string_view approval_token;
 };
 inline constexpr std::array<ReviewGatedFeature, 1> kReviewGatedFeatures = {{
-    ReviewGatedFeature{"PID", false, ""},
+    ReviewGatedFeature{"PID", true, "3c52721944a630d54d3111bc38aab4c0c63c7a8f29ea784d27f2c0cb2e6cc0d6"},
 }};
 
 /* Trả true khi feature bị chặn Check. Tên không có trong bảng là feature không

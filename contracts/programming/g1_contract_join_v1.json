@@ -25,7 +25,7 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2",
+      "sha256": "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
@@ -40,7 +40,9 @@
       "reviewGatedFeatures": [
         "PID"
       ],
-      "approvedReviewGatedFeatures": []
+      "approvedReviewGatedFeatures": [
+        "PID"
+      ]
     },
     {
       "name": "artifact",

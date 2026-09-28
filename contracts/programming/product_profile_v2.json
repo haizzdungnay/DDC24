@@ -105,8 +105,8 @@
       "featureId": "PID",
       "registryEntryId": "PID",
       "policy": "BLOCK_CHECK",
-      "approvalEvidenceRef": null,
-      "approvalToken": null
+      "approvalEvidenceRef": "EV-PROG-PID-APPROVAL-20260928",
+      "approvalToken": "3c52721944a630d54d3111bc38aab4c0c63c7a8f29ea784d27f2c0cb2e6cc0d6"
     }
   ]
 }
