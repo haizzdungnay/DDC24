@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.50.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.51.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingPermission = "read" | "program.edit" | "program.activate" | "simulation.run";
@@ -75,6 +75,8 @@ export type ProgrammingProgramRuntimeStateSource = "CORE_LIVE" | "LAST_KNOWN" | 
 
 export type ProgrammingProgramHealth = "HEALTHY" | "DEGRADED" | "FAULT" | "UNKNOWN";
 
+export type ProgrammingProgramWaitingReason = "INPUT_NOT_READY" | "SIGNAL_NOT_READY";
+
 export interface ProgrammingProgramListItem {
   programId: string;
   desiredEnabled: boolean | null;
@@ -97,6 +99,7 @@ export interface ProgrammingProgramListItem {
   lastFaultCode: string | null;
   lastFaultLine: number | null;
   faultCount: number | null;
+  waitingReason: ProgrammingProgramWaitingReason | null;
   health: ProgrammingProgramHealth | null;
 }
 

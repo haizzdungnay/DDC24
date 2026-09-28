@@ -5,6 +5,7 @@ import type {
   ProgrammingProgramListItem,
   ProgrammingProgramRuntimeState,
   ProgrammingProgramRuntimeStateSource,
+  ProgrammingProgramWaitingReason,
   ProgrammingProgramsPage,
   ProgrammingProject,
   ProgrammingRuntime,
@@ -60,6 +61,7 @@ export function revisionSequenceLabel(kind: 'draft' | 'active', sequence: number
 const RUNTIME_STATES: readonly ProgrammingProgramRuntimeState[] = ['RUNNING', 'WAITING', 'DISABLED', 'FAULTED', 'UNKNOWN']
 const RUNTIME_STATE_SOURCES: readonly ProgrammingProgramRuntimeStateSource[] = ['CORE_LIVE', 'LAST_KNOWN', 'UNAVAILABLE']
 const HEALTH_VALUES: readonly ProgrammingProgramHealth[] = ['HEALTHY', 'DEGRADED', 'FAULT', 'UNKNOWN']
+const WAITING_REASONS: readonly ProgrammingProgramWaitingReason[] = ['INPUT_NOT_READY', 'SIGNAL_NOT_READY']
 
 /**
  * Giá trị lạ (server đời cũ, hoặc `STARTING`/`STOPPING` mà D-07 đã loại) ra
@@ -81,6 +83,13 @@ function normalizeSource(value: unknown): ProgrammingProgramRuntimeStateSource {
 
 function normalizeHealth(value: unknown): ProgrammingProgramHealth | null {
   return HEALTH_VALUES.includes(value as ProgrammingProgramHealth) ? (value as ProgrammingProgramHealth) : null
+}
+
+/** Issue #827 — giá trị lạ hoặc server đời cũ (khoá vắng) ⇒ `null`: nhãn WAITING chung. */
+function normalizeWaitingReason(value: unknown): ProgrammingProgramWaitingReason | null {
+  return WAITING_REASONS.includes(value as ProgrammingProgramWaitingReason)
+    ? (value as ProgrammingProgramWaitingReason)
+    : null
 }
 
 /** Số dương hữu hạn, hoặc `null`. `0` KHÔNG bao giờ là một chu kỳ hợp lệ (Plan 60 §4.2). */
@@ -136,6 +145,12 @@ export interface OverviewProgramRow {
   cycle: { periodMs: number; source: ProgramCycleSource } | null
   runtimeState: ProgrammingProgramRuntimeState
   runtimeStateSource: ProgrammingProgramRuntimeStateSource
+  /**
+   * Issue #827 — VÌ SAO dòng đang `WAITING`. Chỉ khác `null` khi dòng đọc sống
+   * từ Core (`CORE_LIVE`) và đang `WAITING`: lý do của một read-back cũ không
+   * được trình bày như lý do hiện tại.
+   */
+  waitingReason: ProgrammingProgramWaitingReason | null
   /** MỐC lần chạy gần nhất. Dựng từ `lastRunAtUtc`/`lastRunAgeMs`, TUYỆT ĐỐI không từ `lastExecNs` (đó là thời lượng). */
   lastRun: { atUtc: string | null; ageMs: number | null } | null
   health: ProgrammingProgramHealth | null
@@ -287,6 +302,9 @@ function buildRow(args: {
     : null
 
   const health = normalizeHealth(item?.health)
+  const waitingReason = runtimeStateSource === 'CORE_LIVE' && runtimeState === 'WAITING'
+    ? normalizeWaitingReason(item?.waitingReason)
+    : null
   return {
     key: args.key,
     programId: args.programId,
@@ -296,6 +314,7 @@ function buildRow(args: {
     cycle,
     runtimeState,
     runtimeStateSource,
+    waitingReason,
     lastRun,
     health,
     healthMissingReason: health !== null

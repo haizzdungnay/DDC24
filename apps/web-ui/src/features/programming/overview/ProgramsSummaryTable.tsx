@@ -279,11 +279,20 @@ function CycleCell({ row }: { row: OverviewProgramRow }) {
   )
 }
 
-function runtimeStateLabel(pick: Pick, state: ProgrammingProgramRuntimeState): string {
+function runtimeStateLabel(
+  pick: Pick,
+  state: ProgrammingProgramRuntimeState,
+  waitingReason: OverviewProgramRow['waitingReason'] = null
+): string {
   switch (state) {
     case 'RUNNING':
       return pick('Đang chạy', 'Running')
     case 'WAITING':
+      // Issue #827 — sau mỗi lần Core khởi động, Program dùng Virtual Point chờ
+      // web đẩy VP xuống. Nói rõ ĐANG CHỜ GÌ: "Chờ chạy" chung chung làm người
+      // vận hành tưởng phải bấm gì đó, trong khi Program sẽ tự chạy.
+      if (waitingReason === 'INPUT_NOT_READY') return pick('Chờ đầu vào', 'Waiting for inputs')
+      if (waitingReason === 'SIGNAL_NOT_READY') return pick('Chờ tín hiệu', 'Waiting for signal')
       return pick('Chờ chạy', 'Waiting')
     case 'DISABLED':
       return pick('Đã tắt', 'Disabled')
@@ -300,7 +309,12 @@ function StateCell({ row }: { row: OverviewProgramRow }) {
   const StaleIcon = stale.icon
   return (
     <span className="flex flex-col items-start gap-1">
-      <StatusBadge {...semanticBadgeProps(pick, programRuntimeSemanticState(row.runtimeState), runtimeStateLabel(pick, row.runtimeState))} />
+      <StatusBadge {...semanticBadgeProps(pick, programRuntimeSemanticState(row.runtimeState), runtimeStateLabel(pick, row.runtimeState, row.waitingReason))} />
+      {row.waitingReason === 'INPUT_NOT_READY' && (
+        <span className="text-[10px] leading-tight text-[var(--c-text-dim)]">
+          {pick('tự chạy khi đầu vào GOOD; lỗi sau 60 s', 'resumes when inputs are GOOD; faults after 60 s')}
+        </span>
+      )}
       {/* Nhãn "giá trị cũ" là bắt buộc khi read-back rơi về bảng ý định bền
           vững: nếu không, một trạng thái đọc từ lần Enable/Disable gần nhất
           trông y hệt trạng thái sống. */}

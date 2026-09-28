@@ -33,6 +33,7 @@ function row(overrides: Partial<OverviewProgramRow> = {}): OverviewProgramRow {
     cycle: { periodMs: 1000, source: 'CORE_LIVE' },
     runtimeState: 'RUNNING',
     runtimeStateSource: 'CORE_LIVE',
+    waitingReason: null,
     lastRun: { atUtc: '2026-08-23T10:00:00Z', ageMs: 400 },
     health: 'HEALTHY',
     healthMissingReason: null,
@@ -315,5 +316,29 @@ describe('ProgramsSummaryTable — biến thể thẻ gọn cho màn hẹp (T60-
     const first = cards.querySelector('[data-program-card]')
     fireEvent.click(first as Element)
     expect(screen.queryByTestId('pgm02')).not.toBeInTheDocument()
+  })
+})
+
+describe('ProgramsSummaryTable — lý do chờ (Issue #827)', () => {
+  it('chờ đầu vào hiện "Chờ đầu vào" kèm lời giải thích tự phục hồi và ngưỡng 60 s', () => {
+    renderTable({ rows: [row({ runtimeState: 'WAITING', waitingReason: 'INPUT_NOT_READY', health: null, healthMissingReason: 'NOT_LABELLED', lastRun: null })] })
+    expect(within(table()).getByText('Chờ đầu vào')).toBeInTheDocument()
+    expect(within(table()).getByText('tự chạy khi đầu vào GOOD; lỗi sau 60 s')).toBeInTheDocument()
+    expect(within(table()).queryByText('Chờ chạy')).not.toBeInTheDocument()
+    expect(within(table()).queryByText('Lỗi')).not.toBeInTheDocument()
+  })
+
+  it('bản tiếng Anh', () => {
+    renderTable({ rows: [row({ runtimeState: 'WAITING', waitingReason: 'INPUT_NOT_READY', health: null, healthMissingReason: 'NOT_LABELLED' })] }, 'en')
+    expect(within(table()).getByText('Waiting for inputs')).toBeInTheDocument()
+  })
+
+  it('chờ tín hiệu và WAITING không kèm lý do giữ nhãn riêng', () => {
+    renderTable({ rows: [row({ runtimeState: 'WAITING', waitingReason: 'SIGNAL_NOT_READY', health: null, healthMissingReason: 'NOT_LABELLED' })] })
+    expect(within(table()).getByText('Chờ tín hiệu')).toBeInTheDocument()
+    cleanup()
+    renderTable({ rows: [row({ runtimeState: 'WAITING', waitingReason: null, health: null, healthMissingReason: 'NOT_LABELLED' })] })
+    expect(within(table()).getByText('Chờ chạy')).toBeInTheDocument()
+    expect(within(table()).queryByText('tự chạy khi đầu vào GOOD; lỗi sau 60 s')).not.toBeInTheDocument()
   })
 })

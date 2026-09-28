@@ -47,6 +47,7 @@ export type {
   ProgrammingProgramListItem,
   ProgrammingProgramRuntimeState,
   ProgrammingProgramRuntimeStateSource,
+  ProgrammingProgramWaitingReason,
   ProgrammingProgramsPage,
   ProgrammingStHunk
 } from '../api/generated/client'

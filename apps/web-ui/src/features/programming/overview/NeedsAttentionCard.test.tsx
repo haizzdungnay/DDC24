@@ -34,6 +34,7 @@ function row(overrides: Partial<OverviewProgramRow> = {}): OverviewProgramRow {
     cycle: { periodMs: 1000, source: 'CORE_LIVE' },
     runtimeState: 'RUNNING',
     runtimeStateSource: 'CORE_LIVE',
+    waitingReason: null,
     lastRun: { atUtc: '2026-08-24T02:00:00Z', ageMs: 400 },
     health: 'HEALTHY',
     healthMissingReason: null,
