@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added — Plan 63 khắc phục hiệu năng Forlinx, cập nhật record hiệu năng và một Issue theo dõi (2026-09-28)
+
+- Phạm vi: chỉ tài liệu. Thêm `docs/03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md` (`PLAN-PERF-FORLINX-063` 1.0, In Review); nâng `REC-PROG-RUNTIME-PERF-COMP-001` lên 1.3 (thêm §14) và `REC-FORLINX-PERF-PM-20260928` lên 1.1; đăng ký ở `docs/README.md`, `docs/03_implementation/README.md`, `docs/07_records/reviews/README.md`. Không sửa mã, cấu hình, Program hoặc deploy.
+- Lý do: hai đợt rà soát (04/09 và 28/09) để lại 19 mã finding. Một phần đã được ADR-061 sửa, một phần đổi mức độ, và chưa có Issue nào theo dõi. Chủ sở hữu yêu cầu một kế hoạch tổng thể có truy xuất và **một Issue duy nhất** để team review và thi hành một lần.
+- Đối chiếu mã tại `main@cb690dfb` (record §14): `F-PRG-PERF-001` nghiêm trọng hơn vì budget base step chỉ còn 2.000 µs trong khi Core vẫn bỏ `program_budget_us`; `F-PRG-PERF-002` còn `StateSnapshot::save` chạy trên luồng quét; `F-PRG-PERF-005/006` chờ read-back; `F-PRG-PERF-007` đóng vì là thành phần vụ xâm nhập đã xử lý bằng cài sạch bo. Xác nhận trong mã các finding `PERF-SYS-05`, `PERF-API-01/02/03`, `PERF-SYS-03`, `PERF-FE-01`. Thêm hai finding mới: `PERF-SYS-06` (ghi eMMC ngoại suy khoảng 9,7 GB/ngày) và `PERF-SYS-07` (giao dịch IOP khoảng 1,4 ms trong chu kỳ 2 ms, timeout 3 ms dài hơn chu kỳ, bộ đếm overrun IOBus tăng ở mỗi vòng chạy bù).
+- Theo dõi bằng **một Issue** [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) (`state:triage`, chờ cổng G0); nhánh thi hành tách từ nhánh tài liệu này để tài liệu và code vào chung một PR `Closes #809`.
+- Plan 63: 25 task trong 5 wave (≈ 33 người-ngày, ước lượng chưa chốt), 5 cổng quyết định G0/G-D1…G-D4 ánh xạ từ phiếu PM D01–D07, giao thức đo trên bo (không quét journal trong cửa sổ đo), ma trận finding → task → kiểm chứng → trạng thái, Definition of Done. Sửa bảng lịch sử bị vỡ và header lỗi thời của record hiệu năng.
+- Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` và `git diff --check` — kết quả ghi ở thân commit; build/test mã NOT RUN vì không đổi mã; không đo mới trên bo.
+
 ### Fixed — Tạo/đổi tên Virtual Point giữ nhãn (Label) làm tên hiển thị (Issue #789, 2026-09-28)
 
 - **Phạm vi:** `apps/web-api/internal/app/{virtualpoint.go,pointtags.go}` + test (`virtualpoint_label_test.go` mới, `pointchannel_test.go`, `points_test.go`); `apps/web-ui/src/features/points/VirtualIoPage.tsx` + test; `docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md` §`name`.
