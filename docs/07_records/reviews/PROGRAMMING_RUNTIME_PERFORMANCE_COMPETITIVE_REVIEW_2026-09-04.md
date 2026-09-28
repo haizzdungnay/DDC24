@@ -3,14 +3,16 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PROG-RUNTIME-PERF-COMP-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **Record — source/HOST/TARGET exploratory đã rà; provenance TARGET `PARTIAL`; HIL/release `NO-GO`** |
-| Ngày | 2026-09-04 |
-| Phạm vi | Compiler/Check, package, scheduler, ST runtime, cycle time, multi-program và vị thế cạnh tranh |
+| Ngày | 2026-09-04; bổ sung audit hệ thống 2026-09-28 |
+| Phạm vi | Snapshot 04/09: Compiler/Check/runtime/cạnh tranh; audit 28/09: OS/Core, API/Modbus, browser và provenance |
 | Mốc mã nguồn | `main@67f8ca3a6266207469fa029ceb4c66f02be838f6` |
 | Người rà | Codex, vai trò `mkddc-techlead` |
 | Kết luận | Lõi ST chạy đủ nhanh cho profile 1 s trên Forlinx; production còn tuần tự, binary live chưa truy nguyên được tới HEAD và runtime đang có missed release tích lũy dù health vẫn xanh |
 
+> **Hiện trạng 28/09 xem §13; các mục 0–12 giữ nguyên snapshot 04/09.**
+>
 > Đây là **record của một lần rà soát**, không phải Product/Design authority và
 > không tự đóng requirement, risk hay release gate. Bằng chứng HOST, target dùng
 > fake MCU, HIL vật lý và release được tách riêng trong toàn bộ hồ sơ.
@@ -284,7 +286,7 @@ Task production được dựng với period 1.000 ms và budget 199 ms:
 
 Read-back live xác nhận Task period 1.000 ms/budget 199 ms; Task max execution
 111,714 µs, Program max 46,086 µs và không overrun. Ngược lại, source Active mô
-tả `Task = 50ms` và các bước 100/250/500 ms nhưng `programConfig.periodMs`
+tả `Task = 50ms` và các bước 100/251/510 ms nhưng `programConfig.periodMs`
 thực tế là 1.000 ms do profile. Hành vi relay vì vậy chậm hơn ý nghĩa comment
 khoảng 10–20 lần và phải được coi là sai lệch cấu hình/identity, không phải
 bằng chứng cycle 50 ms.
@@ -421,7 +423,7 @@ period, đối chiếu số lần execute với release lý thuyết và alarm/h
 ### `F-PRG-PERF-006` — P1: identity/cycle của Active Program không khớp ý nghĩa source
 
 **Kịch bản hỏng:** kỹ sư đọc source `RelayPattern32` thấy `Task = 50ms`, các
-step 100/250/500 ms và kỳ vọng output đổi ở tốc độ đó; Active Revision lại
+step 100/251/510 ms và kỳ vọng output đổi ở tốc độ đó; Active Revision lại
 cấu hình `periodMs=1000`, nên logic đếm step thực chạy chậm hơn comment khoảng
 10–20 lần. Tên project `AHU-MASTER-SEQUENCE` nhưng Active chỉ chứa fixture relay
 32 output, làm tăng nguy cơ vận hành nhầm chương trình dù runtime vẫn xanh.
@@ -638,9 +640,174 @@ release miss tích lũy không hiện trên health và mismatch identity/cycle.
 Verdict chính xác tại `main@67f8ca3`: **GO cho tiếp tục engineering/pilot lab;
 NO-GO cho release hoặc claim cạnh tranh production**.
 
-## 13. Lịch sử sửa đổi
+## 13. Audit hệ thống và phần mềm trên Forlinx — 2026-09-28
+
+### 13.1 Kết luận hiện tại và phạm vi
+
+**Đã hoàn tất thu thập/phân tích. Chưa triển khai các phương án tối ưu.** CPU,
+RAM và WCET Core còn dư trong tải đã đo; ưu tiên là IOBus trễ nhịp, lỗi snapshot
+SHM, chờ lấy mẫu CPU trong API, polling/log và truyền tài nguyên FE. Không có cơ
+sở ưu tiên JIT hoặc chạy Program song song từ số đo này.
+
+Yêu cầu chủ sở hữu: đọc/phân tích log hệ thống và phần mềm, kiểm hiệu năng, tìm
+finding/phương án cải thiện. Tổ chức đúng yêu cầu: **một agent quản lý, hai
+sub-agent triển khai audit**: OS/Core và API/Programming/Modbus. Agent quản lý
+xác minh artifact, kiểm browser và tổng hợp hồ sơ. Chỉ đọc proc/log/GET, ngoài
+đăng nhập để tạo phiên đọc; không sửa mã thực thi, cấu hình, Program, output,
+restart hoặc deploy.
+
+Các mục **0–12 là snapshot 04/09**. Kết luận cycle 1/5/30 s, service nhiễu hoặc
+identity trong snapshot đó không được dùng thay cho read-back 28/09 ở mục này.
+Đây là record và phương án định hướng, **không phải Detailed Design hoặc cổng
+IMPLEMENT_READY**; việc thi hành cần Issue/thiết kế và kiểm chứng theo phạm vi.
+
+### 13.2 Môi trường, provenance và phương pháp
+
+| Mục | Bằng chứng ngày 28/09 |
+|---|---|
+| Checkout audit | `e8573370399b642d5e6f0ad603986ca7689e7dd8`, nhánh `docs/commit-all-20260927`, cây làm việc sạch khi bắt đầu |
+| Target | `OK1126B-buildroot`, Linux `6.1.141`, aarch64, 4 CPU; uptime khoảng 3 ngày 18 giờ; Fake MCU đang active |
+| Dịch vụ | Core PID `127745`, IOBus `129406`, Web `129416`; active, `NRestarts=0` tại đầu/cuối. Không suy ra toàn lịch sử không restart từ counter này |
+| Manifest | `provenance.json` còn `f86150e3`, build 27/09 09:04:28Z; Core đang chạy khớp checksum `9621cb52…` |
+| Artifact cập nhật sau manifest | IOBus `4f025db4…`, Web và hai helper `d6d3b2cb…`, khởi chạy 27/09 15:54:31Z; hash khớp artifact FC15 trên host. Web health version `dev-u07-u18-with-pr795`. Không có exe `(deleted)` |
+| FE | `index.html`, main JS `index-DUIgA5Uz.js` và charts `charts-CUKRAmjw.js` khớp byte/hash artifact `fc15/d2/dist` trên host |
+| Liên kết source | Artifact tương ứng cây `wt-merge795@9e658628` và `wt-iobus@b66db421`; thiếu manifest mới/vcs embedded. Provenance **PARTIAL**, chưa xác nhận mọi thành phần là source mới nhất |
+| Cửa sổ mới | Bắt đầu đọc target 02:53Z; baseline OS 02:54:20–02:59:43Z, snapshot API cuối 03:01:35Z ngày 28/09 (giờ Việt Nam +7 giờ) |
+| Lịch sử | Query 24 giờ, nhưng journal còn từ khoảng 27/09 05:01–05:02Z, khoảng **21 giờ 54 phút**; không phải bằng chứng trọn 24 giờ |
+
+Proc baseline **61 mẫu/323,62 s**, khoảng 5 s cộng chi phí đọc; CPU process =
+`Δ(utime+stime)/CLK_TCK/Δuptime×100`, `CLK_TCK=100`, **100% bằng một CPU core**.
+Pha đầu chồng thu journal; cả cửa sổ có tải vận hành và probe GET nhẹ. Pha sau
+thu journal 02:58:02–02:59:43Z gồm **20 mẫu/101,90 s**, vẫn có GET/proc probes.
+Không coi đó là tải idle hoặc dùng hai pha khác tải để khẳng định quan hệ nhân quả.
+
+API đo tuần tự **20 mẫu/route/lane**, 5 route × 2 lane = **200 GET**, nghỉ 1 s
+sau mỗi GET. Local 02:57:09,640–02:58:53,888Z: `date` quanh `wget`, gồm chi phí
+spawn/đọc body. WAN 02:58:54–03:00:40Z: Python `perf_counter` quanh urllib, gồm
+DNS/connect/read. Phân vị nearest-rank, p95 với n=20 là mẫu thứ 19; không lấy
+chênh lệch hai lane đo lần lượt làm RTT chính xác hoặc suy SLA dài hạn.
+
+Core/IOBus log jitter có **max từng phút** và counters tích luỹ theo PID.
+Phân vị của max/phút không phải phân vị của từng wake. Modbus latency API dùng
+rolling 128 mẫu; frame ring 200 gần nhất là cửa sổ riêng, không phải lifetime
+hoặc thời gian tiếp điểm relay. Bộ đọc log có giới hạn dòng được bổ sung bằng
+filter/count phía target; không suy trọn lịch sử từ tail bị cắt.
+
+### 13.3 Tài nguyên và nhịp runtime
+
+| Chỉ số | Kết quả và giới hạn |
+|---|---|
+| CPU baseline | Core **2,253%**, IOBus **5,531%**, Web **24,773%** của một core |
+| CPU pha sau thu journal | Core **2,247%**, IOBus **5,083%**, Web **28,999%** của một core; Web lớn nhất trong ba process, chưa có CPU profile để quy hết cho polling |
+| RAM | RSS Core **24.904 KiB**, IOBus **56.100 KiB** giữ nguyên; Web **74.472–76.628 KiB**; MemAvailable **1.470.548–1.490.060 KiB**, swap 0. Không chứng minh không leak dài hạn từ 5 phút |
+| Nhiệt/tần số | **46,04–50,44°C**, governor `performance`, 1,296 GHz trên cả bốn CPU; không quan sát giảm tần trong samples |
+| eMMC | Ghi khoảng **112.785 B/s**, 16,33 write IOPS, busy **0,682%**; root dùng 12%, userdata 6%. Không suy lượng ghi thực từ số byte log dạng text |
+| RT read-back | Core main FIFO80/CPU3, ba helper OTHER/CPU0–2; IOBus main FIFO70/CPU0–2, helper OTHER. QoS resume latency 20 µs; MEMLOCK unlimited; đọc thread thật, không chỉ systemd unit |
+| Core lịch sử PID hiện tại | 27/09 09:06:05–28/09 02:54:11Z: **1.069 cửa sổ / 6.414.593 wakes**, jitter max **124,14 µs**, trung bình trọng số **12,568 µs**, **9 lần >100 µs**, missed step/scan overrun 0 |
+| Core lúc audit | Log 02:54:11→02:55:11Z: violations **9→14** (+5), max **141,19 µs**, WCET max **476 µs/10.000 µs = 4,76%**; counter giữ 14 tới 03:00:11Z, API cuối cũng 14. Cửa sổ log bắt đầu 9 s trước proc baseline; không gán mẫu đếm +5 chính xác cho biên 323,62 s |
+| Core WCET lịch sử | Total max **321 µs = 3,21%** base 10 ms; p95 của maximum/phút **253 µs**. Max từng pha ở scan khác nhau, không cộng chúng thành total |
+| IOBus | Poll mặc định **2 ms** (hợp đồng, config không override, khoảng 30.000 wakes/phút); 660 cửa sổ/19.800.369 wakes, max late-wake **16,345 ms**; counter wake-overrun đầu/cuối **58→26.344** |
+| IOBus gần baseline | 02:54:32–02:59:32Z: counter **26.344→26.854**, **+510/150.004 wakes**, max **14,608 ms**; counter này là wake late >2 ms, không phải Program overrun hoặc số tick bị bỏ |
+| Programming API mới | Task main **10 ms**, RUNNING/HEALTHY, runCount **5.679.711→5.706.835**; missed release/base step, execution overrun đều **0→0**; max task execution **171.509 ns = 0,171509 ms**; jitter violation **14→14** giữa hai snapshot |
+| IOP/Fake MCU | Trong hai snapshot API: timeout **161→163**, seq error **20.117→20.244**, CRC **0→0**; max gap giữa hai IO_RESP hợp lệ lifetime **22,17 ms**. Không nhầm với lỗi bus Modbus hoặc lỗi điện MCU thật |
+
+Các p95/p99 **max/phút** trước audit của Core là **61,61/95,44 µs**; IOBus là
+**14.007,21/15.972,17 µs**. Không có histogram raw wakes để tính p95/p99 thực
+của từng wake. Kernel không có PSI/per-process I/O accounting; CPU3 procstat
+không nhất quán với threadstat trong cấu hình NO_HZ/accounting hiện có. Vì vậy
+không diễn giải CPU3 gần 0 là Core không chạy, hoặc dùng số đó làm headroom chính.
+
+`safeState=true` và `safeStateNoControllerOnly=true` xuất hiện cùng Task RUNNING;
+đây là cờ cần đọc theo semantic, không tự coi là fault Program. Capabilities
+read-back là `[10,50,100,500,1000,5000,10000,50000]` ms. Audit không đổi trạng
+thái điều khiển để tái tạo tải khác.
+
+### 13.4 API, Modbus và browser
+
+| API | Local p50 / p95 (ms) | WAN p50 / p95 (ms) |
+|---|---:|---:|
+| `/api/v1/health` | 11,612 / 15,187 | 30,790 / 37,318 |
+| `/api/v1/system/status` | 114,678 / 116,145 | 134,577 / 147,607 |
+| `/api/v1/programming/runtime` | 22,498 / 39,947 | 39,665 / 46,576 |
+| `/api/v1/programming/runtime/monitor` | 32,051 / 33,765 | 51,598 / 63,236 |
+| `/api/v1/modbus/buses` | 18,158 / 19,737 | 36,487 / 57,500 |
+
+100/100 local GET thành công và 100/100 WAN HTTP200; WAN `/modbus/buses` có
+outlier **260,701 ms**. Không có phép đo throughput cực đại. Health 6/6 `ok`
+không xoá được finding timing/snapshot từ log PID hiện tại.
+
+Bus rs485-1 RUNNING 9600/8N1, **4/4 online**; +264 polls/thiết bị giữa hai
+snapshot; timeout/CRC/retry/write-failed/write-dropped/reopen không tăng và đều
+0. Bus 2 disabled/CLOSED là cấu hình hợp lệ. Rolling p95 đầu/cuối **27→30 ms**,
+utilization **17,2→19,09%**. Không cần đề xuất lại FC15 như một tính năng chưa có.
+
+Frame ring đầu **200/200 ok**, phủ **31,156 s**: FC01 125, FC02 62, FC05 6,
+FC15 7. FC15 có count 8 ở 4 frame và count 2 ở 3 frame, p50/p95 **30,916/31,103
+ms**; FC05 p50/p95 **28,597/28,639 ms**. Frame ring cuối cũng 200/200 ok, có 18
+FC15. Các số này chứng minh giao dịch ACK, không chứng minh electrical HIL.
+
+Chrome DevTools MCP dùng context riêng tại `http://mekong-fac.ddns.net:8082/login`
+(8081 từ host bị từ chối): snapshot, screenshot 1920×1080, Console/Network,
+performance trace. **Không có Console error/warn hoặc request lỗi** trong lượt
+reload 10 GET. Không kiểm UI sau đăng nhập; runtime được kiểm bằng API riêng.
+
+- Một cold load ở viewport 945×917: **1.337.637 B** transfer toàn trang, DOM
+  ContentLoaded **953,6 ms**; charts tải sẵn **407.319 B**. Đây là một sample,
+  không phải p95 hoặc cold LCP.
+- Trace reload có cache, không throttle: **LCP 308 ms**, **TTFB 38 ms**, **CLS 0**.
+  Insight forced reflow khoảng 90 ms chỉ là quan sát một lượt, chưa ghim nguyên
+  nhân component để mở finding sửa riêng.
+- GET có `Accept-Encoding: gzip` của 5 tài nguyên JS/CSS vẫn không có
+  `Content-Encoding`. Tổng body **1.253.429 B**; nén gzip6 trên host thành
+  **336.327 B**, giảm **73,2% byte body**. Đây là tiềm năng dung lượng, chưa phải
+  tốc độ cải thiện sau deploy. Header cache immutable của assets đang đúng.
+
+### 13.5 Finding và phương án cải thiện theo ưu tiên
+
+Mọi finding dưới đây **đang mở**, chưa có patch/deploy từ audit. Ngưỡng thử
+nghiệm bên dưới là **đề xuất kiểm chứng**, không tự thay acceptance authority.
+
+| ID / mức | Bằng chứng và chủ sở hữu | Phương án, phép đo để đóng |
+|---|---|---|
+| `PERF-SYS-05` — P1 | IOBus poll 2 ms, late-wake tới 16,345 ms và +510 overruns gần baseline; IOP +2 timeout/+127 seq error. `apps/iobus/bootstrap/main.cpp:86,912` tăng deadline mỗi period, không skip mốc quá hạn. FW-SOM/IOBus sở hữu | Thiết kế chính sách tick trễ: bỏ mốc quá hạn thay chạy bù, đếm missed ticks; giữ IOP watchdog/safe-state/output ordering. Đo wake/work/IO_RESP-gap riêng; test delayed Fake MCU, timeout, scheduler stall và UART thật. Cơ chế chạy bù có thật; chưa chứng minh là nguyên nhân duy nhất của seq error/jitter |
+| `PERF-SYS-01` — P1 | Core ngưỡng C4 ≤100 µs không đạt trong lịch sử mới: 9 lần trước baseline, thêm 5 trong phút audit. `scan_loop.cpp:489`, `base_step_pacer.hpp`; FW-SOM/BSP sở hữu | Histogram wake và timeline IRQ/softirq trước chỉnh isolation. A/B IRQ affinity tránh CPU3 nếu dữ liệu chỉ ra IRQ tương ứng; kiểm throughput/UART và C4 cả tải vận hành + đọc log. Không quy lỗi cho Wi-Fi chỉ từ tương quan; không đổi kernel/governor tự phát |
+| `PERF-API-01` — P1 | Web PID129416: `/points` **162.186 HTTP200 + 206 HTTP503**, **0,1269%** thất bại; 206 WARN SHM không nhất quán, lỗi cuối 02:50:40Z trước audit. `shm_reader.go:40,129,150`, retry 5 vòng tight; Web API sở hữu | Instrument odd-seq/retry/copy-time theo producer epoch; bounded retry/backoff hoặc snapshot sampler dùng chung. Giữ generation/age/fail-safe, không trả stale thành GOOD hoặc chặn RT. Mục tiêu thử 30 phút tải khoảng 5–6 GET/s: 0 lỗi snapshot nominal, p95 server ≤20 ms; writer treo vẫn phải báo unavailable |
+| `PERF-API-02` — P2 | `/system/status` log server p95 105 ms, `/overview` 137 ms; `system.go:235` chờ 100 ms mỗi request để đọc CPU. Web API sở hữu | Một collector nền 1 s, response dùng snapshot với sampledAt/age và trạng thái unknown/stale; thử p95 server status <20 ms, overview <50 ms, age ≤2 s, không tăng jitter |
+| `PERF-SYS-02/03`, `PERF-API-03` — P2 | Khoảng 95.558 dòng Wi-Fi RTW, 103.824 audit READ alarm_list; Web 462.893 dòng, khoảng 5,2 request/s các giờ ổn định. BSP, Core IPC và Web/FE sở hữu | Driver `/proc/net/rtl8821cs/log_level=4` hiện INFO: giảm verbosity bằng cơ chế BSP phù hợp, giữ lỗi. `web_ipc.cpp:493` audit mọi alarm_list và `http.go:85` log mọi GET: aggregate/sample đọc thành công, giữ 100% write/override/ack/security/rejected/error. Xác định caller trước gom polling; cache metadata theo revision/ETag, pause tab ẩn, dùng live subscription phù hợp. A/B giảm ≥80% access/read-log và ≥50% GET cùng scenario, freshness ≤1 s; kiểm quy tắc audit trước sửa |
+| `PERF-FE-01` — P2 | 5 JS/CSS không nén dù client chấp nhận gzip; có thể giảm 73,2% byte body khi nén gzip6. `apps/web-api/internal/app/http.go:349`, packaging/build; Web/FE sở hữu | Sinh `.gz`/`.br` khi build, thương lượng encoding, `Vary: Accept-Encoding`, giữ cache/range/HEAD/ETag đúng; ưu tiên nén sẵn để không thêm CPU mỗi request trên bo. So body hash sau giải nén, header, cold load trước/sau trên cùng mạng; kiểm jitter dưới tải HTTP |
+| `PERF-FE-02` — P2 | Login preload charts 407.319 B; `App.tsx` import dashboard tĩnh và `vite.config.ts:57` manualChunks. FE sở hữu | Rà import/barrel để defer biểu đồ không cần ở login, giữ dependency boundary/ADR-049 và thời gian mở dashboard. Đo cold login/dashboard/first chart cùng network; không chỉ chấm kích thước bundle |
+| `PERF-PROV-01` — P2 | Core khớp manifest nhưng IOBus/Web/helper/FE là artifact mới ngoài manifest. DevOps sở hữu | Mỗi deploy cập nhật manifest/hash/version/dirty/source tree riêng các artifact; xác minh `/proc/MainPID/exe` của cả ba Web/helper và served FE. Không sửa manifest chỉ để làm khớp hash khi chưa có provenance source; không claim toàn board là source mới nhất |
+| `PERF-SYS-04`, `PERF-API-04` — P3 quan sát | Thiếu PSI/per-PID I/O, accounting CPU3 lệch threadstat; API rolling read/write/counter thiếu nhãn cửa sổ/epoch. BSP và API sở hữu | Thread CPUclock/WCET/histogram; publish sampleCount/window/sinceBootId và read/write p95 riêng. Test reset/generation và metric fixture; nếu bật kernel accounting phải đo overhead ở lane riêng |
+
+Không ưu tiên hạ chi phí kiểm mật khẩu để làm login nhanh, tăng baud khi chưa
+xác nhận thiết bị, hoặc giảm poll period để che metric. Các API kiểu metadata và
+read snapshot cần được tối ưu trước khi thay nền thực thi Program.
+
+### 13.6 Bằng chứng lưu, verification và giới hạn
+
+Số liệu đã lọc được lưu trong [JSON audit](../test-evidence/fw-som/forlinx-performance-20260928/audit-summary.json).
+Raw log đã nén, script đo, JSON từng lane và screenshot/trace giữ lâu dài ngoài
+repo tại `/home/chuong/Desktop/DDC-board-audits/forlinx-performance-20260928-0253Z/`
+(quyền thư mục 0700/tệp 0600), kèm `SHA256SUMS`. Không đưa token/password vào
+hồ sơ; token tạm đã xoá. 51 tệp bằng chứng nén/JSON/ảnh khoảng 4,93 MB.
+
+| Kiểm chứng | Kết quả được phép |
+|---|---|
+| TARGET tài nguyên/RT read-back | DONE, cửa sổ có tải vận hành/probe/audit; chưa stress benchmark |
+| Core C4 / IOBus wake timing | **FAIL quan sát ngưỡng jitter/late-wake**; Programming missed/overrun 0 không thay kết quả này |
+| `/points` availability hồi cứu PID hiện tại | **FAIL: 206 lần 503**, chưa sửa; 200 GET mới thành công không xoá finding lịch sử |
+| Modbus/API GET mới | PASS trong cửa sổ: 4/4 online, lỗi bus không tăng, 200 GET thành công; không phải SLA/throughput/HIL |
+| Browser | DONE ở login cold/warm, Console/Network/screenshot/trace; UI sau đăng nhập và INP tương tác NOT RUN |
+| JSON, hash archive, docs/link/whitespace | PASS: JSON/mẫu/kiểm mẫu token, SHA256 51/51, gzip 22/22; `docs_iso_harness.py --expect` PASS, 0 link/anchor/metadata lệch; `git diff --check` sạch |
+| Host C++/Go/FE build/unit/E2E | NOT RUN vì chỉ audit và thêm record, không đổi mã thực thi |
+| Soak 24 giờ có kiểm soát, fault/power-cut, physical HIL | NOT RUN; lịch sử giữ 21h54 và Fake MCU không thay thế |
+| Integrity/release | Audit hiệu năng không chứng minh image hệ thống tin cậy; `RELEASE_READY` không được nâng từ record này |
+
+## 14. Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-04 | Tạo record từ review source, benchmark HOST, phân tích cycle/multi-program, finding hiệu năng và đối chiếu cạnh tranh; giữ TARGET/HIL/release đúng `NO-GO` |
 | 1.1 | 2026-09-04 | Đo trực tiếp Forlinx: hai lượt runtime ARM64, compiler load, service/API read-back; thêm `F-PRG-PERF-005/006/007`, hạ provenance live xuống PARTIAL và giữ HIL/release `NO-GO` |
+
+| 1.2 | 2026-09-28 | Bổ sung audit OS/Core, API/Modbus và browser trên Forlinx bằng một agent quản lý, hai sub-agent; giữ riêng snapshot 04/09 và giới hạn chứng cứ |

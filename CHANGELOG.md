@@ -18,6 +18,20 @@
 - Kiểm chứng trên `main@597616ca`: 4 test FE mới đỏ khi bỏ bản sửa, xanh khi có; vitest 267 file / 3490 test exit 0; `npm run lint` và `npm run build` exit 0; `go vet` exit 0; `go test ./... -count=1` 21 package ok. Người dùng đã tự kiểm và deploy lên bo.
 - Refs: `F-P59-DELETE-PROGRAM-001`.
 
+### Added — Báo cáo riêng trình PM quyết định cải thiện hiệu năng Forlinx (2026-09-28)
+
+- Thêm `docs/07_records/reviews/FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md` (`REC-FORLINX-PERF-PM-20260928` 1.0, In Review): hiện trạng theo audit ngày 28/09, 9 nhóm finding, các phương án/lợi ích/rủi ro/độ phức tạp tương đối, ba đợt triển khai, tiêu chí thử nghiệm đề xuất và phiếu D01–D07 để PM giao owner/lịch/phạm vi.
+- Số đo liên kết JSON/audit gốc, không giả định nguyên nhân jitter/seq error, thời gian/cost hoặc PM đã phê duyệt. Đăng ký hai chỉ mục; không đổi code, cấu hình, Program/output, không deploy hoặc nâng gate release.
+- Kiểm chứng: hai sub-agent rà số đo/phương án OS/Core/IOP và API/Modbus/FE; làm rõ 200 GET không gồm `/points`, n20 p95=mẫu 19, FC15 n7 p95=max và tải 5–6 GET/s là tải tổng có mix route/client. Đối chiếu JSON/số mẫu/D01–D07 chưa phê duyệt PASS; `docs_iso_harness.py --expect` PASS (0 link/anchor/metadata lệch), `git diff --check` sạch. Không chạy build/browser/target mới vì chỉ thêm tài liệu.
+
+### Added — Audit hiệu năng hệ thống và phần mềm Forlinx (2026-09-28)
+
+- Phạm vi: bổ sung §13 vào `REC-PROG-RUNTIME-PERF-COMP-001` (1.2), một agent quản lý và hai sub-agent đọc OS/Core, API/Modbus, browser; dữ liệu target mới tách khỏi snapshot 04/09.
+- Baseline target 61 mẫu/323,62 s: Core 2,253%, IOBus 5,531%, Web 24,773% của một CPU; Core có 9 lần jitter >100 µs trước audit và thêm 5 trong phút audit, không missed/scan overrun; IOBus poll 2 ms có jitter tới 16,345 ms, cơ chế chạy bù chưa skip tick trễ. Phân biệt với Programming task 10 ms, execution overrun/missed giữ 0.
+- Finding ưu tiên: 206 `/points` HTTP503 do SHM ở PID hiện tại; API status chờ 100 ms; log Wi-Fi/audit đọc/GET dày; assets không nén (5 body gzip6 giảm 73,2% byte trên host) và login preload charts; manifest cũ dù artifact live IOBus/Web/FE khớp bản FC15. Có 200 GET mới thành công và 4/4 Modbus online, lỗi bus không tăng; FC15 có thật, p95 31,103 ms trên 7 frame.
+- Thêm JSON số đo đã lọc; raw log nén/trace/script/ảnh lưu riêng ngoài repo với SHA256. Chỉ giữ khoảng 21h54 lịch sử, không phải soak trọn 24 giờ. Giữ nguyên cấu hình, Program/output và dịch vụ; không deploy phương án tối ưu, không nâng physical HIL hoặc RELEASE_READY.
+- Kiểm chứng: `docs_iso_harness.py --expect` PASS (0 link/anchor/metadata lệch), `git diff --check` sạch; JSON/mẫu và kiểm mẫu token PASS; SHA256 archive 51/51, đọc gzip 22/22 PASS. Không chạy build/unit/E2E vì không đổi mã thực thi; Chrome DevTools MCP đã đo login thật, luồng UI sau đăng nhập chưa chạy.
+
 ### Deploy — Bo lab Foxlinx lên `main@e3072983` (toàn bộ finding đã merge của báo cáo sử dụng thực tế) (2026-09-28)
 
 - Phạm vi: bo lab `OK1126B-buildroot`. Web `mkddc-web` (`7c58fab0…`, version `main-pr804-74d92415`; cây của head #804 trùng từng byte với `main@e3072983`), `dist` FE (`npm run build:release`, `VITE_PROGRAMS_WORKSPACE_V2=1`), `mkddc-iobus` (`dc8cad5b…`), `mkddc-st-compile` (`d3aec043…`), `mkddc-st-package`. Tool cross-build với khoá phát hành: `--st-key-info` báo `RELEASE`, fingerprint `2fb77aa42e7fe446`; GLIBCXX ≤ 3.4.29. Core giữ `9621cb52…`, vì runtime/domain/bootstrap/adapters không đổi kể từ RC `f86150e3`; profile (`1cb61fec…`) và SHM magic không đổi. Không đụng Programming (Active của người dùng `0c29f4f1…` giữ nguyên, Draft sạch).
@@ -16691,7 +16705,7 @@ chuyển, mỗi hồ sơ gắn banner `🗄 ĐÃ LƯU TRỮ` ghi **lý do đóng
 | `32_DEV_TEAM_NEXT_ACTION` | SUPERSEDED Rev 2.0 | 3 task chặn đã xử lý |
 | `46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN` | Closed, G0..G5 PASS | `apps/*` + root `CMakeLists.txt` |
 | `50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN` | 96/96 task đóng | `apps/core/application/schedule/`, `bacnet_schedule.*` |
-| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 50/50 task, G0–G6 | `apps/web-ui/src/features/*` |
+| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 51/51 task, G0–G6 | `apps/web-ui/src/features/*` |
 
 Trước khi chuyển đã kiểm phần còn treo **không bị mất dấu**: `EXT_PHYSICAL_VERIFIED` /
 `PHYSICAL_IO_VERIFIED` của plan 50 thuộc `ADR-023` và mở khoá bởi plan 49 `G-C`/`G-D`;
@@ -23235,7 +23249,7 @@ bằng chứng hiện hành; không thay đổi nội dung nghiệp vụ PA3.
 **Kiểm chứng.** Kiểm tra mã tài liệu không trùng, liên kết tài liệu nội bộ tồn
 tại, `git diff --check` và docs harness.
 
-### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
+### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 51/51 (2026-08-08)
 
 **Phạm vi.** Phần còn lại của `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`:
 P0 tài liệu, các use case P5 còn thiếu, a11y và diễn tập rollback.
@@ -23287,7 +23301,7 @@ cũ, và kho Activity giữ nguyên `retained: 25` — nhật ký vận hành n�
 tới nó. Sau đó tiến lại bản mới (`mkddc-web` `a5bcc5f5…7655e1`, bundle
 `index-DepLspUa.js`), `journalctl -p err` trống.
 
-**Tracker plan 52: 50/50 HOÀN TẤT, G0–G6 đạt.** Finding `PA3-N03` (hierarchy
+**Tracker plan 52: 51/51 HOÀN TẤT, G0–G6 đạt.** Finding `PA3-N03` (hierarchy
 Modbus) đã đóng. Vẫn mở: `PA3-N01` (PLC SHM chưa mang mốc lấy mẫu — cần đổi hợp
 đồng SHM và deploy lại Core), `PA3-N02`, `PA3-N04`.
 
@@ -24050,7 +24064,7 @@ Bốn điểm đáng ghi lại:
 
 ```
 ctest --test-dir build/fw (MODBUS+BACNET+HMI ON) → 822/822 passed, 0 failed (13,16 s)
-core_tests --gtest_filter='ScheduleV31*'          → 50/50 passed
+core_tests --gtest_filter='ScheduleV31*'          → 51/51 passed
 [PERF] 64 lịch × 16 target = 1024 lệnh ghi: 0,120 ms/vòng
        ngưỡng đặc tả §21 là 100 ms ⇒ dư 833 lần
 ```
@@ -27176,7 +27190,7 @@ Không đổi hợp đồng binary: `kx_ext_point_t`, `kx_io_shm_t`, `kx_plc_shm
 ### Added - WEB-HIST-005 shared Logging Control and feature-gated unified Trends (2026-07-20)
 - fe(logging-control): added one reusable UI/AO/DO/VP database logging control with textual `off|scheduled|recording|error` status, 11 intervals, admin-only two-step immediate/future UTC activation, viewer/operator read-only behavior, revisioned policy updates, capacity/storage/conflict/field alerts, VP diagnostic-log separation, focus trap/Escape/focus restore and screen-reader alerts.
 - fe(history): added explicit UTC `[from,to)` history client, generation-aware response normalization, structured 400/413/503 errors, CSV query parity, partial/gap/unavailable/no-history state banner, BAD/missing gap line breaks, boolean stepped lines and stale-response suppression. Trends can use v2 unified response without browser tier merge when `VITE_HISTORIAN_V2_TRENDS=1`; default `0` preserves legacy range/query authority until activation/cutover.
-- Verification: frontend Vitest `50/50`, `npm run lint`, `npm run typecheck`, default and `VITE_HISTORIAN_V2_TRENDS=1` production builds pass; backend regression `go test -count=1 ./...` passes (`20.790s`), with `go vet ./...` and `go build ./...` GREEN. Browser/manual accessibility, activation/cutover, target eMMC and `E2E-HIST-001` remain open; legacy code/query removal is deferred.
+- Verification: frontend Vitest `51/51`, `npm run lint`, `npm run typecheck`, default and `VITE_HISTORIAN_V2_TRENDS=1` production builds pass; backend regression `go test -count=1 ./...` passes (`20.790s`), with `go vet ./...` and `go build ./...` GREEN. Browser/manual accessibility, activation/cutover, target eMMC and `E2E-HIST-001` remain open; legacy code/query removal is deferred.
 ### Added - WEB-HIST-004 unified UTC history query (2026-07-20)
 - web/backend(historian-v2): added a generation-aware unified query engine for 1..8 canonical UI/AO/DO/VP IDs over explicit half-open UTC `[from,to)` ranges. The engine supports all 11 fixed resolutions plus `auto`, enforces `maxPoints<=5000` per series without silent truncation, merges RAM > hot > committed archive at 15-second base buckets, re-aggregates deterministically, preserves value/min/max/sum/count/worst-quality/source/tier semantics, returns empty generation series only after all tiers finish, and emits explicit partial gaps when a tier is unavailable or corrupt.
 - web/backend(historian-query-store): added bounded, cancellable RAM/hot/archive readers with common per-request RAM coverage, hot/gap half-open reads, enabled-policy identity discovery, contiguous archive-watermark enforcement, committed-block checksum/codec/identity verification, safe local regular-file reads, generation isolation, typed partial archive errors and hard row/block/identity limits.

@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-27 (đăng ký hướng dẫn ST 16 DO Modbus và record đánh giá mã nguồn qua sử dụng thực tế; 2026-09-26 đăng ký hai record rà soát kiến trúc/so sánh/finding; các trạng thái task Programming bên dưới là snapshot hồ sơ theo mốc 2026-08-25, không phải kết quả kiểm lại trong phiên này; `RELEASE_READY` vẫn `NO-GO` theo Verification)
+**Cập nhật:** 2026-09-28 (báo cáo riêng hiệu năng Forlinx trình PM, D01–D07 chờ quyết định; audit hiệu năng Forlinx §13 của `REC-PROG-RUNTIME-PERF-COMP-001` v1.2; đăng ký hướng dẫn ST 16 DO Modbus và record đánh giá mã nguồn qua sử dụng thực tế; 2026-09-26 đăng ký hai record rà soát kiến trúc/so sánh/finding; các trạng thái task Programming bên dưới là snapshot hồ sơ theo mốc 2026-08-25, không phải kết quả kiểm lại trong phiên này; `RELEASE_READY` vẫn `NO-GO` theo Verification)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -25,6 +25,8 @@
 | [Đề xuất chương trình ST 16 DO Modbus](06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md) | `GUIDE-PROG-ST-DO16-001`: Program ST 8 kiểu chạy + chế độ AUTO tự chạy lần lượt cả 8, dùng FUNCTION/FUNCTION_BLOCK và thư viện hệ thống, hướng dẫn tự nhập trên Web UI; đã triển khai trên bo lab Foxlinx 2026-09-27; nghiệm thu T1–T12 và kiểm từng chu kỳ (3 785 chu kỳ, 0 vi phạm thiết kế); chưa đo điện tiếp điểm — bằng chứng `EV-PROG-DO16-MB-20260927` |
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
+| [Audit hiệu năng Forlinx ngày 28/09](07_records/reviews/PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md#13-audit-hệ-thống-và-phần-mềm-trên-forlinx--2026-09-28) | Record §13: OS/Core, API/Modbus, browser, finding và phương án cải thiện; chưa deploy tối ưu, chưa phải HIL/release |
+| [Hiện trạng/finding/phương án hiệu năng Forlinx để PM review](07_records/reviews/FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md) | `REC-FORLINX-PERF-PM-20260928`: báo cáo riêng, lựa chọn/lợi ích/rủi ro, trình tự, tiêu chí đề xuất và phiếu D01–D07; chưa phê duyệt triển khai |
 | [Rà soát kiến trúc và đề xuất cạnh tranh DDC-24](07_records/reviews/DDC24_ARCHITECTURE_SOLUTION_COMPARATIVE_REVIEW_2026-09-26.md) | record 26–27/09: cấu trúc Program/Function/FB, topology, so sánh hãng và §9 gồm chín đề xuất tính năng để Product review; chưa đổi Product authority |
 | [Finding và đề xuất kiến trúc DDC-24](07_records/reviews/DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md) | record riêng 7 finding, giải pháp đề xuất, bằng chứng và điều kiện đóng; không thay Design authority |
 | [Đánh giá mã nguồn DDC-24 qua sử dụng thực tế](07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md) | record 27/09: 21 vấn đề cần nâng cấp/cải tiến rút từ việc viết, triển khai và kiểm từng chu kỳ một chương trình ST trên bo, kèm dẫn chứng `file:dòng` và lộ trình; không đổi Design authority |
