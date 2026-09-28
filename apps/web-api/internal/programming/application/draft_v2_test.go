@@ -853,3 +853,86 @@ func TestAnnotateObjectVaTaiChoVaChoPhepXuongDong(t *testing.T) {
 		t.Fatalf("objectId lạ phải bị từ chối, nhận: %v", err)
 	}
 }
+
+// Hồi quy bo Foxlinx 2026-09-25 ("không xóa được chương trình"): Binding flat
+// legacy hợp lệ theo hợp đồng nhưng không có `variableId`, nên view Mapping của
+// FE không thấy nó và batch xoá cũ không gỡ nó. Backend đúng khi từ chối Binding
+// treo vào Program đã xoá; bên dựng batch phải gỡ Binding theo owner `programId`.
+func TestXoaProgramPhaiGoBindingTheoOwnerProgramId(t *testing.T) {
+	projectID := "e96357dc-b00c-4116-a4a0-1dd71ea116db"
+	first, second := objectUUID(1), objectUUID(2)
+	ownedByFirst, ownedBySecond := objectUUID(3), objectUUID(4)
+	document := newDraftDocumentV2(projectID, "AHU-MASTER-SEQUENCE")
+	document["objects"] = []any{
+		map[string]any{"objectId": first, "kind": "PROGRAM", "name": "DO_BlinkFast",
+			"language": "ST", "source": "PROGRAM DO_BlinkFast\nEND_PROGRAM\n", "locals": []any{}},
+		map[string]any{"objectId": second, "kind": "PROGRAM", "name": "RelayPattern32ST",
+			"language": "ST", "source": "PROGRAM RelayPattern32ST\nEND_PROGRAM\n", "locals": []any{}},
+	}
+	document["programs"] = []any{
+		map[string]any{"programId": first, "objectId": first, "periodMs": float64(1000)},
+		map[string]any{"programId": second, "objectId": second, "periodMs": float64(1000)},
+	}
+	document["bindings"] = []any{
+		map[string]any{"bindingId": ownedByFirst, "programId": first, "variable": "DO_01",
+			"pointId": "DO-01", "direction": "WRITE"},
+		map[string]any{"bindingId": ownedBySecond, "programId": second, "variable": "R50805_DO1",
+			"pointId": "CK50805-DO1", "direction": "WRITE"},
+	}
+	if err := validateDraftDocumentV2(document); err != nil {
+		t.Fatalf("fixture phải là Draft hợp lệ: %v", err)
+	}
+	before, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Batch FE cũ: chỉ gỡ cấu hình chạy và POU.
+	if _, err := applyDraftOperations(before, []json.RawMessage{
+		op(map[string]any{"op": "removeProgram", "programId": first}),
+		op(map[string]any{"op": "removeObject", "objectId": first}),
+	}); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("Binding treo vào Program đã xoá phải bị từ chối, nhận %v", err)
+	}
+
+	// Batch FE mới: gỡ Binding theo owner trước.
+	result, err := applyDraftOperations(before, []json.RawMessage{
+		op(map[string]any{"op": "removeBinding", "bindingId": ownedByFirst}),
+		op(map[string]any{"op": "removeProgram", "programId": first}),
+		op(map[string]any{"op": "removeObject", "objectId": first}),
+	})
+	if err != nil {
+		t.Fatalf("xoá Program kèm gỡ Binding theo owner bị từ chối: %v", err)
+	}
+	var after map[string]any
+	if err := json.Unmarshal(result, &after); err != nil {
+		t.Fatal(err)
+	}
+	bindings := collectionOf(after, "bindings")
+	if len(bindings) != 1 || bindings[0]["bindingId"] != ownedBySecond {
+		t.Fatalf("Binding của Program còn lại phải giữ nguyên, nhận %v", bindings)
+	}
+	if findByID(after, "objects", "objectId", first) != nil || findByID(after, "programs", "programId", first) != nil {
+		t.Fatal("Program đã xoá vẫn còn trong Draft")
+	}
+}
+
+// Binding CANONICAL (có `point`) mà thiếu `variableId` nằm ngoài hợp đồng: không
+// đường API nào sinh ra nó. Draft trên bo 2026-09-25 bị ghi thẳng vào SQLite ở
+// đúng hình dạng này và mọi PATCH sau đó đều 400. Chốt rằng validator KHÔNG âm
+// thầm chấp nhận — dữ liệu như vậy phải được sửa về hợp đồng.
+func TestDraftTuChoiBindingCanonicalThieuVariableId(t *testing.T) {
+	programID := objectUUID(1)
+	document := newDraftDocumentV2("e96357dc-b00c-4116-a4a0-1dd71ea116db", "AHU")
+	document["objects"] = []any{map[string]any{"objectId": programID, "kind": "PROGRAM",
+		"name": "DO_BlinkFast", "language": "FBD", "source": "", "locals": []any{}}}
+	document["programs"] = []any{map[string]any{"programId": programID, "objectId": programID, "periodMs": float64(1000)}}
+	document["bindings"] = []any{map[string]any{
+		"bindingId": objectUUID(2), "programId": programID, "variable": "DO_01",
+		"dataType": "BOOL", "direction": "WRITE", "writable": true, "qualityPolicy": "REQUIRE_GOOD",
+		"point": map[string]any{"category": "LOCAL", "pointId": "DO-01"},
+	}}
+	if err := validateDraftDocumentV2(document); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("Binding canonical thiếu variableId phải bị từ chối, nhận %v", err)
+	}
+}

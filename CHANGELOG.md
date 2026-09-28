@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Fixed — Xoá POU gỡ đủ Binding theo owner `programId` ("không xóa được chương trình") (2026-09-28)
+
+- Phạm vi: `apps/web-ui/src/features/programming/{model/signals.ts,design/pou/pouCommands.ts,design/pou/PouExplorer.tsx,design/DesignWorkspacePage.tsx}` + test; `apps/web-api/internal/programming/application/draft_v2_test.go` (chỉ thêm test). Bản sửa viết ngày 2026-09-25 trên `main@36c1a863` nhưng chưa từng được commit; nay áp lên `main@597616ca`.
+- Triệu chứng: trên bo Foxlinx, bấm Xoá Program ở Project `AHU-MASTER-SEQUENCE` luôn nhận `PATCH .../draft` → `400 PRG-ERR-REQ-001`.
+- Nguyên nhân gốc: `deletePouOperations` chỉ gỡ Binding tìm được qua biến `locals` của POU trong view Mapping. View đó (`programmingBindingsFromV2`) fail-closed: chỉ cần một Binding flat legacy hoặc thiếu `variableId` là cả collection rỗng, nên batch xoá không có `removeBinding` nào và backend từ chối vì Binding còn trỏ vào Program đã xoá.
+- Cách sửa: `draftBindingOwners` đọc owner `programId` của mọi Binding từ draft thô (cùng cách `draftSignals`); `deletePouOperations` gộp Binding theo biến và theo owner, khử trùng, chỉ áp cho POU đã xếp lịch; `DesignWorkspacePage` truyền `bindingOwners` xuống `PouExplorer`. Backend giữ hành vi fail-closed (khoá bằng test).
+- Dữ liệu hỏng của Project đó không còn: bo lab đã cài sạch ngày 2026-09-27.
+- Kiểm chứng trên `main@597616ca`: 4 test FE mới đỏ khi bỏ bản sửa, xanh khi có; vitest 267 file / 3490 test exit 0; `npm run lint` và `npm run build` exit 0; `go vet` exit 0; `go test ./... -count=1` 21 package ok. Người dùng đã tự kiểm và deploy lên bo.
+- Refs: `F-P59-DELETE-PROGRAM-001`.
+
 ### Deploy — Bo lab Foxlinx lên `main@e3072983` (toàn bộ finding đã merge của báo cáo sử dụng thực tế) (2026-09-28)
 
 - Phạm vi: bo lab `OK1126B-buildroot`. Web `mkddc-web` (`7c58fab0…`, version `main-pr804-74d92415`; cây của head #804 trùng từng byte với `main@e3072983`), `dist` FE (`npm run build:release`, `VITE_PROGRAMS_WORKSPACE_V2=1`), `mkddc-iobus` (`dc8cad5b…`), `mkddc-st-compile` (`d3aec043…`), `mkddc-st-package`. Tool cross-build với khoá phát hành: `--st-key-info` báo `RELEASE`, fingerprint `2fb77aa42e7fe446`; GLIBCXX ≤ 3.4.29. Core giữ `9621cb52…`, vì runtime/domain/bootstrap/adapters không đổi kể từ RC `f86150e3`; profile (`1cb61fec…`) và SHM magic không đổi. Không đụng Programming (Active của người dùng `0c29f4f1…` giữ nguyên, Draft sạch).
