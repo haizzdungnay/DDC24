@@ -97,7 +97,7 @@
     "MB_RTU"
   ],
   "coreLibrary": {
-    "version": "rev-a.5"
+    "version": "rev-a.6"
   },
   "integrityMode": "SIGNATURE_REQUIRED",
   "reviewGatedFeatures": [

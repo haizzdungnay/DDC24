@@ -12,6 +12,7 @@ import {
   FBD_MAX_LAYOUT_COORDINATE,
   FBD_MAX_LAYOUT_NODES,
   FBD_MAX_NETWORKS,
+  FBD_MAX_PORTS_PER_NODE,
   FBD_MAX_WIRES,
   canonicalFbdJson,
   canonicalizeFbdDocument,
@@ -227,7 +228,7 @@ export function healNodePortOrders(document: FbdDocument): void {
       const seen = new Set<number>()
       let hasIssue = false
       for (const p of node.ports) {
-        if (seen.has(p.order) || p.order < 0 || p.order > 15) {
+        if (seen.has(p.order) || p.order < 0 || p.order > FBD_MAX_PORTS_PER_NODE - 1) {
           hasIssue = true
           break
         }

@@ -31,7 +31,9 @@ constexpr std::size_t kMaxNetworks = 256;
  * 16 node) mà vẫn chặn được một map phình vô hạn gửi từ client. */
 constexpr std::size_t kMaxLayoutNodes = 4096;
 constexpr double      kMaxLayoutCoordinate = 100000.0;
-constexpr std::size_t kMaxPortsPerNode = 16;
+/* Issue #801 — 17 = 16 bit + 1 cổng word của `WORD_TO_BITS`/`BITS_TO_WORD`;
+ * khớp `maxItems` của `fbd_v1.schema.json` và registry schema. */
+constexpr std::size_t kMaxPortsPerNode = 17;
 
 void add_issue(FbdValidationResult* result, const char* code, std::string path)
 {
@@ -262,6 +264,10 @@ bool node_port_shape_matches_kind(const FbdNode& node)
     case FbdNodeKind::OUTPUT:
         return input_count > 0 && output_count == 0;
     case FbdNodeKind::FUNCTION:
+        /* Issue #801: `UPTIME` là hàm SYSTEM duy nhất không có đối số — node của
+         * nó chỉ có đúng một cổng ra. Mọi FUNCTION khác vẫn phải có cổng vào. */
+        if (node.type_ref == "UPTIME") return input_count == 0 && output_count == 1;
+        return input_count > 0 && output_count > 0;
     case FbdNodeKind::FUNCTION_BLOCK:
     case FbdNodeKind::CONVERSION:
         return input_count > 0 && output_count > 0;
@@ -541,7 +547,7 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
                     !has_string(port_json, "direction") || !has_string(port_json, "dataType") ||
                     !port_json.contains("unit") ||
                     !(port_json["unit"].is_null() || port_json["unit"].is_string()) ||
-                    !has_unsigned_in_range(port_json, "order", 15)) {
+                    !has_unsigned_in_range(port_json, "order", kMaxPortsPerNode - 1)) {
                     add_issue(&result, "FBD-SCHEMA-PORT-001", port_path);
                     continue;
                 }

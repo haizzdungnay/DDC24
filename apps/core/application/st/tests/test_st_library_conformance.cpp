@@ -90,9 +90,11 @@ StValue value_from_json(StType type, const json& value)
 {
     switch (type) {
     case StType::BOOL: return StValue::make_bool(value.get<bool>());
-    case StType::INT:
-    case StType::DINT:
-    case StType::UINT: return StValue::make_int(value.get<int32_t>());
+    /* Issue #801: trace đầu tiên có biến vào UINT (`WORD_TO_BITS`). Dựng giá trị
+     * đúng kiểu — `set_variable` từ chối UINT mang thẻ INT, đúng như nó phải. */
+    case StType::INT: return StValue::make_int(value.get<int32_t>());
+    case StType::DINT: return StValue::make_dint(value.get<int32_t>());
+    case StType::UINT: return StValue::make_uint(value.get<uint16_t>());
     case StType::REAL: return StValue::make_real(value.get<float>());
     case StType::TIME: return StValue::make_time(value.get<int64_t>());
     }

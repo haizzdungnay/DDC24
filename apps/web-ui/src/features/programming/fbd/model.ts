@@ -11,7 +11,8 @@ export const FBD_PROFILE_ID = PROGRAMMING_PROFILE_ID
 export const FBD_MAX_NETWORKS = PROGRAMMING_RESOURCES.maxFbdBlocks
 export const FBD_MAX_BLOCKS = PROGRAMMING_RESOURCES.maxFbdBlocks
 export const FBD_MAX_WIRES = PROGRAMMING_RESOURCES.maxFbdConnections
-export const FBD_MAX_PORTS_PER_NODE = 16
+// Issue #801 — 16 bit + 1 cổng word (`WORD_TO_BITS`/`BITS_TO_WORD`); khớp `fbd_v1.schema.json`.
+export const FBD_MAX_PORTS_PER_NODE = 17
 
 export type FbdDataType = (typeof PROGRAMMING_TYPES)[number]['name']
 export const FBD_DATA_TYPES: readonly FbdDataType[] = PROGRAMMING_TYPES.map((item) => item.name)
@@ -273,6 +274,8 @@ function portShapeMatchesKind(node: FbdNode): boolean {
     return node.ports.length === 1 && inputs === 1 && outputs === 0 &&
       port?.name === 'IN' && port.order === 0
   }
+  // Issue #801: `UPTIME` là hàm SYSTEM duy nhất không có đối số — chỉ một cổng ra.
+  if (node.kind === 'FUNCTION' && node.typeRef === 'UPTIME') return inputs === 0 && outputs === 1
   return inputs > 0 && outputs > 0
 }
 
@@ -369,7 +372,7 @@ export function validateFbdDocument(document: FbdDocument, context?: FbdValidati
         const portPath = `${nodePath}.ports[${portIndex}]`
         if (!canonicalUuid.test(port.id) || ids.has(port.id) || portOrders.has(port.order) ||
             portNames.has(port.name) || !identifier.test(port.name) || !FBD_DATA_TYPES.includes(port.dataType) ||
-            port.order < 0 || port.order > 15 || (port.unit !== null && (port.unit.length < 1 || port.unit.length > 32))) {
+            port.order < 0 || port.order > FBD_MAX_PORTS_PER_NODE - 1 || (port.unit !== null && (port.unit.length < 1 || port.unit.length > 32))) {
           add('FBD-SEM-PORT-001', portPath)
         }
         ids.add(port.id)

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.7 |
+| Phiên bản | 1.8 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
@@ -17,6 +17,7 @@
 - Logic tách thành **10 khối người dùng** (5 FUNCTION, 5 FUNCTION_BLOCK) và dùng **17 mục của thư viện hệ thống**: 6 khối `TON`, `TP`, `R_TRIG`, `F_TRIG`, `CTU`, `HYSTERESIS` và 11 hàm `LIMIT`, `SEL`, `MIN`, `MAX`, `SCALE`, `DEADBAND`, `REAL_TO_TIME`, `REAL_TO_UINT`, `REAL_TO_INT`, `INT_TO_REAL`, `DINT_TO_REAL`.
 - An toàn: mất tín hiệu cho phép (`InPermit`) thì tắt ngay; khoá từng kênh để bảo trì; đổi chế độ thì tắt hết và nghỉ 2 s; relay tải thật có thời gian đóng/nghỉ tối thiểu 10 s; các phép trong mã có thể gây lỗi runtime (tràn số, ép kiểu, cận đảo) đều được chặn trước.
 - Mọi đoạn mã ở §4 là **bản đang chạy trên bo** (§9), **trừ** `FB_MASK_SPLIT` (§4.6) và khối `VAR CONSTANT` của Program: từ phiên bản 1.7 hai chỗ này dùng toán tử bit trên `UINT` và `VAR CONSTANT` (Issue #800), nên cần tool ST có #800. Bo đang chạy bản trước (`MOD 2` / `/ 2` và số trần); mô phỏng 3 001 chu kỳ cho hai bản kết quả **giống hệt từng byte** (§9.1). Quá trình kiểm đã tìm và sửa 9 lỗi của mã đề xuất (7 trên host, 2 trên bo) và 1 lỗi của sản phẩm (Check từ chối VP `integer`/`multistate`, PR #795).
+- Từ phiên bản 1.8, thư viện hệ thống `rev-a.6` (Issue #801) có sẵn `RELAY_GUARD`, `STAGER`, `PULSE_GEN`, `WORD_TO_BITS`. **§4.12** là bản Program dùng các khối này thay cho `FB_DO_CHANNEL`, `FB_STAGER`, `FB_STEP_TIMER`, `FB_BLINK`, `FB_MASK_SPLIT`: chỉ còn 5 FUNCTION người dùng, số lệnh IR giảm 1 525 → 792. Mô phỏng sai khác 3 001 chu kỳ (§9.8): mọi chế độ giống hệt trừ STAGING, nơi bậc đổi đúng `STAGE_DELAY` thay vì chậm thêm 2 chu kỳ. Bo đang chạy bản khối tự viết; bản §4.12 cần firmware có `rev-a.6`.
 - Làm theo §5 → §6 → §7. Chu kỳ Program: **100 ms**.
 
 ## 1. Kiểu chạy
@@ -806,6 +807,70 @@ END_VAR
 END_PROGRAM
 ```
 
+### 4.12 Bản dùng khối SYSTEM (`rev-a.6`, Issue #801)
+
+Thư viện hệ thống `rev-a.6` có sẵn đúng các khối mà §4.6–§4.10 phải tự viết
+([`SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI`](../02_design/software/SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md)).
+Với firmware có `rev-a.6`, **bỏ hẳn** 5 FUNCTION_BLOCK người dùng và chỉ giữ 5
+FUNCTION §4.1–§4.5; Program §4.11 đổi đúng các chỗ sau, phần còn lại giữ nguyên:
+
+| Chỗ trong §4.11 | Khối tự viết | Khối SYSTEM |
+|---|---|---|
+| `Ch01`…`Ch16` | `FB_DO_CHANNEL` | `RELAY_GUARD` — cùng luật: `ENABLE = FALSE` tắt ngay, cold start nghỉ đủ `MIN_OFF`, `STARTS` bão hoà |
+| `Req`, `LockBits` | `FB_MASK_SPLIT` (`B01`…`B16`) | `WORD_TO_BITS` (`B00`…`B15` — **chỉ số lệch 1**: `Ch01` dùng `B00`) |
+| `StepClk` | `FB_STEP_TIMER` (`Pulse`) | `PULSE_GEN` với `T_ON := T#0s`, `T_OFF := StepTime`, dùng `TICK` |
+| `Blinker` | `FB_BLINK` | `PULSE_GEN` với `T_ON = T_OFF = BlinkTime`, dùng `Q` |
+| `Stager` | `FB_STAGER` + `FN_FIRST_N(Stager.Stages)` | `STAGER`, dùng thẳng `Stager.MASK` |
+
+```pascal
+VAR
+    Ch01 : RELAY_GUARD;     (* ... tương tự tới Ch16 *)
+    Req        : WORD_TO_BITS;
+    LockBits   : WORD_TO_BITS;
+    StepClk    : PULSE_GEN;   (* chỉ dùng TICK: T_ON = 0, T_OFF = StepTime *)
+    Blinker    : PULSE_GEN;
+    Stager     : STAGER;
+    (* ... các biến khác giữ nguyên như §4.11 *)
+END_VAR
+
+    (* ===== 3. Gọi MỌI instance FB đúng một lần mỗi chu kỳ ===== *)
+    StepClk(RUN := Settled AND (((Mode = 2) AND (Step < 16) AND NOT AnyWaiting) OR (Mode = 3) OR ((Mode = 6) AND TestRunning)),
+            T_ON := T#0s, T_OFF := StepTime);
+    Blinker(RUN := Settled AND (Mode = 4), T_ON := BlinkTime, T_OFF := BlinkTime);
+    DemandOn(IN := DemandUsed, HIGH := 10.0, LOW := 5.0);
+    Stager(RUN := Settled AND (Mode = 5) AND DemandOn.Q, DEMAND := DemandUsed,
+           MAX_STAGES := 16, STAGE_DELAY := StepTime, HOLD := AnyWaiting);
+    (* ... StepClk.Pulse đổi thành StepClk.TICK ở TestStep và nhánh 2, 3 *)
+
+    (* nhánh 5 của CASE *)
+        5:  LoadMode := TRUE;
+            Mask := Stager.MASK;
+
+    (* ===== 5. Tách mặt nạ, bảo vệ relay ===== *)
+    Req(IN := Mask);
+    LockBits(IN := FN_MASK_FROM_REAL(CmdLockMask));
+    Ch01(CMD := Req.B00, ENABLE := InPermit AND NOT LockBits.B00, MIN_ON := TMinOn, MIN_OFF := TMinOff);
+    (* ... Ch02 dùng B01, …, Ch16 dùng B15 *)
+    DO01 := Ch01.Q;
+    AnyWaiting := Ch01.WAITING OR Ch02.WAITING (* ... *) OR Ch16.WAITING;
+```
+
+Tên cổng khối SYSTEM viết **HOA** đúng như registry (`CMD`, `ENABLE`, `MIN_ON`,
+`MIN_OFF`, `Q`, `WAITING`, `STARTS`, …). Mức dùng tài nguyên đo bằng
+`mkddc-st-compile --check-only`:
+
+| Chỉ số | Khối tự viết (§4.6–§4.11) | Khối SYSTEM (§4.12) |
+|---|---:|---:|
+| Lệnh IR | 1 525 | 792 |
+| Instance FB | 43 | 28 |
+| Slot / slot ghi được | 517 / 431 | 372 / 287 |
+| Hằng | 86 | 85 |
+| Artifact `.mkir` | 55 784 byte | 25 048 byte |
+
+Khác biệt hành vi duy nhất (§9.8): `STAGER` đổi bậc đúng mỗi `STAGE_DELAY` theo
+đồng hồ Core, còn `FB_STAGER` hạ `IN` của `TON` một chu kỳ sau mỗi lần đổi nên
+mỗi bậc chậm thêm 2 chu kỳ Program (1 s thành 1,2 s ở chu kỳ 100 ms).
+
 ## 5. Chuẩn bị trên bo trước khi nhập mã
 
 ### 5.1 Kiểm 16 điểm Modbus
@@ -1100,6 +1165,28 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 - Relay vật lý: chưa có phép đo điện tại tiếp điểm. Kết quả trên bo là lệnh FC05 được ACK và giá trị coil đọc lại.
 - Hành vi DO Modbus khi Program **FAULTED**: theo mã nguồn, đầu ra được giữ giá trị cuối tới hết TTL giữ (sàn 60 s, ADR-051), sau đó mới về "Giá trị an toàn". Chưa đo trên bo.
 
+### 9.8 Mô phỏng sai khác bản khối SYSTEM (phiên bản 1.8)
+
+Cùng kịch bản 300 s của §9.1 (AUTO trọn vòng, khoá kênh, đảo chiều, STAGING
+77 % với bước 1,5 s, MANUAL), chạy bằng `mkddc-st-sim` trên bản dựng có
+`rev-a.6`: bản §4.11 (khối tự viết) và bản §4.12 (khối SYSTEM), 3 001 chu kỳ
+100 ms mỗi bản.
+
+| Hạng mục | Kết quả |
+|---|---|
+| Bản §4.11 dựng lại trên `rev-a.6` | Giống hệt từng byte CSV của lần chạy bản 1.7 — khối tự viết không bị `rev-a.6` làm đổi hành vi |
+| Chu kỳ khác nhau giữa hai bản | 239 / 3 001, **chỉ** trong hai đoạn STAGING (AUTO 100–126 s và STAGING tay 208–226 s); OFF, MANUAL, STAGGER, CHASE, BLINK, TEST, PULSE giống hệt |
+| Nhịp đổi bậc STAGING trong AUTO (`StepTime` 1 s) | Tự viết: 1,2 s/bậc (100,6 → 110,2 s đủ 9 bậc). SYSTEM: **1,0 s/bậc** (100,6 → 108,6 s) |
+| Nhịp đổi bậc STAGING tay (`CmdStepSec` 1,5 s) | Tự viết: 1,7 s/bậc. SYSTEM: **1,5 s/bậc** |
+| Relay đóng cùng một chu kỳ ở STAGING | Tối đa 1 ở cả hai bản |
+| Giảm bậc | Cả hai nhả bậc cao nhất trước; relay thật nhả khi hết `MIN_ON` 10 s của chính nó (`HOLD := AnyWaiting` giữ bậc tới lúc đó) |
+| Lỗi runtime | 0 ở cả hai bản |
+
+Bốn lỗi hiện trường liệt kê ở §1 của đặc tả khối SYSTEM (nhịp `TON` tự nạp
+lại trôi 1,0 → 1,2 s, đóng dồn relay, STAGING nhả có "lỗ", relay bị giữ 10 s khi
+đổi chế độ) được tái hiện bằng mã kiểu cũ và kiểm khối SYSTEM không mắc trong
+`apps/core/application/st/tests/test_st_system_blocks.cpp` (T-801-5).
+
 ## 10. Lỗi thường gặp
 
 | Mã / hiện tượng | Nguyên nhân | Cách xử lý |
@@ -1145,3 +1232,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu, ràng buộc 8 và dòng Trạng thái (Active hiện là `0c29f4f1…`) |
 | 1.6 | 2026-09-28 | Ràng buộc 10: `PID` là trạng thái chờ quyết định (Issue #802), trỏ tới phiếu `REC-PID-DECISION-REQUEST-20260928`. Mã chương trình không đổi |
 | 1.7 | 2026-09-28 | Issue #800: `FB_MASK_SPLIT` viết lại bằng `AND` theo bit trên `UINT`; mặt nạ `MASK_ODD`/`MASK_EVEN`/`MASK_LOW_NIBBLES`/`MASK_HIGH_NIBBLES` bằng `VAR CONSTANT`; ràng buộc 2, 3, 7 và §10 theo ngôn ngữ mới; §9.1 số đo bản 1.7 và mô phỏng 3 001 chu kỳ giống hệt bản trên bo. Bo vẫn chạy bản trước |
+| 1.8 | 2026-09-28 | Issue #801: thêm §4.12 — Program dùng khối SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS` (`rev-a.6`) thay 5 FUNCTION_BLOCK tự viết, lệnh IR 1 525 → 792; §9.8 mô phỏng sai khác 3 001 chu kỳ: chỉ STAGING khác (bậc đúng `STAGE_DELAY`). Bo vẫn chạy bản khối tự viết |

@@ -61,11 +61,12 @@ func TestSystemLibraryGeneratedFromRegistryWithoutDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	// `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS (46); Issue #800
-	// thêm SHL/SHR (`rev-a.5`, 48). Con số ghim
+	// thêm SHL/SHR (`rev-a.5`, 48); Issue #801 thêm 4 FB SYSTEM + BITS_TO_WORD
+	// + UPTIME (`rev-a.6`, 54). Con số ghim
 	// ở đây là CỐ Ý: nó bắt một lần thêm entry phải đi kèm người sửa test đọc
 	// lại danh sách, thay vì để registry lớn dần mà không ai đối chiếu.
-	if len(entries) != len(contract.Entries) || len(entries) != 48 {
-		t.Fatalf("số entry Go/JSON = %d/%d, cần 48", len(entries), len(contract.Entries))
+	if len(entries) != len(contract.Entries) || len(entries) != 54 {
+		t.Fatalf("số entry Go/JSON = %d/%d, cần 54", len(entries), len(contract.Entries))
 	}
 	for index, rawEntry := range contract.Entries {
 		var want libraryRegistryEntryContract
@@ -125,8 +126,8 @@ func TestSystemLibraryStateSizeOnlyClaimsAuthoritativeFacts(t *testing.T) {
 			}
 		}
 	}
-	if functions != 39 || blocks != 9 {
-		t.Fatalf("phân loại FUNCTION/FB = %d/%d, cần 39/9", functions, blocks)
+	if functions != 41 || blocks != 13 {
+		t.Fatalf("phân loại FUNCTION/FB = %d/%d, cần 41/13", functions, blocks)
 	}
 }
 

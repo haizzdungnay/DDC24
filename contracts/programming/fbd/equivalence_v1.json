@@ -844,6 +844,110 @@
         ],
         "expected": 5
       }
+    },
+    {
+      "id": "EQ-040",
+      "typeRef": "BITS_TO_WORD",
+      "inputs": [
+        {
+          "name": "X00",
+          "type": "BOOL"
+        },
+        {
+          "name": "X01",
+          "type": "BOOL"
+        },
+        {
+          "name": "X02",
+          "type": "BOOL"
+        },
+        {
+          "name": "X03",
+          "type": "BOOL"
+        },
+        {
+          "name": "X04",
+          "type": "BOOL"
+        },
+        {
+          "name": "X05",
+          "type": "BOOL"
+        },
+        {
+          "name": "X06",
+          "type": "BOOL"
+        },
+        {
+          "name": "X07",
+          "type": "BOOL"
+        },
+        {
+          "name": "X08",
+          "type": "BOOL"
+        },
+        {
+          "name": "X09",
+          "type": "BOOL"
+        },
+        {
+          "name": "X10",
+          "type": "BOOL"
+        },
+        {
+          "name": "X11",
+          "type": "BOOL"
+        },
+        {
+          "name": "X12",
+          "type": "BOOL"
+        },
+        {
+          "name": "X13",
+          "type": "BOOL"
+        },
+        {
+          "name": "X14",
+          "type": "BOOL"
+        },
+        {
+          "name": "X15",
+          "type": "BOOL"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "BITS_TO_WORD(X00, X01, X02, X03, X04, X05, X06, X07, X08, X09, X10, X11, X12, X13, X14, X15)",
+      "vector": {
+        "values": [
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "expected": 32777
+      }
+    },
+    {
+      "id": "EQ-041",
+      "typeRef": "UPTIME",
+      "inputs": [],
+      "outputType": "TIME",
+      "stExpression": "UPTIME()",
+      "vector": {
+        "values": [],
+        "expected": 0
+      }
     }
   ],
   "stateTraces": [
@@ -1690,6 +1794,696 @@
           },
           "expected": {
             "ACTIVE": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-010",
+      "typeRef": "RELAY_GUARD",
+      "instance": "GUARD",
+      "inputs": [
+        {
+          "port": "CMD",
+          "variable": "CMD_IN",
+          "type": "BOOL"
+        },
+        {
+          "port": "ENABLE",
+          "variable": "EN_IN",
+          "type": "BOOL"
+        },
+        {
+          "port": "MIN_ON",
+          "variable": "T_MINON",
+          "type": "TIME"
+        },
+        {
+          "port": "MIN_OFF",
+          "variable": "T_MINOFF",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "RUN_Q",
+          "type": "BOOL"
+        },
+        {
+          "port": "WAITING",
+          "variable": "WAIT_Q",
+          "type": "BOOL"
+        },
+        {
+          "port": "STARTS",
+          "variable": "N_STARTS",
+          "type": "DINT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": true,
+            "N_STARTS": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": true,
+            "N_STARTS": 0
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": true,
+            "WAIT_Q": false,
+            "N_STARTS": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CMD_IN": false,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": true,
+            "WAIT_Q": true,
+            "N_STARTS": 1
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "CMD_IN": false,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": false,
+            "N_STARTS": 1
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": true,
+            "N_STARTS": 1
+          }
+        },
+        {
+          "nowNs": 7000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": false,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": false,
+            "N_STARTS": 1
+          }
+        },
+        {
+          "nowNs": 8000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": true,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": true,
+            "WAIT_Q": false,
+            "N_STARTS": 2
+          }
+        },
+        {
+          "nowNs": 9000000000,
+          "values": {
+            "CMD_IN": true,
+            "EN_IN": false,
+            "T_MINON": 2000000000,
+            "T_MINOFF": 3000000000
+          },
+          "expected": {
+            "RUN_Q": false,
+            "WAIT_Q": false,
+            "N_STARTS": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-011",
+      "typeRef": "STAGER",
+      "instance": "STG",
+      "inputs": [
+        {
+          "port": "RUN",
+          "variable": "RUN_IN",
+          "type": "BOOL"
+        },
+        {
+          "port": "DEMAND",
+          "variable": "DEMAND_IN",
+          "type": "REAL"
+        },
+        {
+          "port": "MAX_STAGES",
+          "variable": "N_MAX",
+          "type": "INT"
+        },
+        {
+          "port": "STAGE_DELAY",
+          "variable": "T_DELAY",
+          "type": "TIME"
+        },
+        {
+          "port": "HOLD",
+          "variable": "HOLD_IN",
+          "type": "BOOL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "STAGES",
+          "variable": "N_STAGES",
+          "type": "INT"
+        },
+        {
+          "port": "TARGET",
+          "variable": "N_TARGET",
+          "type": "INT"
+        },
+        {
+          "port": "MASK",
+          "variable": "STAGE_MASK",
+          "type": "UINT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 0,
+            "N_TARGET": 4,
+            "STAGE_MASK": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 0,
+            "N_TARGET": 4,
+            "STAGE_MASK": 0
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 1,
+            "N_TARGET": 4,
+            "STAGE_MASK": 1
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 1,
+            "N_TARGET": 4,
+            "STAGE_MASK": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 2,
+            "N_TARGET": 4,
+            "STAGE_MASK": 3
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 2,
+            "N_TARGET": 4,
+            "STAGE_MASK": 3
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 100.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": true
+          },
+          "expected": {
+            "N_STAGES": 2,
+            "N_TARGET": 4,
+            "STAGE_MASK": 3
+          }
+        },
+        {
+          "nowNs": 7000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 25.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 2,
+            "N_TARGET": 1,
+            "STAGE_MASK": 3
+          }
+        },
+        {
+          "nowNs": 9000000000,
+          "values": {
+            "RUN_IN": true,
+            "DEMAND_IN": 25.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 1,
+            "N_TARGET": 1,
+            "STAGE_MASK": 1
+          }
+        },
+        {
+          "nowNs": 10000000000,
+          "values": {
+            "RUN_IN": false,
+            "DEMAND_IN": 25.0,
+            "N_MAX": 4,
+            "T_DELAY": 2000000000,
+            "HOLD_IN": false
+          },
+          "expected": {
+            "N_STAGES": 0,
+            "N_TARGET": 0,
+            "STAGE_MASK": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-012",
+      "typeRef": "PULSE_GEN",
+      "instance": "PG",
+      "inputs": [
+        {
+          "port": "RUN",
+          "variable": "RUN_IN",
+          "type": "BOOL"
+        },
+        {
+          "port": "T_ON",
+          "variable": "T_PON",
+          "type": "TIME"
+        },
+        {
+          "port": "T_OFF",
+          "variable": "T_POFF",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "PULSE_Q",
+          "type": "BOOL"
+        },
+        {
+          "port": "TICK",
+          "variable": "TICK_Q",
+          "type": "BOOL"
+        },
+        {
+          "port": "COUNT",
+          "variable": "N_PULSES",
+          "type": "DINT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": true,
+            "TICK_Q": false,
+            "N_PULSES": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": false,
+            "TICK_Q": false,
+            "N_PULSES": 0
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": false,
+            "TICK_Q": false,
+            "N_PULSES": 0
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": true,
+            "TICK_Q": true,
+            "N_PULSES": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": false,
+            "TICK_Q": false,
+            "N_PULSES": 1
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": true,
+            "TICK_Q": true,
+            "N_PULSES": 2
+          }
+        },
+        {
+          "nowNs": 7000000000,
+          "values": {
+            "RUN_IN": false,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": false,
+            "TICK_Q": false,
+            "N_PULSES": 2
+          }
+        },
+        {
+          "nowNs": 8000000000,
+          "values": {
+            "RUN_IN": true,
+            "T_PON": 1000000000,
+            "T_POFF": 2000000000
+          },
+          "expected": {
+            "PULSE_Q": true,
+            "TICK_Q": false,
+            "N_PULSES": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-013",
+      "typeRef": "WORD_TO_BITS",
+      "instance": "WB",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "W_IN",
+          "type": "UINT"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "B00",
+          "variable": "BIT00",
+          "type": "BOOL"
+        },
+        {
+          "port": "B01",
+          "variable": "BIT01",
+          "type": "BOOL"
+        },
+        {
+          "port": "B02",
+          "variable": "BIT02",
+          "type": "BOOL"
+        },
+        {
+          "port": "B03",
+          "variable": "BIT03",
+          "type": "BOOL"
+        },
+        {
+          "port": "B04",
+          "variable": "BIT04",
+          "type": "BOOL"
+        },
+        {
+          "port": "B05",
+          "variable": "BIT05",
+          "type": "BOOL"
+        },
+        {
+          "port": "B06",
+          "variable": "BIT06",
+          "type": "BOOL"
+        },
+        {
+          "port": "B07",
+          "variable": "BIT07",
+          "type": "BOOL"
+        },
+        {
+          "port": "B08",
+          "variable": "BIT08",
+          "type": "BOOL"
+        },
+        {
+          "port": "B09",
+          "variable": "BIT09",
+          "type": "BOOL"
+        },
+        {
+          "port": "B10",
+          "variable": "BIT10",
+          "type": "BOOL"
+        },
+        {
+          "port": "B11",
+          "variable": "BIT11",
+          "type": "BOOL"
+        },
+        {
+          "port": "B12",
+          "variable": "BIT12",
+          "type": "BOOL"
+        },
+        {
+          "port": "B13",
+          "variable": "BIT13",
+          "type": "BOOL"
+        },
+        {
+          "port": "B14",
+          "variable": "BIT14",
+          "type": "BOOL"
+        },
+        {
+          "port": "B15",
+          "variable": "BIT15",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "W_IN": 0
+          },
+          "expected": {
+            "BIT00": false,
+            "BIT01": false,
+            "BIT02": false,
+            "BIT03": false,
+            "BIT04": false,
+            "BIT05": false,
+            "BIT06": false,
+            "BIT07": false,
+            "BIT08": false,
+            "BIT09": false,
+            "BIT10": false,
+            "BIT11": false,
+            "BIT12": false,
+            "BIT13": false,
+            "BIT14": false,
+            "BIT15": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "W_IN": 32777
+          },
+          "expected": {
+            "BIT00": true,
+            "BIT01": false,
+            "BIT02": false,
+            "BIT03": true,
+            "BIT04": false,
+            "BIT05": false,
+            "BIT06": false,
+            "BIT07": false,
+            "BIT08": false,
+            "BIT09": false,
+            "BIT10": false,
+            "BIT11": false,
+            "BIT12": false,
+            "BIT13": false,
+            "BIT14": false,
+            "BIT15": true
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "W_IN": 8
+          },
+          "expected": {
+            "BIT00": false,
+            "BIT01": false,
+            "BIT02": false,
+            "BIT03": true,
+            "BIT04": false,
+            "BIT05": false,
+            "BIT06": false,
+            "BIT07": false,
+            "BIT08": false,
+            "BIT09": false,
+            "BIT10": false,
+            "BIT11": false,
+            "BIT12": false,
+            "BIT13": false,
+            "BIT14": false,
+            "BIT15": false
           }
         }
       ]

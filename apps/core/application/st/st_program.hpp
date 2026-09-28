@@ -92,6 +92,12 @@ enum class StFbType : uint16_t {
     CTU    = 7,
     CTD    = 8,
     HYSTERESIS = 9,
+    /* Issue #801 (U-12) — khối DDC của thư viện SYSTEM `rev-a.6`, đặc tả
+     * `SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI`. Giá trị 1..9 giữ nguyên. */
+    RELAY_GUARD = 10,
+    STAGER      = 11,
+    PULSE_GEN   = 12,
+    WORD_TO_BITS = 13,
 };
 
 StFbType st_fb_type_from_name(const std::string& name);
@@ -177,6 +183,9 @@ enum class StFunc : uint8_t {
     REAL_TO_DINT, REAL_TO_UINT,
     /* Issue #800 — dịch bit trên `UINT` (16 bit); `N >= 16` cho 0, không fault. */
     SHL, SHR,
+    /* Issue #801 — `BITS_TO_WORD` khai triển bằng SEL/OR trên UINT (16 đối số
+     * BOOL); `UPTIME()` đọc thời gian Core kể từ lần chạy đầu của Program. */
+    BITS_TO_WORD, UPTIME,
 };
 
 bool st_func_from_name(const std::string& name, StFunc* out);

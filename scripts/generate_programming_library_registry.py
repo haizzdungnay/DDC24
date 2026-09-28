@@ -450,6 +450,11 @@ def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
         # Registry hiện chưa mang layout state của FUNCTION_BLOCK; ghi unknown
         # thay vì đoán. PROJECT FB chỉ được publish sau khi có layout riêng hợp lệ.
         state_size_authoritative = entry["kind"] != "FUNCTION_BLOCK"
+        # Tách riêng: đặt `"Tags: %s, " % (...)` giữa chuỗi liền kề làm Python
+        # nối MỌI literal/f-string phía trước (gồm cả `Description`) thành chuỗi
+        # định dạng rồi mới áp `%` — mô tả có ký tự `%` làm generator hỏng hoặc
+        # định dạng sai mà không báo (Issue #801 gặp với "0-100 %").
+        tags_go = "[]string{" + ", ".join(q(t) for t in entry.get("tags", [])) + "}"
         return (
             "\t{"
             f"EntryID: {q(entry['id'])}, Name: {q(entry['id'])}, "
@@ -459,8 +464,8 @@ def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
             # nó không được sinh ra Go nên không endpoint nào trả được nó.
             f"Category: {q(entry['category'])}, "
             f"Description: {q(entry.get('description', ''))}, "
-            "Tags: %s, " % ("[]string{%s}" % ", ".join(q(t) for t in entry.get("tags", [])))
-            + f"SignatureJSON: {q(signature_json)}, "
+            f"Tags: {tags_go}, "
+            f"SignatureJSON: {q(signature_json)}, "
             f"ContentSHA256Hex: {q(content_hash)}, "
             f"PresentationSHA256Hex: {q(presentation_hash)}, "
             "StateSizeBytes: 0, "

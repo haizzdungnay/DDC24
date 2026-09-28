@@ -76,6 +76,11 @@ struct StFbState {
     /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). TASK-PROG-402 lưu state
      * bằng codec wire canonical; pid_prev_call_ns được rebase khi restore vì
      * timestamp monotonic không có nghĩa qua process restart. */
+    /* Issue #801 — `RELAY_GUARD` dùng `timing` = đã có mốc, `start_ns` = mốc Q
+     * đổi lần cuối, `q`, `counter` = STARTS. `STAGER` dùng `counter` = số bậc,
+     * `timing`/`start_ns` = đang đếm trễ đổi bậc, `prev_in` = hướng đang chờ
+     * (TRUE = tăng). `PULSE_GEN` dùng `timing` = đang chạy, `start_ns` = mốc
+     * đảo pha kế tiếp (tuyệt đối), `q`, `counter` = COUNT. */
     float   pid_integral = 0.0f;
     float   pid_prev_pv = 0.0f;
     float   pid_prev_output = 0.0f;
@@ -101,6 +106,10 @@ struct StLoadedProgram {
     std::vector<StIrVariable>    variables;
     std::vector<StIrFbInstance>  fb_instances;
     std::vector<StFbState>       fb_states;
+    /* Issue #801 — gốc của `UPTIME()`: mốc Core của lần thực thi ĐẦU TIÊN sau
+     * khi nạp. Không phải wall clock, không qua restart. */
+    bool                         uptime_origin_set = false;
+    int64_t                      uptime_origin_ns = 0;
     std::vector<StIrIoBinding>   io_bindings;
     std::vector<StIrRetainEntry> retain_entries;
     uint32_t                     retain_layout_hash = 0;

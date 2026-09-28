@@ -529,6 +529,58 @@ END_PROGRAM
     ::unlink(path.c_str());
 }
 
+/* Issue #801 §3: khối SYSTEM chỉ giữ SỐ ĐẾM của quy trình (số lần đóng relay,
+ * số chu kỳ nhịp, số bậc) qua restart; Q và mốc thời gian KHÔNG — relay phải đi
+ * lại đường nghỉ tối thiểu sau mất điện. */
+TEST(StRetain, SystemBlocksKeepProcessCountsButNotOutputsOrTimers)
+{
+    const char* source = R"ST(
+PROGRAM retained_system
+VAR RETAIN
+    guard : RELAY_GUARD;
+    stg : STAGER;
+    pg : PULSE_GEN;
+    wb : WORD_TO_BITS;
+END_VAR
+END_PROGRAM
+)ST";
+    const std::vector<uint8_t> art = build(source);
+    const std::string path = temp_path();
+    StProgramRuntime rt;
+    ASSERT_TRUE(load(&rt, art));
+    StLoadedProgram* program = const_cast<StLoadedProgram*>(rt.program());
+    ASSERT_NE(program, nullptr);
+    EXPECT_EQ(program->retain_record_size, 10u); /* 4 + 1 + 4 + 1 */
+    ASSERT_EQ(program->fb_states.size(), 4u);
+    program->fb_states[0].counter = 123456;
+    program->fb_states[0].q = true;
+    program->fb_states[0].timing = true;
+    program->fb_states[1].counter = 5;
+    program->fb_states[1].timing = true;
+    program->fb_states[2].counter = 77;
+    program->fb_states[2].q = true;
+    program->fb_states[2].timing = true;
+
+    StRetainStore store(path);
+    ASSERT_TRUE(store.save_if_needed(*program, 10 * kSec, true));
+
+    StProgramRuntime fresh;
+    ASSERT_TRUE(load(&fresh, art));
+    StLoadedProgram* restored_program = const_cast<StLoadedProgram*>(fresh.program());
+    StRetainStore restored(path);
+    ASSERT_TRUE(restored.restore(restored_program, 3 * kSec).restored);
+    ASSERT_EQ(restored_program->fb_states.size(), 4u);
+    EXPECT_EQ(restored_program->fb_states[0].counter, 123456);
+    EXPECT_FALSE(restored_program->fb_states[0].q);
+    EXPECT_FALSE(restored_program->fb_states[0].timing);
+    EXPECT_EQ(restored_program->fb_states[1].counter, 5);
+    EXPECT_FALSE(restored_program->fb_states[1].timing);
+    EXPECT_EQ(restored_program->fb_states[2].counter, 77);
+    EXPECT_FALSE(restored_program->fb_states[2].q);
+    EXPECT_FALSE(restored_program->fb_states[2].timing);
+    ::unlink(path.c_str());
+}
+
 TEST(StRetain, SchedulerRestoresOnlySnapshotPublishedAfterOutputCommit)
 {
     const std::string root = temp_dir();

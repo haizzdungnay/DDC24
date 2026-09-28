@@ -1,9 +1,11 @@
 # Đặc tả đề xuất: khối DDC cho thư viện SYSTEM — `RELAY_GUARD`, `STAGER`, `PULSE_GEN`, `WORD_TO_BITS`
 
 > **Document ID:** SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI
-> **Phiên bản:** 0.1
-> **Trạng thái:** Proposed — chờ Controls Lead duyệt đặc tả từng khối trước khi
-> bump registry; **chưa code**
+> **Phiên bản:** 0.2
+> **Trạng thái:** **Accepted + Implemented 2026-09-28** — chủ dự án chấp thuận
+> Q1–Q5 theo đề xuất khi giao triển khai; registry bump `rev-a.5 → rev-a.6`
+> (không phải `rev-a.4 → rev-a.5` như §4 viết, vì #800 đã dùng `rev-a.5`). Kết
+> quả ở §7
 > **Issue:** [#801](https://github.com/Mekong-HCM/MK-DDC-24/issues/801) (finding **U-12** của
 > [`REC-DDC-FIELD-USE-20260927`](../../07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md))
 > **Mốc mã nguồn đối chiếu:** `main@9910b88` (2026-09-28)
@@ -163,10 +165,29 @@ cho gọi trong PROGRAM/FUNCTION_BLOCK, không trong FUNCTION (Q4).
 | Q4 | Thêm `UPTIME()` và giới hạn nơi gọi | Có, chỉ trong PROGRAM/FUNCTION_BLOCK |
 | Q5 | RETAIN `STARTS`/`COUNT` | Có |
 
-Tài liệu này **không** thay chữ ký cho Q1–Q5 và không tự bump registry.
+Chủ dự án chấp thuận Q1–Q5 theo cột "Đề xuất" ngày 2026-09-28 khi giao triển
+khai Issue #801; hiện thực theo đúng các đề xuất đó (§7).
+
+## 7. Kết quả hiện thực
+
+| Mục | Kết quả |
+|---|---|
+| Wire `StFbType` | `RELAY_GUARD = 10`, `STAGER = 11`, `PULSE_GEN = 12`, `WORD_TO_BITS = 13`; giá trị cũ giữ nguyên. `StFunc` thêm `BITS_TO_WORD` (khai triển: `SEL` + `OR` theo bit, không opcode riêng) và `UPTIME` (opcode `0x56`). **Không** bump `targetAbi`: opcode/giá trị mới là bổ sung, loader cũ từ chối (fail-closed) |
+| Cổng | Đúng bảng §3.1–§3.4. `WORD_TO_BITS` có 17 cổng (1 vào + 16 ra), `BITS_TO_WORD` có 17 (16 vào + 1 ra) ⇒ giới hạn cổng mỗi node FBD nâng **16 → 17** ở registry schema, `fbd_v1.schema.json` (`ports.maxItems`, `order` tối đa 16), Core `kMaxPortsPerNode` và FE `FBD_MAX_PORTS_PER_NODE` |
+| `STAGER` | Đồng hồ `STAGE_DELAY` bắt đầu lại **ngay tại lần đổi bậc**; đổi hướng hoặc `HOLD` khởi động lại đồng hồ. Nhờ vậy bậc đổi đúng mỗi `STAGE_DELAY`, không chậm thêm chu kỳ quét (§2 "đo bằng đồng hồ Core"). `DEMAND` không hữu hạn → `ST-RT-004` |
+| `PULSE_GEN` | Mốc đảo pha tuyệt đối, cộng dồn; tối đa 2 lần đảo pha mỗi lần gọi (WCET tĩnh); `T_ON = 0` cho một bộ nhịp chỉ có `TICK` |
+| `UPTIME()` | Thời gian từ **lần thực thi đầu** của Program sau khi nạp (không phải đồng hồ tuyệt đối). Gọi trong FUNCTION → `ST-POU-002`. Trong FBD là node FUNCTION duy nhất không có cổng vào |
+| RETAIN | `RELAY_GUARD.STARTS`, `PULSE_GEN.COUNT` (u32), `STAGER` số bậc (u8 ≤ 16); `WORD_TO_BITS` 1 byte dự trữ. Q và mốc thời gian **không** qua restart |
+| Registry | `rev-a.6`, 54 mục (41 FUNCTION, 13 FB); profile, schema `const`, G1 pin + lịch sử bất biến, golden package sinh lại; hồ sơ ngôn ngữ `st_language_profile_v1` 1.1.0 → **1.2.0** (+6 `vendorExtensions`) |
+| Conformance ST↔FBD | `EQ-040` (`BITS_TO_WORD`), `EQ-041` (`UPTIME`), trace nhiều chu kỳ `FB-010`…`FB-013` cho bốn FB — phủ registry hai chiều vẫn 100 % |
+| T-801-1..5 | `apps/core/application/st/tests/test_st_system_blocks.cpp` (13 test, runtime thật): cold start đóng đúng 3,0 s; `MIN_ON` nhả đúng 13,0 s; 10 000 chu kỳ `PULSE_GEN` sai pha 0, 1 428 `TICK`; 65 536 giá trị đồng nhất; bốn lỗi hiện trường tái hiện ở mã kiểu cũ (nhịp `TON` tự nạp lại cho 50 thay vì 60 nhịp/60 s) và không có ở khối SYSTEM |
+| RETAIN test | `StRetain.SystemBlocksKeepProcessCountsButNotOutputsOrTimers` |
+| T-801-6 | Test parity registry ↔ palette FE, số ghim Go (54; 41/13) và FE (26 hàm, 13 FB) cập nhật; `g1_contract_join_v1.json` re-pin |
+| Guide | `GUIDE-PROG-ST-DO16-001` 1.8 §4.12/§9.8: bản dùng khối SYSTEM, lệnh IR 1 525 → 792, mô phỏng sai khác 3 001 chu kỳ chỉ khác ở nhịp STAGING |
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.2 | 2026-09-28 | Chủ dự án chấp thuận Q1–Q5; hiện thực trong registry `rev-a.6`; §7 kết quả |
 | 0.1 | 2026-09-28 | Bản đặc tả đề xuất đầu tiên cho Issue #801 (U-12): bằng chứng 4 lỗi hiện trường, đặc tả `RELAY_GUARD`, `STAGER`, `PULSE_GEN`, `WORD_TO_BITS`/`BITS_TO_WORD`, `UPTIME`; ảnh hưởng registry `rev-a.4`, test conformance, câu hỏi duyệt |
