@@ -114,6 +114,8 @@ StType st_fb_output_type(StFbType t, int idx);
 
 /* ---- Khai báo ---- */
 
+struct StExpr;
+
 struct StVarDecl {
     std::string name;
     StType      type = StType::REAL;
@@ -121,6 +123,19 @@ struct StVarDecl {
     int         line = 0;
     int         column = 0;
     int         length = 1;
+    /* Issue #800 — `VAR CONSTANT` và giá trị khởi tạo khi khai báo.
+     *
+     * `init_expr` là biểu thức hằng parser ghi lại sau `:=`; semantic gập nó
+     * thành `init_value` (`has_init` = true). `shared_ptr` chứ không phải
+     * `unique_ptr`: `StVarDecl` được sao chép (FBD lowering, registry) và biểu
+     * thức hằng là bất biến sau khi gập, nên chia sẻ là an toàn.
+     *
+     * `constant` = khai báo trong `VAR CONSTANT`: không tốn slot ghi được,
+     * mọi chỗ đọc được compiler thay bằng hằng. */
+    bool        constant = false;
+    bool        has_init = false;
+    std::shared_ptr<StExpr> init_expr;
+    StValue     init_value;
 };
 
 struct StFbDecl {
@@ -160,6 +175,8 @@ enum class StFunc : uint8_t {
     INT_TO_DINT, INT_TO_UINT, DINT_TO_INT, DINT_TO_UINT,
     UINT_TO_INT, UINT_TO_DINT, DINT_TO_REAL, UINT_TO_REAL,
     REAL_TO_DINT, REAL_TO_UINT,
+    /* Issue #800 — dịch bit trên `UINT` (16 bit); `N >= 16` cho 0, không fault. */
+    SHL, SHR,
 };
 
 bool st_func_from_name(const std::string& name, StFunc* out);

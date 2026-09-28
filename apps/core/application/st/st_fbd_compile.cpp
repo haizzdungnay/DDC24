@@ -253,8 +253,13 @@ private:
         }
         const FbdSourceAnchor* anchor = anchor_for_port(*expected_ports[0]);
         if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
-        const StVarDecl declaration{*name, expected_ports[0]->data_type, storage,
-                                    anchor->line, anchor->column, 1};
+        StVarDecl declaration;
+        declaration.name = *name;
+        declaration.type = expected_ports[0]->data_type;
+        declaration.storage = storage;
+        declaration.line = anchor->line;
+        declaration.column = anchor->column;
+        declaration.length = 1;
         const auto existing = variables_.find(*name);
         if (existing != variables_.end()) {
             if (existing->second.type != declaration.type || existing->second.storage != storage) {

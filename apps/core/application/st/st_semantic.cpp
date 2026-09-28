@@ -1,10 +1,12 @@
 #include "st/st_semantic.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "st/st_limits.hpp"
@@ -53,6 +55,11 @@ struct Symbol {
     bool reportable = false;
     bool read = false;
     bool written = false;
+    /* Issue #800 — `VAR CONSTANT`: chỉ đọc; `value` là giá trị đã gập, dùng
+     * cho biểu thức hằng của các khai báo SAU nó. */
+    bool constant = false;
+    bool has_value = false;
+    StValue value;
 };
 
 struct FbSymbol {
@@ -267,7 +274,7 @@ private:
             ret.storage = StStorage::VAR_LOCAL;
             vars_[prog_->name] = ret; /* reportable=false: không có dòng khai báo */
         }
-        for (const StVarDecl& v : prog_->vars) {
+        for (StVarDecl& v : prog_->vars) {
             if (!check_var_decl(v, &retain_count)) {
                 ok = false;
                 record();
@@ -291,7 +298,7 @@ private:
      * sinh diagnostic giả: bỏ đăng ký thì mọi câu lệnh dùng biến đó sau này
      * đều ăn thêm một `ST-SEM-001 undeclared variable` mà nguyên nhân thật
      * nằm ở dòng khai báo, không phải ở chỗ dùng. */
-    bool check_var_decl(const StVarDecl& v, std::size_t* retain_count)
+    bool check_var_decl(StVarDecl& v, std::size_t* retain_count)
     {
         if (vars_.count(v.name) || fbs_.count(v.name))
             return fail(st_diag_code::kDuplicateVar,
@@ -304,7 +311,22 @@ private:
         sym.column = v.column;
         sym.length = v.length;
         sym.reportable = true;
+        sym.constant = v.constant;
         vars_[v.name] = sym;
+        if (v.init_expr) {
+            /* Gập TRƯỚC khi đăng ký giá trị: biểu thức của chính nó không được
+             * tham chiếu tới nó (lỗi "hằng chưa có giá trị"). */
+            StValue folded;
+            if (!fold_init(v, &folded)) return false;
+            v.init_value = folded;
+            v.has_init = true;
+            Symbol& registered = vars_[v.name];
+            registered.has_value = true;
+            registered.value = folded;
+            /* Hằng không bao giờ bị ghi; biến có giá trị khởi tạo coi như đã
+             * được "ghi" một lần, để cảnh báo "đọc mà không ghi" không nói sai. */
+            registered.written = true;
+        }
         if (v.storage == StStorage::VAR_RETAIN &&
             ++(*retain_count) > st_limits::kMaxRetainVars)
             /* Trần tài nguyên: soát tiếp cũng không cho thêm thông tin nào
@@ -314,6 +336,200 @@ private:
                                   std::to_string(st_limits::kMaxRetainVars),
                               v.line, v.column, v.length);
         return true;
+    }
+
+    /* ---- Biểu thức hằng (Issue #800) ----
+     *
+     * Giá trị khởi tạo và `VAR CONSTANT` nhận đúng một lớp biểu thức: literal,
+     * hằng đã khai TRƯỚC, toán tử một/hai ngôi. Không gọi hàm, không đọc biến
+     * thường, không đọc đầu ra FB: giá trị phải biết được lúc biên dịch, và
+     * phép gập dùng ĐÚNG luật lỗi của runtime (tràn → lỗi, chia 0 → lỗi, số
+     * thực không hữu hạn → lỗi) để hằng không bao giờ mang một giá trị mà
+     * chính phép tính đó ở runtime sẽ fault. */
+    bool fold_init(const StVarDecl& v, StValue* out)
+    {
+        StExpr& e = *v.init_expr;
+        if (!require_constant_expr(e)) return false;
+        TypeInfo got;
+        const StType want = v.type;
+        if (!check_expr(e, &got, &want)) return false;
+        if (!coerce(e, &got, want)) return false;
+        if (got.type != want)
+            return fail(st_diag_code::kTypeMismatch,
+                        std::string("initial value of '") + v.name + "' is " +
+                            st_type_name(got.type) + ", expected " + st_type_name(want),
+                        e.line, e.column, e.length);
+        return eval_const(e, out);
+    }
+
+    bool require_constant_expr(const StExpr& e)
+    {
+        switch (e.kind) {
+        case StExpr::Kind::LITERAL:
+            return true;
+        case StExpr::Kind::VAR: {
+            const auto it = vars_.find(e.var_name);
+            if (it != vars_.end() && it->second.constant && it->second.has_value) return true;
+            return fail(st_diag_code::kTypeMismatch,
+                        "initial value must be a constant expression; '" + e.var_name +
+                            "' is not a VAR CONSTANT declared earlier",
+                        e.line, e.column, e.length);
+        }
+        case StExpr::Kind::UNOP:
+            return require_constant_expr(*e.operand);
+        case StExpr::Kind::BINOP:
+            return require_constant_expr(*e.lhs) && require_constant_expr(*e.rhs);
+        default:
+            return fail(st_diag_code::kTypeMismatch,
+                        "initial value must be a constant expression "
+                        "(literals, earlier VAR CONSTANT and operators only)",
+                        e.line, e.column, e.length);
+        }
+    }
+
+    bool const_range(StType type, int64_t value, const StExpr& e, StValue* out)
+    {
+        if (value < st_integer_min(type) || value > st_integer_max(type))
+            return fail(st_diag_code::kIntLiteralOutOfRange,
+                        "constant expression overflows " + std::string(st_type_name(type)),
+                        e.line, e.column, e.length);
+        *out = StValue::make_integer(type, static_cast<int32_t>(value));
+        return true;
+    }
+
+    bool const_time(int64_t value, bool overflow, const StExpr& e, StValue* out)
+    {
+        if (overflow)
+            return fail(st_diag_code::kIntLiteralOutOfRange,
+                        "constant TIME expression overflows", e.line, e.column, e.length);
+        if (value < 0)
+            return fail(st_diag_code::kTypeMismatch,
+                        "constant TIME expression is negative", e.line, e.column, e.length);
+        *out = StValue::make_time(value);
+        return true;
+    }
+
+    bool eval_const(const StExpr& e, StValue* out)
+    {
+        switch (e.kind) {
+        case StExpr::Kind::LITERAL:
+            *out = e.literal;
+            return true;
+        case StExpr::Kind::VAR:
+            *out = vars_.at(e.var_name).value;
+            return true;
+        case StExpr::Kind::UNOP: {
+            StValue a;
+            if (!eval_const(*e.operand, &a)) return false;
+            if (e.un_op == StUnOp::NOT) {
+                if (a.type == StType::UINT)
+                    return const_range(StType::UINT, (~a.i) & 0xFFFF, e, out);
+                *out = StValue::make_bool(!a.b);
+                return true;
+            }
+            if (a.type == StType::REAL) { *out = StValue::make_real(-a.r); return true; }
+            return const_range(a.type, -static_cast<int64_t>(a.i), e, out);
+        }
+        case StExpr::Kind::BINOP: {
+            StValue a, b;
+            if (!eval_const(*e.lhs, &a) || !eval_const(*e.rhs, &b)) return false;
+            return eval_const_binop(e, a, b, out);
+        }
+        default:
+            return fail(st_diag_code::kTypeMismatch, "initial value must be a constant expression",
+                        e.line, e.column, e.length);
+        }
+    }
+
+    bool eval_const_binop(const StExpr& e, const StValue& a, const StValue& b, StValue* out)
+    {
+        const StBinOp op = e.bin_op;
+        auto div0 = [&]() {
+            return fail(st_diag_code::kTypeMismatch, "constant expression divides by zero",
+                        e.line, e.column, e.length);
+        };
+        switch (op) {
+        case StBinOp::LT: case StBinOp::LE: case StBinOp::GT: case StBinOp::GE:
+        case StBinOp::EQ: case StBinOp::NE: {
+            double l = 0, r = 0;
+            if (a.type == StType::REAL) { l = a.r; r = b.r; }
+            else if (a.type == StType::TIME) { l = static_cast<double>(a.t); r = static_cast<double>(b.t); }
+            else if (a.type == StType::BOOL) { l = a.b; r = b.b; }
+            else { l = a.i; r = b.i; }
+            bool v = false;
+            switch (op) {
+            case StBinOp::LT: v = l < r; break;
+            case StBinOp::LE: v = l <= r; break;
+            case StBinOp::GT: v = l > r; break;
+            case StBinOp::GE: v = l >= r; break;
+            case StBinOp::EQ: v = l == r; break;
+            default: v = l != r; break;
+            }
+            *out = StValue::make_bool(v);
+            return true;
+        }
+        case StBinOp::AND: case StBinOp::OR: case StBinOp::XOR:
+            if (a.type == StType::UINT) {
+                const int64_t v = op == StBinOp::AND ? (a.i & b.i)
+                                : op == StBinOp::OR  ? (a.i | b.i) : (a.i ^ b.i);
+                return const_range(StType::UINT, v, e, out);
+            }
+            *out = StValue::make_bool(op == StBinOp::AND ? (a.b && b.b)
+                                      : op == StBinOp::OR ? (a.b || b.b) : (a.b != b.b));
+            return true;
+        default:
+            break;
+        }
+        if (a.type == StType::TIME) {
+            if (op == StBinOp::ADD || op == StBinOp::SUB) {
+                int64_t v = 0;
+                const bool ovf = op == StBinOp::ADD ? __builtin_add_overflow(a.t, b.t, &v)
+                                                    : __builtin_sub_overflow(a.t, b.t, &v);
+                return const_time(v, ovf, e, out);
+            }
+            /* TIME × số / TIME ÷ số: cùng công thức với runtime (`TMUL`/`TDIV`). */
+            if (b.type == StType::REAL) {
+                if (op == StBinOp::DIV && b.r == 0.0f) return div0();
+                const double ns = op == StBinOp::MUL ? static_cast<double>(a.t) * b.r
+                                                     : static_cast<double>(a.t) / b.r;
+                if (!std::isfinite(ns) || std::fabs(ns) > 9.2e18)
+                    return const_time(0, true, e, out);
+                return const_time(static_cast<int64_t>(std::llround(ns)), false, e, out);
+            }
+            if (op == StBinOp::DIV) {
+                if (b.i == 0) return div0();
+                return const_time(a.t / b.i, false, e, out);
+            }
+            int64_t v = 0;
+            const bool ovf = __builtin_mul_overflow(a.t, static_cast<int64_t>(b.i), &v);
+            return const_time(v, ovf, e, out);
+        }
+        if (a.type == StType::REAL) {
+            float v = 0.0f;
+            switch (op) {
+            case StBinOp::ADD: v = a.r + b.r; break;
+            case StBinOp::SUB: v = a.r - b.r; break;
+            case StBinOp::MUL: v = a.r * b.r; break;
+            case StBinOp::DIV: if (b.r == 0.0f) return div0(); v = a.r / b.r; break;
+            default: break;
+            }
+            if (!std::isfinite(v))
+                return fail(st_diag_code::kTypeMismatch,
+                            "constant REAL expression is not finite", e.line, e.column, e.length);
+            *out = StValue::make_real(v);
+            return true;
+        }
+        const int64_t l = a.i, r = b.i;
+        switch (op) {
+        case StBinOp::ADD: return const_range(a.type, l + r, e, out);
+        case StBinOp::SUB: return const_range(a.type, l - r, e, out);
+        case StBinOp::MUL: return const_range(a.type, l * r, e, out);
+        case StBinOp::DIV: if (r == 0) return div0(); return const_range(a.type, l / r, e, out);
+        case StBinOp::MOD: if (r == 0) return div0(); return const_range(a.type, l % r, e, out);
+        default: break;
+        }
+        return fail(st_diag_code::kTypeMismatch, "unsupported operator in constant expression",
+                    e.line, e.column, e.length);
     }
 
     bool check_fb_decl(const StFbDecl& f, std::size_t* retain_count)
@@ -426,6 +642,10 @@ private:
         /* Cùng lý do như ở nhánh đọc: gán sai kiểu vẫn là một lần GHI. Đánh
          * dấu trước khi soát kiểu để lỗi kiểu không đẻ thêm cảnh báo giả. */
         it->second.written = true;
+        if (it->second.constant)
+            return fail(st_diag_code::kReadonlyInput,
+                        "'" + s.assign_target + "' is VAR CONSTANT and is read-only",
+                        s.assign_target_line, s.assign_target_column, s.assign_target_length);
         if (it->second.storage == StStorage::VAR_INPUT)
             return fail(st_diag_code::kReadonlyInput,
                         "'" + s.assign_target + "' is VAR_INPUT and is read-only",
@@ -747,15 +967,24 @@ private:
             TypeInfo t;
             const StType bool_type = StType::BOOL;
             const StType* operand_expected =
-                e.un_op == StUnOp::NOT ? &bool_type : expected;
+                e.un_op == StUnOp::NOT
+                    ? (expected && *expected == StType::UINT ? expected : &bool_type)
+                    : expected;
             if (!check_expr(*e.operand, &t, operand_expected)) return false;
             if (e.un_op == StUnOp::NOT) {
-                if (!coerce(*e.operand, &t, StType::BOOL)) return false;
-                if (t.type != StType::BOOL)
+                /* Issue #800 — NOT trên UINT đảo 16 bit. Literal đa hình chỉ
+                 * thành UINT khi ngữ cảnh đòi UINT; mặc định vẫn là BOOL. */
+                if (t.poly) {
+                    if (!coerce(*e.operand, &t, operand_expected ? *operand_expected
+                                                                 : StType::BOOL))
+                        return false;
+                }
+                if (t.type != StType::BOOL && t.type != StType::UINT)
                     return fail(st_diag_code::kTypeMismatch,
-                                std::string("NOT requires BOOL, got ") + st_type_name(t.type),
+                                std::string("NOT requires BOOL or UINT, got ") +
+                                    st_type_name(t.type),
                                 e.line, e.column, e.length);
-                e.result_type = StType::BOOL;
+                e.result_type = t.type;
             } else {
                 if (t.poly && !coerce(*e.operand, &t, StType::INT)) return false;
                 if ((!st_type_is_signed_integer(t.type) && t.type != StType::REAL))
@@ -787,15 +1016,50 @@ private:
         if (!check_expr(*e.rhs, &rt, operand_expected)) return false;
 
         if (op == StBinOp::AND || op == StBinOp::OR || op == StBinOp::XOR) {
-            if (!coerce(*e.lhs, &lt, StType::BOOL)) return false;
-            if (!coerce(*e.rhs, &rt, StType::BOOL)) return false;
-            if (lt.type != StType::BOOL || rt.type != StType::BOOL)
+            /* Issue #800 — cùng toán tử, hai nghĩa theo kiểu toán hạng: BOOL là
+             * logic (không rút gọn, §4.4), UINT là theo bit. Trộn hai loại hoặc
+             * dùng số có dấu là lỗi: bit của số âm phụ thuộc biểu diễn bù 2. */
+            const bool want_uint = (!lt.poly && lt.type == StType::UINT) ||
+                                   (!rt.poly && rt.type == StType::UINT) ||
+                                   (lt.poly && rt.poly && expected &&
+                                    *expected == StType::UINT);
+            const StType want = want_uint ? StType::UINT : StType::BOOL;
+            if (!coerce(*e.lhs, &lt, want)) return false;
+            if (!coerce(*e.rhs, &rt, want)) return false;
+            if (lt.type != want || rt.type != want)
                 return fail(st_diag_code::kTypeMismatch,
-                            "logical operator requires BOOL on both sides", e.line, e.column,
-                            e.length);
-            e.result_type = StType::BOOL;
-            *out = TypeInfo::make(StType::BOOL);
+                            "logical operator requires BOOL on both sides, or UINT on both "
+                            "sides for a bitwise operation",
+                            e.line, e.column, e.length);
+            e.result_type = want;
+            *out = TypeInfo::make(want);
             return true;
+        }
+
+        /* Issue #800 — TIME × số và TIME ÷ số (số bên phải: INT/DINT/UINT/REAL,
+         * hoặc số × TIME cho phép nhân). Kết quả TIME; tràn/âm/chia 0 là fault
+         * như `+`/`-` của TIME. `TIME / TIME` vẫn không có. */
+        if (op == StBinOp::MUL || op == StBinOp::DIV) {
+            const bool l_time = !lt.poly && lt.type == StType::TIME;
+            const bool r_time = !rt.poly && rt.type == StType::TIME;
+            if (l_time != r_time) {
+                if (r_time && op == StBinOp::DIV)
+                    return fail(st_diag_code::kTypeMismatch,
+                                "a number cannot be divided by TIME", e.line, e.column,
+                                e.length);
+                StExpr& number = l_time ? *e.rhs : *e.lhs;
+                TypeInfo& nt = l_time ? rt : lt;
+                if (nt.poly && !coerce(number, &nt, StType::DINT)) return false;
+                if (!is_numeric(nt.type))
+                    return fail(st_diag_code::kTypeMismatch,
+                                std::string("TIME can only be multiplied or divided by a "
+                                            "number, got ") + st_type_name(nt.type),
+                                e.line, e.column, e.length);
+                if (r_time) std::swap(e.lhs, e.rhs);  /* chuẩn hoá: TIME luôn ở trái */
+                e.result_type = StType::TIME;
+                *out = TypeInfo::make(StType::TIME);
+                return true;
+            }
         }
 
         if (!unify(*e.lhs, &lt, *e.rhs, &rt)) return false;
@@ -996,6 +1260,12 @@ private:
             break;
         case StFunc::REAL_TO_UINT:
             if (!require(0, StType::REAL)) return false;
+            e.result_type = StType::UINT;
+            break;
+        case StFunc::SHL:
+        case StFunc::SHR:
+            if (!require(0, StType::UINT)) return false;
+            if (!require(1, StType::UINT)) return false;
             e.result_type = StType::UINT;
             break;
         }

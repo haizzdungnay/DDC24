@@ -84,6 +84,10 @@ enum class StOp : uint8_t {
     DIV          = 0x23,
     MOD          = 0x24,
     NEG          = 0x25,
+    /* Issue #800 — TIME (a) nhân/chia một số (b); kiểu lệnh = kiểu của b
+     * (INT/DINT/UINT/REAL). Kết quả TIME; tràn, âm, chia 0 là fault. */
+    TMUL         = 0x26,
+    TDIV         = 0x27,
     LT           = 0x30,
     LE           = 0x31,
     GT           = 0x32,
@@ -94,6 +98,10 @@ enum class StOp : uint8_t {
     OR           = 0x41,
     XOR          = 0x42,
     NOT          = 0x43,
+    /* Issue #800 — dịch bit UINT 16 bit; số bước >= 16 cho 0. AND/OR/XOR/NOT
+     * mang kiểu UINT là phép theo bit, kiểu BOOL là phép logic. */
+    SHL          = 0x44,
+    SHR          = 0x45,
     ABS          = 0x50,
     MIN          = 0x51,
     MAX          = 0x52,

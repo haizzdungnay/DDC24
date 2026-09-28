@@ -159,6 +159,9 @@ private:
     struct Scope {
         std::unordered_map<std::string, uint16_t> vars;
         std::unordered_map<std::string, std::unique_ptr<FbBinding>> fbs;
+        /* Issue #800 — `VAR CONSTANT`: không có slot ghi được; mọi chỗ đọc
+         * dùng thẳng slot hằng của giá trị đã gập. */
+        std::unordered_map<std::string, StValue> consts;
     };
 
     const StProgram& prog_;
@@ -230,7 +233,8 @@ private:
 
     bool allocate_variable(Scope* scope, const std::string& public_name,
                            const std::string& ir_name, StType type,
-                           StStorage storage, int line = 0, int column = 0)
+                           StStorage storage, int line = 0, int column = 0,
+                           const StValue* init = nullptr)
     {
         uint16_t slot = 0;
         if (!reserve_slots(1, &slot, line, column)) return false;
@@ -239,10 +243,26 @@ private:
         variable.type = type;
         variable.storage = storage;
         variable.slot = slot;
-        variable.init = default_init(type);
+        /* Issue #800 — giá trị khởi tạo khai báo (`x : REAL := 21.5;`) đi vào
+         * trường `init` sẵn có của bảng biến: loader đã nạp nó ở cold start,
+         * nên không cần đổi định dạng artifact. */
+        variable.init = init != nullptr ? *init : default_init(type);
         scope->vars[public_name] = slot;
         out_->variables.push_back(std::move(variable));
         return true;
+    }
+
+    /* Khai báo một biến người dùng vào `scope`: hằng vào `consts`, còn lại
+     * cấp slot kèm giá trị khởi tạo nếu có (Issue #800). */
+    bool declare_var(Scope* scope, const StVarDecl& v, const std::string& ir_name,
+                     StStorage storage)
+    {
+        if (v.constant) {
+            scope->consts[v.name] = v.init_value;
+            return true;
+        }
+        return allocate_variable(scope, v.name, ir_name, v.type, storage, v.line, v.column,
+                                 v.has_init ? &v.init_value : nullptr);
     }
 
     /* Một slot trong khung FUNCTION đang mở (Issue #799). Không ghi
@@ -324,11 +344,8 @@ private:
         binding->scope = std::make_unique<Scope>();
         const bool retained = inherited_retain || decl.retained;
         for (const StVarDecl& variable : found->second->vars) {
-            if (!allocate_variable(binding->scope.get(), variable.name,
-                                   path + "." + variable.name, variable.type,
-                                   retained ? StStorage::VAR_RETAIN
-                                            : StStorage::VAR_LOCAL,
-                                   variable.line, variable.column))
+            if (!declare_var(binding->scope.get(), variable, path + "." + variable.name,
+                             retained ? StStorage::VAR_RETAIN : StStorage::VAR_LOCAL))
                 return false;
         }
         for (const StFbDecl& nested : found->second->fbs) {
@@ -350,9 +367,7 @@ private:
         /* Thứ tự cấp slot: biến khai báo -> cổng FB -> slot tạm -> hằng.
          * Thứ tự này cố định để artifact tất định. */
         for (const StVarDecl& v : prog_.vars) {
-            if (!allocate_variable(&root_scope_, v.name, v.name, v.type, v.storage,
-                                   v.line, v.column))
-                return false;
+            if (!declare_var(&root_scope_, v, v.name, v.storage)) return false;
         }
 
         for (const StFbDecl& f : prog_.fbs) {
@@ -722,6 +737,10 @@ private:
 
         std::size_t input_index = 0;
         for (const StVarDecl& variable : function.vars) {
+            if (variable.constant) {
+                function_scope.consts[variable.name] = variable.init_value;
+                continue;
+            }
             if (!allocate_frame_slot(&function_scope, variable.name,
                                      variable.line, variable.column))
                 return false;
@@ -735,7 +754,8 @@ private:
                      arguments[input_index++]);
             } else {
                 emit(StOp::MOV, type_raw(variable.type), destination,
-                     const_slot(default_init(variable.type)));
+                     const_slot(variable.has_init ? variable.init_value
+                                                  : default_init(variable.type)));
             }
         }
         if (input_index != arguments.size())
@@ -787,6 +807,11 @@ private:
         case StExpr::Kind::VAR:
             if (const auto found = scope->vars.find(e.var_name); found != scope->vars.end()) {
                 *out_slot = found->second;
+                return true;
+            }
+            if (const auto constant = scope->consts.find(e.var_name);
+                constant != scope->consts.end()) {
+                *out_slot = const_slot(constant->second);
                 return true;
             }
             return fail(st_diag_code::kUnboundVariable,
@@ -841,6 +866,16 @@ private:
             if (!emit_expr(*e.lhs, scope, &a)) return false;
             if (!emit_expr(*e.rhs, scope, &b)) return false;
             const uint16_t dst = push_temp();
+            /* Issue #800 — TIME × số / TIME ÷ số: semantic đã chuẩn hoá TIME về
+             * vế trái; kiểu của lệnh là kiểu của SỐ ở vế phải. */
+            if ((e.bin_op == StBinOp::MUL || e.bin_op == StBinOp::DIV) &&
+                e.lhs->result_type == StType::TIME) {
+                const StOp op = e.bin_op == StBinOp::MUL ? StOp::TMUL : StOp::TDIV;
+                const uint32_t pc = emit(op, type_raw(e.rhs->result_type), dst, a, b);
+                note_source(pc, e.line, e.column);
+                *out_slot = dst;
+                return true;
+            }
             /* Kiểu của lệnh là kiểu TOÁN HẠNG, không phải kiểu kết quả: so
              * sánh REAL trả BOOL nhưng phải so sánh theo REAL. */
             const uint8_t traw = type_raw(e.lhs->result_type);
@@ -1013,6 +1048,10 @@ private:
             pc = emit(StOp::CVT_R2D, 0, dst, argv[0]); break;
         case StFunc::REAL_TO_UINT:
             pc = emit(StOp::CVT_R2U, 0, dst, argv[0]); break;
+        case StFunc::SHL:
+            pc = emit(StOp::SHL, type_raw(StType::UINT), dst, argv[0], argv[1]); break;
+        case StFunc::SHR:
+            pc = emit(StOp::SHR, type_raw(StType::UINT), dst, argv[0], argv[1]); break;
         }
         note_source(pc, e.line, e.column);
         *out_slot = dst;

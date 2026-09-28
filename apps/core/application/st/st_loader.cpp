@@ -703,8 +703,12 @@ private:
         case StOp::EQ: case StOp::NE:
                                  *s = mk(1,1,1,0,0,0, ALL);  return true;
         case StOp::AND: case StOp::OR: case StOp::XOR:
-                                 *s = mk(1,1,1,0,0,0, B);    return true;
-        case StOp::NOT:          *s = mk(1,1,0,0,0,0, B);    return true;
+                                 *s = mk(1,1,1,0,0,0, B | U); return true;
+        case StOp::NOT:          *s = mk(1,1,0,0,0,0, B | U); return true;
+        case StOp::SHL: case StOp::SHR:
+                                 *s = mk(1,1,1,0,0,0, U);    return true;
+        case StOp::TMUL: case StOp::TDIV:
+                                 *s = mk(1,1,1,0,0,0, NUM);  return true;
         case StOp::ABS:          *s = mk(1,1,0,0,0,0, NUM);  return true;
         case StOp::MIN: case StOp::MAX:
                                  *s = mk(1,1,1,0,0,0, NUMT); return true;

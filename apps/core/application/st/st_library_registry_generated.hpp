@@ -8,8 +8,8 @@
 
 namespace core::st_library_registry_generated {
 
-inline constexpr std::string_view kRegistrySha256 = "e79442f2cd781084fd6a0e34b3f7028a51d13b53af945202e0f8e5cc7fbf91b0";
-inline constexpr std::string_view kLibraryVersion = "rev-a.4";
+inline constexpr std::string_view kRegistrySha256 = "adb5357dd514f638463936e83401e43a0c519ceff0a63858e935bb4309186e20";
+inline constexpr std::string_view kLibraryVersion = "rev-a.5";
 
 /* Entry compiler nhận diện qua binop/unop trong st_fbd_compile.cpp. */
 inline constexpr std::array<std::string_view, 15> kOperators = {
@@ -31,7 +31,9 @@ inline constexpr std::array<std::string_view, 15> kOperators = {
 };
 
 /* Entry compiler nhận diện qua kFuncs[] (st_func_from_name). */
-inline constexpr std::array<std::string_view, 20> kFuncTable = {
+inline constexpr std::array<std::string_view, 22> kFuncTable = {
+    "SHL",
+    "SHR",
     "SEL",
     "ABS",
     "MIN",
@@ -75,11 +77,13 @@ inline constexpr std::array<std::string_view, 9> kFbTypes = {
 };
 
 /* Allowlist FBD theo node kind. */
-inline constexpr std::array<std::string_view, 23> kPureFunctions = {
+inline constexpr std::array<std::string_view, 25> kPureFunctions = {
     "AND",
     "OR",
     "XOR",
     "NOT",
+    "SHL",
+    "SHR",
     "SEL",
     "EQ",
     "NE",
