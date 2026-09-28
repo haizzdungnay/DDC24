@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Fixed — Tạo/đổi tên Virtual Point giữ nhãn (Label) làm tên hiển thị (Issue #789, 2026-09-28)
+
+- **Phạm vi:** `apps/web-api/internal/app/{virtualpoint.go,pointtags.go}` + test (`virtualpoint_label_test.go` mới, `pointchannel_test.go`, `points_test.go`); `apps/web-ui/src/features/points/VirtualIoPage.tsx` + test; `docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md` §`name`.
+- **Triệu chứng:** bo Foxlinx, RC `main@910bea95`: tạo VP Tag `TMP_LAYOUT_CHECK`, Label `Kiểm bố cục tạm` → trình soạn hiện Label `VP1`, `GET /points/VP1` cho `display_name = "TMP_LAYOUT_CHECK"`; `POST /virtual-points` với `label` trả `201` không còn nhãn.
+- **Nguyên nhân gốc:** `normalizeVirtualPoint` xoá trắng `Label` ở mọi đường ghi (tạo, sửa, `PUT /points/{id}/config`), `normalizePointTags` và migration khởi động (`migratePointMetadata`, chạy mỗi lần boot) cũng xoá; không gian tên không có mục nào cho VP. FE thì vẫn xây theo hợp đồng có nhãn VP (WEB-NAME-001, kiểm trùng chéo loại, đường `items[n].label`), và rơi nhãn trống về mã nội bộ `VP1`.
+- **Cách sửa (phương án (a) của Issue):** backend giữ nhãn đã chuẩn hoá (`normalizeVirtualPointLabel`) trong cùng giao dịch ghi; VP có nhãn tham gia không gian tên với UI/AO/DO (lỗi `point_name_conflict` trỏ `items[n].label`, nhãn không hợp lệ → `point_name_invalid`); VP không nhãn hiển thị bằng Tag và **không** vào không gian tên để cấu hình cũ không tự thành xung đột; `virtualPointDTO` trả `name`/`display_name` = nhãn, rỗng thì Tag; migration giữ nhãn hợp lệ. FE rơi nhãn trống về Tag (không còn `VP1`), gửi nhãn rỗng khi ô Label chỉ phản chiếu Tag (`virtualPointWireLabel`) và kiểm trùng theo cùng luật backend.
+- **Kiểm chứng:** 3 test Go mới (`TestVirtualPointCreateKeepsLabelAsDisplayName` gồm cả lần chạy migration, `...RejectsDuplicateLabel`, `...NamePatchPersists`) đỏ trên mã cũ, xanh sau sửa; `go vet ./...` exit 0, `go test ./... -count=1` 21 package ok; vitest 267 file / 3493 test pass; `npm run lint` exit 0; `npm run build` exit 0; `npx playwright test e2e/point-names.spec.ts` 18/18 pass. Chưa kiểm trên bo.
+- **Refs:** Issue #789, `WEB-NAME-001`, `ISS-PIO-37`.
+
 ### Fixed — Xoá POU gỡ đủ Binding theo owner `programId` ("không xóa được chương trình") (2026-09-28)
 
 - Phạm vi: `apps/web-ui/src/features/programming/{model/signals.ts,design/pou/pouCommands.ts,design/pou/PouExplorer.tsx,design/DesignWorkspacePage.tsx}` + test; `apps/web-api/internal/programming/application/draft_v2_test.go` (chỉ thêm test). Bản sửa viết ngày 2026-09-25 trên `main@36c1a863` nhưng chưa từng được commit; nay áp lên `main@597616ca`.

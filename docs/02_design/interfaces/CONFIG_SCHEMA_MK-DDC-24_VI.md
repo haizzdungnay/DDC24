@@ -130,7 +130,7 @@ local-panel scope.
 
 ### 3.0a Global display-name namespace UI/AO/DO/VP (ADR-019 v1.1)
 
-- `ui[].name`, `ao[].name`, `do[].name` là display name/label cho physical points. Chúng không thay `tag`, nhưng phải unique trong một namespace riêng trên cùng scope UI-01..16, AO-01..04 và DO-01..04. VP không còn Label riêng và dùng Tag làm display.
+- `ui[].name`, `ao[].name`, `do[].name` là display name/label cho physical points. Chúng không thay `tag`, nhưng phải unique trong một namespace riêng trên cùng scope UI-01..16, AO-01..04 và DO-01..04. VP có `items[].label` (tùy chọn, Issue #789, 2026-09-28): khi khác rỗng nó là display name của VP, chuẩn hoá cùng luật `name` vật lý và phải unique trong cùng namespace tên với UI/AO/DO (lỗi trỏ `items[n].label`); khi rỗng thì VP dùng Tag làm display và không tham gia namespace tên. Migration khởi động giữ nhãn hợp lệ, chỉ bỏ nhãn không chuẩn hoá được.
 - Canonical display: trim đầu/cuối, collapse mọi whitespace run thành một ASCII space, dài 1..64 Unicode code point, cấm control character. Backend tính `nameKey` bằng Unicode lowercase của canonical display; client không submit/persist key.
 - Name có thể giống technical tag vì hai namespace độc lập. AO `name` tiếp tục là BACnet `Object_Name`; uniqueness mới không đổi mapping BACnet.
 - Sau migration, name/label là required. Legacy blank được gán canonical ID (`UI-01`, `AO-01`, `DO-01`, `VP1`).
