@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-FORLINX-PERF-PM-20260928` |
-| Phiên bản | 1.0 |
-| Trạng thái | **In Review — chờ PM quyết định phạm vi, nguồn lực và thứ tự triển khai** |
+| Phiên bản | 1.1 |
+| Trạng thái | **In Review — chờ PM quyết định phạm vi, nguồn lực và thứ tự triển khai; kế hoạch thi hành gộp ở [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md) / Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809)** |
 | Ngày lập | 2026-09-28 |
 | Người lập / chủ quản | Engineering; PM tiếp nhận quyết định, các owner trong báo cáo là vai trò đề xuất |
 | Mục đích | Cung cấp hiện trạng đã đo, finding có bằng chứng, lựa chọn giải pháp và phiếu quyết định để PM giao việc |
@@ -29,6 +29,15 @@ Engineering đề xuất PM chọn hướng triển khai theo ba nhóm:
 3. **Giảm tải theo số đo:** xác định caller gây polling, giảm log đọc thành công,
    tách biểu đồ khỏi tải đăng nhập; quyết định kernel/IRQ chỉ sau khi có timeline
    và kết quả A/B.
+
+**Cập nhật 2026-09-28 (bản 1.1):** chủ sở hữu yêu cầu gộp toàn bộ phương án
+thành một kế hoạch thi hành và **một Issue duy nhất** để team review và làm một
+lần. Kế hoạch là [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md),
+theo dõi bằng Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809).
+Plan 63 chọn phương án Engineering khuyến nghị ở §4 và biến D01–D07 thành các
+cổng G0, G-D1…G-D4 (Plan 63 §5). Plan còn gồm các finding runtime Programming
+của snapshot 04/09 (`F-PRG-PERF-001/002/004`) và hai finding mới từ lần đối chiếu
+mã (`PERF-SYS-06` ghi eMMC, `PERF-SYS-07` biên thời gian IOP), ngoài 9 nhóm ở §3.
 
 **Quyết định cần PM ghi ở §7.** Mọi dòng hiện là **CHỜ QUYẾT ĐỊNH**; chưa gán
 nhân sự thực, lịch hoàn thành, ngân sách hoặc dấu phê duyệt. Phương án chưa được
@@ -256,7 +265,7 @@ nhận và thời điểm xem lại. Ô CHỜ QUYẾT ĐỊNH không phải phê
 | Ngày review | Chưa ghi nhận |
 | PM / Tech Lead / QA tham dự | Chưa ghi nhận |
 | Quyết định D01–D07 | Chưa ghi nhận |
-| Issue / người được phân công / milestone | Chưa tạo từ báo cáo này |
+| Issue / người được phân công / milestone | Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) (một Issue cho toàn bộ Plan 63), tạo 2026-09-28; chưa phân công người, chưa đặt milestone |
 | Phạm vi cho phép deploy lab | Chưa được xác lập từ báo cáo này |
 | Điều kiện chưa đồng thuận | Chưa ghi nhận; các giả thuyết kỹ thuật đang mở nêu ở §3–4 |
 | Người ghi biên bản / xác nhận | Chưa ghi nhận |
@@ -283,3 +292,4 @@ biên bản thực.
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-28 | Tạo báo cáo riêng theo yêu cầu chủ sở hữu: hiện trạng audit, 9 nhóm finding, các lựa chọn/trade-off, trình tự, tiêu chí đề xuất và D01–D07 để PM review/quyết định; chưa triển khai tối ưu |
+| 1.1 | 2026-09-28 | Nối báo cáo với Plan 63 và Issue #809 theo yêu cầu gộp một Issue của chủ sở hữu; ánh xạ D01–D07 sang cổng G0/G-D1…G-D4; D01–D07 vẫn CHỜ QUYẾT ĐỊNH |

@@ -3,15 +3,17 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PROG-RUNTIME-PERF-COMP-001` |
-| Phiên bản | 1.2 |
-| Trạng thái | **Record — source/HOST/TARGET exploratory đã rà; provenance TARGET `PARTIAL`; HIL/release `NO-GO`** |
-| Ngày | 2026-09-04; bổ sung audit hệ thống 2026-09-28 |
-| Phạm vi | Snapshot 04/09: Compiler/Check/runtime/cạnh tranh; audit 28/09: OS/Core, API/Modbus, browser và provenance |
-| Mốc mã nguồn | `main@67f8ca3a6266207469fa029ceb4c66f02be838f6` |
-| Người rà | Codex, vai trò `mkddc-techlead` |
-| Kết luận | Lõi ST chạy đủ nhanh cho profile 1 s trên Forlinx; production còn tuần tự, binary live chưa truy nguyên được tới HEAD và runtime đang có missed release tích lũy dù health vẫn xanh |
+| Phiên bản | 1.3 |
+| Trạng thái | **Record — snapshot 04/09, audit TARGET 28/09 và đối chiếu mã `main@cb690dfb` đã xong; finding còn mở thi hành qua [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md) / Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809); provenance TARGET `PARTIAL`; HIL/release `NO-GO`** |
+| Ngày | 2026-09-04; bổ sung audit hệ thống 2026-09-28; đối chiếu mã nguồn 2026-09-28 |
+| Phạm vi | Snapshot 04/09: Compiler/Check/runtime/cạnh tranh; audit 28/09: OS/Core, API/Modbus, browser và provenance; §14: trạng thái 21 finding tại mã hiện hành |
+| Mốc mã nguồn | Snapshot 04/09: `main@67f8ca3a6266207469fa029ceb4c66f02be838f6`; audit 28/09: `e8573370399b642d5e6f0ad603986ca7689e7dd8`; đối chiếu §14: `main@cb690dfbb905075c10845b1cec7e13447154b5dc` |
+| Người rà | Codex, vai trò `mkddc-techlead` (04/09, 28/09); Claude Code, vai trò planner (§14) |
+| Kết luận | Tại `main@cb690dfb`: bo còn dư CPU/RAM; cần sửa nhịp IOBus, đọc snapshot SHM, độ trễ API, log và tải FE. Rủi ro Programming lớn nhất là budget từng Program chưa được Core thi hành trong khi budget base step chỉ còn 2.000 µs. `F-PRG-PERF-005/006` chờ read-back để đóng, `F-PRG-PERF-007` đã đóng. Kết luận của snapshot 04/09 giữ ở §0 |
 
-> **Hiện trạng 28/09 xem §13; các mục 0–12 giữ nguyên snapshot 04/09.**
+> **Hiện trạng 28/09 xem §13; trạng thái từng finding tại `main@cb690dfb` xem §14;
+> kế hoạch thi hành là [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md).
+> Các mục 0–12 giữ nguyên snapshot 04/09.**
 >
 > Đây là **record của một lần rà soát**, không phải Product/Design authority và
 > không tự đóng requirement, risk hay release gate. Bằng chứng HOST, target dùng
@@ -803,11 +805,109 @@ hồ sơ; token tạm đã xoá. 51 tệp bằng chứng nén/JSON/ảnh khoản
 | Soak 24 giờ có kiểm soát, fault/power-cut, physical HIL | NOT RUN; lịch sử giữ 21h54 và Fake MCU không thay thế |
 | Integrity/release | Audit hiệu năng không chứng minh image hệ thống tin cậy; `RELEASE_READY` không được nâng từ record này |
 
-## 14. Lịch sử sửa đổi
+## 14. Đối chiếu mã nguồn tại `main@cb690dfb` — 2026-09-28
+
+### 14.1 Phạm vi và phương pháp
+
+Đọc lại mã tại `main@cb690dfbb905075c10845b1cec7e13447154b5dc` cho từng finding
+ở §6 (snapshot 04/09) và §13.5 (audit 28/09), ghi `file:dòng` làm bằng chứng.
+Lần đối chiếu này **không đo mới trên bo**, không đổi mã/cấu hình/Program và
+không deploy; số đo được dẫn lại từ §3.1 và §13. Mục đích là tách finding còn
+mở khỏi finding đã được ADR-061 sửa, rồi gom việc còn lại vào một kế hoạch thi
+hành có truy xuất.
+
+Trạng thái: **OPEN** còn nguyên · **PARTIAL** đã sửa một phần · **FIXED-VERIFY**
+mã đã sửa, chờ read-back trên bo · **CLOSED** không còn việc kỹ thuật ·
+**NO-ACTION** giữ nguyên có chủ ý.
+
+### 14.2 Finding của snapshot 04/09
+
+| Finding | Trạng thái | Bằng chứng tại `cb690dfb` |
+|---|---|---|
+| `F-PRG-PERF-001` | **PARTIAL, mức độ tăng** | Backend đã chia budget base step 2.000 µs theo số Program ([checks_topology.go:96-100](../../../apps/web-api/internal/programming/application/checks_topology.go#L96-L100)). Core vẫn đọc `program_budget_us` ([st_package_v2.cpp:802-816](../../../apps/core/application/st/st_package_v2.cpp#L802-L816)) rồi bỏ: `PackageProgramSlice` ([coordinator.hpp:156-160](../../../apps/core/application/programming/programming_runtime_coordinator.hpp#L156-L160)) và `StProgramSetEntry` ([st_scheduler.hpp:386-392](../../../apps/core/application/st/st_scheduler.hpp#L386-L392)) không có trường budget. Vượt budget chỉ xử lý ở cấp Task: 3 lần liên tiếp làm mọi Program `FAULTED` ([st_scheduler.cpp:1147-1167](../../../apps/core/application/st/st_scheduler.cpp#L1147-L1167)) |
+| `F-PRG-PERF-002` | **PARTIAL** | Đã sửa: xử lý EINTR ([scan_loop.cpp:595-601](../../../apps/core/application/runtime/scan_loop.cpp#L595-L601)), bỏ mốc quá hạn bằng `BaseStepPacer`, snapshot đổi sang 60 s theo đồng hồ. Còn lại: `StateSnapshot::save` (dựng JSON, `fsync` file và thư mục) vẫn chạy trong `after_scan` trên luồng quét FIFO80 ([main.cpp:936-941](../../../apps/core/bootstrap/main.cpp#L936-L941)) |
+| `F-PRG-PERF-003` | **NO-ACTION** | Giữ `SEQUENTIAL`; không claim thực thi đa lõi (xem §3.1) |
+| `F-PRG-PERF-004` | **OPEN** | Compile tuần tự từng Program ([checks.go:370-371](../../../apps/web-api/internal/programming/application/checks.go#L370-L371)), mỗi lần một thư mục tạm và một process ([runner.go:313](../../../apps/web-api/internal/programming/compiler/runner.go#L313), [runner.go:412](../../../apps/web-api/internal/programming/compiler/runner.go#L412)) |
+| `F-PRG-PERF-005` | **FIXED-VERIFY** | Release theo Program nay có dung sai và nhảy mốc ([st_scheduler.cpp:117-162](../../../apps/core/application/st/st_scheduler.cpp#L117-L162)); §13.3 ghi missed release `0→0`. Đóng khi read-back 2 × 30 phút không tăng |
+| `F-PRG-PERF-006` | **FIXED-VERIFY** | Profile nay có chu kỳ `10/50/100/500/1000/5000/10000/50000` ms ([product_profile_v2.json:19-31](../../../contracts/programming/product_profile_v2.json#L19-L31)); FE hiển thị `periodMs`; fixture `RelayPattern32` không còn sau khi cài sạch bo 27/09. Đóng khi read-back Active khớp chu kỳ khai báo |
+| `F-PRG-PERF-007` | **CLOSED** | Hai unit `masscan-agent` và `AgentSvr-agent` là thành phần của vụ xâm nhập ([record bảo mật](../security/2026-09-26-foxlinx-ssh-intrusion.md)); bo đã cài sạch ([evidence 27/09](../test-evidence/fw-som/2026-09-27-foxlinx-factory-reset.md)) |
+
+### 14.3 Finding của audit 28/09
+
+| Finding | Trạng thái | Bằng chứng tại `cb690dfb` |
+|---|---|---|
+| `PERF-SYS-05` | **OPEN, xác nhận** | `sleep_until` cộng một chu kỳ vào mốc cũ và không kiểm mốc đã qua ([iobus main.cpp:85-93](../../../apps/iobus/bootstrap/main.cpp#L85-L93)), nên sau một lần kẹt vòng poll chạy dồn. Core đã có chính sách "lỡ thì bỏ" trong `BaseStepPacer`; IOBus chưa dùng |
+| `PERF-SYS-01` | **OPEN** | Ngưỡng C4 vẫn FAIL vì 9 lần >100 µs trước audit. Xem §14.4 mục 4 về 5 lần trong phút audit |
+| `PERF-API-01` | **OPEN, xác nhận** | Reader Web thử 5 vòng liền; gặp seq lẻ là thử lại ngay, không nhường CPU ([shm_reader.go:155-173](../../../apps/web-api/internal/app/shm_reader.go#L155-L173)). Reader Core ([iobus_reader.cpp:59](../../../apps/core/adapters/ipc/iobus_reader.cpp#L59)) và HMI ([shm_reader.cpp:79](../../../apps/hmi/data/shm_reader.cpp#L79)) dùng cùng con số 5; Core hết lượt thì dùng snapshot cũ và tăng `seqlock_fail` |
+| `PERF-API-02` | **OPEN, xác nhận** | Mỗi request chờ timer 100 ms ([system.go:230-246](../../../apps/web-api/internal/app/system.go#L230-L246)) |
+| `PERF-API-03` | **OPEN, xác nhận** | Middleware ghi INFO cho mọi request ([http.go:85-93](../../../apps/web-api/internal/app/http.go#L85-L93)) |
+| `PERF-SYS-03` | **OPEN, xác nhận** | Mỗi lần đọc `alarm_list` thành công đều ghi AUDIT ([web_ipc.cpp:493](../../../apps/core/adapters/ipc/web_ipc.cpp#L493)) |
+| `PERF-SYS-02` | **OPEN** | Chưa có cấu hình mức log driver Wi-Fi trong `platform/` |
+| `PERF-FE-01` | **OPEN, xác nhận** | `handleStatic` chỉ đặt `Cache-Control` rồi `http.ServeFile`, không có nhánh nén ([http.go:349-379](../../../apps/web-api/internal/app/http.go#L349-L379)) |
+| `PERF-FE-02` | **OPEN** | `recharts` gom vào chunk `charts` ([vite.config.ts:57-63](../../../apps/web-ui/vite.config.ts#L57-L63)) và được tải sẵn ở login |
+| `PERF-PROV-01` | **OPEN** | `provenance.json` chỉ sinh khi dựng gói release ([build-release.sh:132](../../../platform/packaging/build-release.sh#L132)); deploy từng thành phần không cập nhật |
+| `PERF-SYS-04`, `PERF-API-04` | **OPEN** | Không đổi so với §13.5 |
+
+### 14.4 Phân tích bổ sung
+
+1. **`F-PRG-PERF-001` nghiêm trọng hơn sau ADR-061.** Budget một base step nay
+   là 2.000 µs. Benchmark target §3.1 cho 16 Program × 4.095 instruction chạy
+   tuần tự trung bình 2.002–2.050 µs, lớn nhất 3.008 µs. Cấu hình này nằm trong
+   giới hạn profile (16 Program Enable, 4.096 instruction/Program), nên một
+   package qua được Check có thể vượt budget ở mọi step. Sau 3 lần liên tiếp,
+   **cả Task** chuyển `FAULTED`. Số §3.1 đo dưới governor `schedutil` và trên bo
+   khi đó đang bị xâm nhập (mục 5), nên cần tái hiện trên bo sạch trước khi kết
+   luận mức vượt.
+2. **`PERF-SYS-07` (mới) — biên thời gian IOP hẹp và bộ đếm bị phóng đại.** Một
+   giao dịch IOP mất khoảng 1,4 ms trong chu kỳ poll 2 ms, còn
+   `IOP_RESP_TIMEOUT_MS=3` dài hơn cả chu kỳ ([iop_protocol.h:49](../../../contracts/iop/iop_protocol.h#L49)).
+   Bộ đếm overrun tăng ở **mỗi vòng** trễ hơn một chu kỳ ([main.cpp:912-914](../../../apps/iobus/bootstrap/main.cpp#L912-L914)).
+   Khi vòng poll chạy dồn sau một lần kẹt 16 ms, khoảng 7 vòng liên tiếp đều bị
+   đếm, nên +510 overrun ở §13.3 tương ứng với ít sự kiện kẹt hơn nhiều. Giả
+   thuyết cần đo: chính các đợt chạy dồn, cùng timeout dài hơn chu kỳ, tạo phần
+   lớn lỗi seq của IOP.
+3. **`PERF-SYS-06` (mới) — khối lượng ghi eMMC.** 112.785 B/s ở §13.3 ngoại suy
+   tuyến tính thành khoảng 9,7 GB/ngày, tức khoảng 3,5 TB/năm. Busy 0,682% cho
+   thấy không có vấn đề hiệu năng, nhưng với thiết bị DDC dùng trên 10 năm đây là
+   rủi ro tuổi thọ bộ nhớ. Cửa sổ đo chỉ 5 phút và chưa biết nguồn ghi; cần đo 24
+   giờ và phân bổ theo nguồn trước khi kết luận.
+4. **Phép đo tự làm nhiễu `PERF-SYS-01`.** 5 lần vi phạm jitter mới rơi đúng phút
+   02:54–02:55Z, lúc sub-agent đang thu journal; sau đó bộ đếm đứng yên ở 14.
+   Không dùng 5 lần này làm bằng chứng nguyên nhân. C4 vẫn FAIL vì 9 lần trước
+   audit. Hành động đầu tiên là histogram đo sạch, chưa chỉnh IRQ hay kernel.
+5. **Số tail TARGET ngày 04/09 đo trên bo bị xâm nhập.** Hai vòng restart
+   `F-PRG-PERF-007` thuộc vụ xâm nhập, nên p99/max của §3.1, nhất là lane song
+   song, không đại diện cho bo sạch. Mean tuần tự chỉ dùng để định hướng.
+6. **Sửa lỗi của chính record.** Header trước bản 1.3 còn mô tả kết luận 04/09.
+   Bảng lịch sử có một dòng trống giữa 1.1 và 1.2, làm dòng 1.2 không hiển thị
+   thành bảng. Bản 1.3 sửa cả hai và không đổi nội dung các mục 0–13.
+
+### 14.5 Kế hoạch thi hành
+
+Toàn bộ finding còn mở (trừ `F-PRG-PERF-003` giữ nguyên có chủ ý và
+`F-PRG-PERF-007` đã đóng) được gom vào
+[Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md):
+25 task trong 5 wave, 5 cổng quyết định, giao thức đo trên bo và ma trận truy
+xuất. Việc thi hành được theo dõi bằng **một Issue**
+[#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) và một PR.
+Phiếu D01–D07 của [báo cáo PM](FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md)
+được ánh xạ thành các cổng của Plan; chưa có quyết định PM nào được coi là đã
+phê duyệt.
+
+### 14.6 Kiểm chứng của lần đối chiếu
+
+| Kiểm chứng | Kết quả |
+|---|---|
+| Đọc mã tại `cb690dfb` cho 21 finding | DONE; `file:dòng` ở §14.2–14.3 |
+| Build/test C++, Go, FE | NOT RUN — lần đối chiếu không đổi mã |
+| Đo TARGET mới | NOT RUN — dùng số §3.1 và §13; đo lại thuộc T63-001 |
+| Tài liệu | `docs_iso_harness.py --expect` và `git diff --check`: xem CHANGELOG mục 2026-09-28 |
+
+## 15. Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-04 | Tạo record từ review source, benchmark HOST, phân tích cycle/multi-program, finding hiệu năng và đối chiếu cạnh tranh; giữ TARGET/HIL/release đúng `NO-GO` |
 | 1.1 | 2026-09-04 | Đo trực tiếp Forlinx: hai lượt runtime ARM64, compiler load, service/API read-back; thêm `F-PRG-PERF-005/006/007`, hạ provenance live xuống PARTIAL và giữ HIL/release `NO-GO` |
-
 | 1.2 | 2026-09-28 | Bổ sung audit OS/Core, API/Modbus và browser trên Forlinx bằng một agent quản lý, hai sub-agent; giữ riêng snapshot 04/09 và giới hạn chứng cứ |
+| 1.3 | 2026-09-28 | Thêm §14 đối chiếu 21 finding với mã tại `main@cb690dfb` (2 finding mới `PERF-SYS-06/07`, `F-PRG-PERF-007` đóng, `F-PRG-PERF-005/006` chờ read-back); cập nhật header theo hiện trạng; sửa bảng lịch sử bị vỡ; liên kết Plan 63 và Issue #809 |
