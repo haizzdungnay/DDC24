@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.4 |
+| Phiên bản | 1.5 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
-| Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Revision Active `a0f107fa…`, Program `RUNNING` ở chế độ **AUTO**. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
+| Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
 | Phạm vi | 1 `PROGRAM` + 5 `FUNCTION` + 5 `FUNCTION_BLOCK`; 16 DO relay trên CK508-04 và CK508-05 (RS-485 `rs485-1`) |
-| Nền đối chiếu | `main@0f5d46f3` (host); trên bo: RC `f86150e3` + web của PR #795 (`86aa4ede`); compiler `fwsom-st-1.2.0`; profile `revA-1t-1-5-30` bản 2.2 (`1cb61fec…`); thư viện hệ thống `rev-a.4` |
+| Nền đối chiếu | `main@0f5d46f3` (host); trên bo lúc nghiệm thu: RC `f86150e3` + web của PR #795 (`86aa4ede`), từ 2026-09-28 là `main@e3072983`; compiler `fwsom-st-1.2.0`; profile `revA-1t-1-5-30` bản 2.2 (`1cb61fec…`); thư viện hệ thống `rev-a.4` |
 | Lớp bằng chứng | **HOST** (biên dịch + mô phỏng runtime) và **TARGET** (Check/Commission, lệnh FC05, readback coil). Không phải HIL: chưa đo điện tại tiếp điểm. Hồ sơ trên bo: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming/2026-09-27-do16-modbus-target-deploy.md) |
 
 ## 0. Đọc nhanh
@@ -73,7 +73,7 @@ Mỗi dòng dưới đây đã đối chiếu mã nguồn ở `main@0f5d46f3`. D
 | 5 | Mỗi instance FB chỉ được gọi **một lần mỗi chu kỳ** (`ST-SEM-010`) | `apps/core/application/st/samples/err_fb_called_twice.st` | Mục 3 của Program gọi mọi instance vô điều kiện; `CASE` chỉ đọc output |
 | 6 | FUNCTION phải thuần: không instance FB, không `VAR_OUTPUT`, không `VAR RETAIN`, không Published Signal (`ST-POU-002`). Gọi FUNCTION theo **vị trí** đối số (thứ tự `VAR_INPUT`), gọi FB theo **tên** cổng | `st_pou_registry.cpp` | 5 FUNCTION chỉ tính toán, trạng thái nằm trong FB |
 | 7 | FB/FUNCTION người dùng được **inline** vào Program: dùng chung trần 4096 lệnh IR, 512 slot ghi được, 64 instance FB chuẩn (tính cả `TON` nằm trong FB người dùng) | `st_compile.cpp`, `st_profile_generated.hpp` | Đo thật ở §9: 1463 lệnh, 453 slot, 42 instance |
-| 8 | Nhãn `CASE` dạng dải: từ compiler có U-11 (PR #803) dải rộng như `16..32767:` **hợp lệ** (trần đếm theo số nhãn). Tool ST trên bo lab hiện là bản RC `f86150e3`, cũ hơn U-11, nên vẫn từ chối (`CASE label set is too large`) cho tới khi deploy lại tool | `st_parser.cpp`; `DDD-LANG-PROG-001` §4.3 | Nhánh "từ 16 trở lên" viết bằng `IF`: chạy được ở cả hai bản, nên giữ nguyên |
+| 8 | Nhãn `CASE` dạng dải: từ compiler có U-11 (PR #803) dải rộng như `16..32767:` **hợp lệ** (trần đếm theo số nhãn). Tool ST trên bo lab đã lên bản có U-11 từ 2026-09-28 (`main@e3072983`); bo chạy bản cũ hơn thì vẫn từ chối (`CASE label set is too large`) | `st_parser.cpp`; `DDD-LANG-PROG-001` §4.3 | Nhánh "từ 16 trở lên" viết bằng `IF`: chạy được ở cả hai bản, nên giữ nguyên |
 | 9 | Lỗi runtime làm Program **FAULTED** và phải reset tay: tràn số nguyên (không quấn vòng), chia 0, ép kiểu ngoài miền, `TIME` âm, `LIMIT` có cận đảo, `HYSTERESIS` có `LOW ≥ HIGH`, số thực không hữu hạn | `st_exec.cpp`, `st_scheduler.cpp` | Chặn trần bộ đếm, kẹp trước khi đổi kiểu, sắp lại cận trong `FN_SEC_TO_TIME` |
 | 10 | `PID` mang nhãn `REVIEW_REQUIRED`: Check từ chối mọi Program dùng nó | `st_profile_generated.hpp` | Không dùng `PID` |
 | 11 | Chu kỳ Program chỉ nhận {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061) | `kAllowedPeriodMs` | Chọn 100 ms |
@@ -1006,7 +1006,7 @@ Slot ghi được là tài nguyên eo hẹp nhất (AUTO tốn thêm 14 slot): m
 
 | # | Phát hiện bởi | Triệu chứng | Nguyên nhân | Đã sửa |
 |---|---|---|---|---|
-| 1 | Compiler | `ST-SYN-001 CASE label set is too large` | Nhãn `16..32767` bị bung thành 32 752 giá trị | `FN_FIRST_N` xử lý N ≥ 16 bằng `IF`. Lỗi compiler này đã sửa ở U-11 (PR #803): dải rộng nay hợp lệ; tool ST trên bo lab (RC) vẫn từ chối cho tới khi deploy lại. Mã mẫu giữ `IF` để chạy được ở cả hai bản |
+| 1 | Compiler | `ST-SYN-001 CASE label set is too large` | Nhãn `16..32767` bị bung thành 32 752 giá trị | `FN_FIRST_N` xử lý N ≥ 16 bằng `IF`. Lỗi compiler này đã sửa ở U-11 (PR #803): dải rộng nay hợp lệ; tool ST trên bo lab có bản sửa từ 2026-09-28; bo chạy tool cũ hơn thì vẫn từ chối. Mã mẫu giữ `IF` để chạy được ở cả hai bản |
 | 2 | Compiler | `'tOn' is a keyword and cannot be a variable name` | Tên không phân biệt hoa thường: `tOn` = `TON`, `TOn` = `TON` | Đổi thành `TmrOn`/`TmrOff`/`TimeOn`/`TimeOff` |
 | 3 | Mô phỏng | CHASE 1 s/bước thực tế 1,2 s; TEST 0,5 s thực tế 0,7 s | `TON` tự nạp lại kiểu `IN := NOT Q` cần 2 chu kỳ để khởi động lại | `FB_STEP_TIMER`/`FB_BLINK` dùng đồng hồ chạy tự do với mốc cộng dồn: đúng 1,0 s và 0,5 s |
 | 4 | Mô phỏng | STAGGER đóng **7 relay cùng lúc** tại t = 10 s | Bước vẫn tăng trong lúc kênh chờ hết thời gian nghỉ tối thiểu, rồi các kênh đóng dồn | Chỉ tăng bước khi `AnyWaiting = FALSE`; bộ nhịp dừng khi còn kênh chờ |
@@ -1136,3 +1136,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.2 | 2026-09-27 | Kiểm từng chu kỳ trên bo (2 120 chu kỳ); sửa STAGING giảm bậc có "lỗ" và nhả dồn (lỗi 8, `FB_STAGER`); thêm S15, §9.6; khoảng nghỉ đổi chế độ ghi đúng ≈ 2,1 s |
 | 1.3 | 2026-09-27 | Thêm chế độ AUTO (`CmdMode = 10`) tự chạy lần lượt mọi chế độ; sửa lỗi bỏ qua bước OFF khi khởi động (lỗi 9); thêm S16, T13; kiểm AUTO trên bo 1 665 chu kỳ |
 | 1.4 | 2026-09-28 | Ràng buộc 16 và §8: tuỳ chọn FC15 theo thiết bị (PR #804, U-07), mặc định tắt, kèm số đo trên bo (`EV-MB-FC15-20260927`); §7.2 nhắc cột "Giá trị ghi" (U-18). Ràng buộc 8, §9.2 và §10: dải `CASE` rộng hợp lệ từ compiler có U-11 (PR #803), tool ST RC trên bo vẫn từ chối tới khi deploy lại. Mã chương trình không đổi |
+| 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu, ràng buộc 8 và dòng Trạng thái (Active hiện là `0c29f4f1…`) |
