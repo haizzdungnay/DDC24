@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 1.2 |
-| Ngày | 2026-09-27 |
+| Phiên bản | 1.3 |
+| Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
 | Người rà | Claude, qua phiên viết – triển khai – kiểm chứng chương trình `PRG_DO16_MODBUS` |
-| Kết luận | **Nền tảng chạy tin cậy** (3 785 chu kỳ kiểm từng chu kỳ, 0 lỡ nhịp, 0 lỗi runtime). **21 vấn đề cần nâng cấp/cải tiến**: 1 lỗi đã sửa ở PR #795 chờ merge, 5 lỗi/lệch hợp đồng chưa sửa, 15 giới hạn và điểm cản trở năng suất. Ưu tiên cao nhất: merge #795, gộp FC15 cho Modbus, làm Trace trung thực, mở rộng ngôn ngữ ST (#367) |
+| Kết luận | **Nền tảng chạy tin cậy** (3 785 chu kỳ kiểm từng chu kỳ, 0 lỡ nhịp, 0 lỗi runtime). **21 vấn đề cần nâng cấp/cải tiến** (tại bản 1.0): 1 lỗi đã sửa ở PR #795, 5 lỗi/lệch hợp đồng chưa sửa, 15 giới hạn và điểm cản trở năng suất. Ưu tiên cao nhất khi đó: merge #795, gộp FC15 cho Modbus, làm Trace trung thực, mở rộng ngôn ngữ ST (#367). Tiến độ tới 2026-09-28 ở §5: #795, #797, #803 đã merge; U-07/U-18 ở PR #804 chờ merge |
 | Căn cứ | [`GUIDE-PROG-ST-DO16-001`](../../06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md) bản 1.3; [`EV-PROG-DO16-MB-20260927`](../test-evidence/programming/2026-09-27-do16-modbus-target-deploy.md); PR [#795](https://github.com/Mekong-HCM/MK-DDC-24/pull/795) |
 
 ## 0. Cách đánh giá
@@ -39,27 +39,27 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 
 | ID | Mức | Nhóm | Vấn đề | Trạng thái |
 |---|---|---|---|---|
-| U-01 | P1 | Check / Point | Check từ chối mọi binding vào VP `integer` và `multistate` | **Đã sửa ở PR #795, chờ merge**; bo lab đang chạy bản vá |
-| U-02 | P2 | Trace | Phiên Trace thứ hai âm thầm lấy mẫu thưa (~500 ms) nhưng vẫn báo 100 ms, 0 mẫu rơi | **Đã sửa ở PR #797** (`source` + đếm chu kỳ bị bỏ) |
-| U-03 | P3 | Hợp đồng API | Trace trả `freshness = "FRESH"` ngoài enum OpenAPI | **Đã sửa ở PR #797** (`LIVE`) |
+| U-01 | P1 | Check / Point | Check từ chối mọi binding vào VP `integer` và `multistate` | **Đã sửa ở PR #795, đã merge** (`2d2eb368`); bo lab đang chạy bản vá, chưa deploy lại từ `main` |
+| U-02 | P2 | Trace | Phiên Trace thứ hai âm thầm lấy mẫu thưa (~500 ms) nhưng vẫn báo 100 ms, 0 mẫu rơi | **Đã sửa ở PR #797, đã merge** (`0e6785e2`): `source` + đếm chu kỳ bị bỏ |
+| U-03 | P3 | Hợp đồng API | Trace trả `freshness = "FRESH"` ngoài enum OpenAPI | **Đã sửa ở PR #797, đã merge** (`LIVE`) |
 | U-04 | P2 | Trace / quan sát | Một mẫu Trace có thể trộn đầu vào mới với đầu ra cũ; `actualValue` của DO Modbus là lệnh chứ không phải giá trị đọc lại | Cần thiết kế (đổi hợp đồng IPC/OpenAPI): #798 |
-| U-05 | P3 | Virtual Point | "writable" mang hai nghĩa ngược nhau giữa UI và Check | **Đã sửa ở PR #797** |
-| U-06 | P2 | Thư viện | Không có đường UI để POU ST khai phụ thuộc vào khối Thư viện PROJECT | **Đã sửa ở PR #803** (lưu Draft tự khai dependency) |
-| U-07 | P1 | Modbus | Ghi từng coil một, không gộp FC15: 16 DO mất ≈ 0,46 s và tốn băng thông bus | Phần đánh thức theo sự kiện và ghi trước đọc của G7 đã có trên `main` (2026-09-26); gộp FC15 chưa làm |
-| U-08 | P2 | Compiler | Trần 512 slot/Program; mỗi lời gọi FUNCTION/FB được inline và cấp slot riêng | Phần báo mức dùng đã làm ở PR #803 (`--check-only` trả `usage`); dùng chung slot và nâng trần cần thiết kế: #799 |
-| U-09 | P2 | Trace | Quota 10 000 ô/phiên: 27 biến chỉ ghi được ≈ 37 s | **Đã sửa ở PR #803** (`sampleMode = ON_CHANGE` + `cycle`) |
+| U-05 | P3 | Virtual Point | "writable" mang hai nghĩa ngược nhau giữa UI và Check | **Đã sửa ở PR #797, đã merge** |
+| U-06 | P2 | Thư viện | Không có đường UI để POU ST khai phụ thuộc vào khối Thư viện PROJECT | **Đã sửa ở PR #803, đã merge** (`823a739c`): lưu Draft tự khai dependency. Rủi ro còn lại: phép suy dùng regex trên mã (đã bỏ chú thích và chuỗi), nên một định danh trùng tên khối Thư viện PROJECT có thể sinh dependency thừa; hậu quả nhẹ (chỉ thêm bản ghi usage), hướng lâu dài là lấy danh sách lời gọi từ compiler |
+| U-07 | P1 | Modbus | Ghi từng coil một, không gộp FC15: 16 DO mất ≈ 0,46 s và tốn băng thông bus | **Đã sửa ở PR #804** (chờ merge): gom coil liền kề thành FC15 theo thiết bị (`coil_write_batch_max`, mặc định tắt). Trên bo, bật cho CK508-04/05: 16 DO = 2 giao dịch FC15, 61,1 ms/loạt, lệch hai module 30 ms, chiếm dây 22,2 % (trước: 16 FC05, 458,8 ms, 229 ms, 63,1 %); 0 lỗi — `EV-MB-FC15-20260927` |
+| U-08 | P2 | Compiler | Trần 512 slot/Program; mỗi lời gọi FUNCTION/FB được inline và cấp slot riêng | Phần báo mức dùng đã làm ở PR #803, đã merge (`--check-only` trả `usage`); dùng chung slot và nâng trần cần thiết kế: #799 |
+| U-09 | P2 | Trace | Quota 10 000 ô/phiên: 27 biến chỉ ghi được ≈ 37 s | **Đã sửa ở PR #803, đã merge** (`sampleMode = ON_CHANGE` + `cycle`) |
 | U-10 | P2 | Ngôn ngữ ST | Thiếu ARRAY/STRUCT, toán tử bit trên số nguyên, `VAR CONSTANT`, giá trị khởi tạo, phép nhân TIME | #367 (ARRAY/STRUCT/VAR_IN_OUT, đã thêm bằng chứng); phần còn lại #800. Cần duyệt `DDD-LANG-PROG-001` |
-| U-11 | P3 | Compiler | Nhãn CASE bị bung thành tập giá trị, nên dải lớn bị từ chối | **Đã sửa ở PR #803** |
+| U-11 | P3 | Compiler | Nhãn CASE bị bung thành tập giá trị, nên dải lớn bị từ chối | **Đã sửa ở PR #803, đã merge**; `DDD-LANG-PROG-001` 1.3 ghi lại luật trần theo số nhãn (PR #804). Tool ST trên bo lab còn là bản RC, vẫn từ chối dải rộng cho tới khi deploy lại |
 | U-12 | P2 | Thư viện hệ thống | Thiếu khối DDC thường dùng; tự viết thì dễ sai (phiên này mắc 4 lỗi trong các khối tự viết) | Cần duyệt đặc tả khối (DDD-CTRL §7A): #801 |
 | U-13 | P1 | Sản phẩm | `PID` bị cổng review chặn, nên không Program nào dùng được vòng PID | Chờ quyết định Controls/Safety + Product: #802 |
-| U-14 | P3 | API | Sai `baseRevisionId` khi PATCH Draft chỉ nhận `409` chung chung | **Đã sửa ở PR #797** |
-| U-15 | P3 | API | `upsertObject` thay cả object, dễ xoá mất biến và binding khi chỉ muốn sửa mã | **Đã sửa ở PR #803**: op `replaceProgramSource` đã có sẵn nhưng chưa được kiểm; nay nhận `objectId` theo hợp đồng và có test |
-| U-16 | P3 | Công cụ | CLI biên dịch đòi khoá ký cả khi chỉ kiểm cú pháp; chưa có công cụ mô phỏng Program cho người viết | **Đã làm ở PR #803**: `--check-only` và công cụ host `mkddc-st-sim` (chạy package theo kịch bản trên đúng engine SIMULATE, xuất CSV) |
-| U-17 | P3 | Tài liệu | `FBD_CREATION_AND_ACTIVATION_GUIDE.md` lạc hậu (chu kỳ, danh sách xác nhận) | **Đã sửa ở PR #797** |
-| U-18 | P3 | Chẩn đoán | Frame Monitor không ghi giá trị của lệnh ghi | Mở |
-| U-19 | P3 | Hiệu năng API | Một lệnh ghi VP mất ~4 s (các lệnh khác ~0,1 s) | Chưa tái hiện; **đã thêm log phân rã theo pha ở PR #803** để lần sau có dữ liệu |
+| U-14 | P3 | API | Sai `baseRevisionId` khi PATCH Draft chỉ nhận `409` chung chung | **Đã sửa ở PR #797, đã merge** |
+| U-15 | P3 | API | `upsertObject` thay cả object, dễ xoá mất biến và binding khi chỉ muốn sửa mã | **Đã sửa ở PR #803, đã merge**: op `replaceProgramSource` đã có sẵn nhưng chưa được kiểm; nay nhận `objectId` theo hợp đồng và có test |
+| U-16 | P3 | Công cụ | CLI biên dịch đòi khoá ký cả khi chỉ kiểm cú pháp; chưa có công cụ mô phỏng Program cho người viết | **Đã làm ở PR #803, đã merge**: `--check-only` và công cụ host `mkddc-st-sim` (chạy package theo kịch bản trên đúng engine SIMULATE, xuất CSV) |
+| U-17 | P3 | Tài liệu | `FBD_CREATION_AND_ACTIVATION_GUIDE.md` lạc hậu (chu kỳ, danh sách xác nhận) | **Đã sửa ở PR #797, đã merge** |
+| U-18 | P3 | Chẩn đoán | Frame Monitor không ghi giá trị của lệnh ghi | **Đã sửa ở PR #804** (chờ merge): khung ghi mang `values`, Frame Monitor có cột "Giá trị ghi"; trên bo 688/688 khung ghi có giá trị. Sửa kèm lỗi khối Frame Monitor biến mất khi mọi thiết bị đã được poll |
+| U-19 | P3 | Hiệu năng API | Một lệnh ghi VP mất ~4 s (các lệnh khác ~0,1 s) | Chưa tái hiện; **đã thêm log phân rã theo pha ở PR #803** (đã merge) để lần sau có dữ liệu |
 | U-20 | P2 | An toàn đầu ra | Program FAULTED thì DO Modbus giữ giá trị cuối tới 60 s | Theo mã; bằng chứng đã thêm vào #384, chờ quyết định ma trận chính sách đầu ra |
-| U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | **Phần kiểm binary cũ đã sửa ở PR #797**; bo lệch RC hết khi #795 merge và deploy lại |
+| U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | **Phần kiểm binary cũ đã sửa ở PR #797, đã merge**; #795 đã merge nhưng bo còn lệch `main` cho tới khi deploy lại (hiện chạy bản dev của PR #804 gộp #795) |
 
 ## 3. Chi tiết và đề xuất
 
@@ -94,6 +94,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 - Program gọi khối **lấy từ Thư viện PROJECT** phải khai `requiresLibrary`, nếu không Check báo `ST-LIB-001` (đã kiểm bằng CLI). Trên FE, chỉ trình soạn khối thư viện ghi `dependencies` (`LibraryAuthoringDrawer.tsx:197`). Còn chèn khối vào POU ST (`EditorPane.tsx:2417` `applyLibraryInsertion`) chỉ chèn chữ, không ghi phụ thuộc. Hệ quả: người dùng buộc phải chép khối vào Cây POU, mất lợi ích quản lý phiên bản.
 - *Đề xuất:* thao tác chèn tự thêm `objects[].dependencies`, hoặc Check suy phụ thuộc từ các lời gọi trong nguồn rồi ghim theo lock.
 - *Đóng khi:* e2e: tạo khối PROJECT → chèn vào POU ST → Check PASSED.
+- *Trạng thái (1.3):* đã sửa ở PR #803 (đã merge `823a739c`) bằng phép suy dependency khi lưu Draft. Rủi ro còn lại: phép suy dùng regex trên mã (bỏ chú thích/chuỗi), nên một định danh trùng tên khối Thư viện PROJECT có thể sinh dependency thừa. Hậu quả nhẹ (chỉ thêm bản ghi usage, Check không hỏng); hướng lâu dài là lấy danh sách lời gọi từ compiler.
 
 ### 3.2 Hiệu năng và khả năng mở rộng
 
@@ -104,6 +105,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 - *Đã có trên `main`:* G7 của audit 25/09 ("Fixed — Lệnh Core → Modbus lên dây theo sự kiện", 2026-09-26) đánh thức luồng bus theo `ext_cmd_seq`, cho lệnh ghi đi trước lượt đọc và giới hạn số mục mỗi lượt. Số đo ở trên lấy trên iobus đã có G7, nên phần trễ còn lại đến từ việc ghi tuần tự từng coil.
 - *Đề xuất còn lại:* mỗi lượt, gộp các coil liền kề của cùng slave thành một FC15: 16 coil trên 2 module → 2 giao dịch ≈ 60 ms.
 - *Đóng khi:* đo lại T4 BLINK trên bo: 16 DO đổi trong ≤ 2 giao dịch, lệch giữa hai module ≤ 1 giao dịch.
+- *Trạng thái (1.3):* sửa ở PR #804, bật theo thiết bị qua `coil_write_batch_max` (mặc định tắt, vì không phải thiết bị nào cũng có FC15). Đo trên bo với `PRG_DO16_MODBUS` AUTO: 13/13 loạt 16 DO đúng 2 giao dịch FC15 × 8, lệch hai module 30–32 ms (= 1 giao dịch) → điều kiện đóng **PASS**. Coil không liền kề (ví dụ nhả coil 0, 2, 4, 6 khi rời BLINK) vẫn đi FC05 từng coil, đúng thiết kế. Hồ sơ: [`EV-MB-FC15-20260927`](../test-evidence/modbus/2026-09-27-fc15-coil-batch-target.md).
 
 **U-08 — Trần slot và inline từng lời gọi (P2).**
 - Trần 512 slot ghi được mỗi Program (`st_profile_generated.hpp:50`). Mỗi lời gọi FUNCTION được inline và cấp biến mới theo số thứ tự lời gọi (`st_compile.cpp:685`); mỗi instance FB người dùng mang theo toàn bộ biến của nó. Program 16 DO dùng **467/512 (91 %)**, mỗi kênh tốn 15 slot, nên không thể mở rộng lên 32 DO trong một Program. Muốn biết còn dư bao nhiêu, người dùng phải dò bằng cách thêm biến giả, vì thông báo `ST-POU-004` chỉ nêu điểm vượt đầu tiên.
@@ -171,6 +173,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 **U-18 — Frame Monitor thiếu giá trị ghi (P3).**
 - Frame FC05/FC15 chỉ có thời điểm, slave, FC, địa chỉ, số lượng, kết quả và thời gian giao dịch (`at, slave, fc, addr, count, ok, reason, elapsedUs, attempt`), không có giá trị. Muốn biết lệnh đóng hay mở, phải suy từ readback 1 s sau.
 - *Đề xuất:* thêm giá trị (hoặc bitmap với FC15) vào bản ghi frame.
+- *Trạng thái (1.3):* sửa ở PR #804: `values` (tối đa 16 word, chỉ khung ghi) từ iobus tới cột "Giá trị ghi". Trên bo, 550/550 và 138/138 khung ghi của hai cửa sổ đo có giá trị; Chrome thật thấy cột hiện `0 1 0 1 0 1 0 1` cho FC15 và `—` cho khung đọc. Khi kiểm còn lộ một lỗi có từ `af1a7ef0`: khối Frame Monitor nằm trong `NeverPolledWarning` nên biến mất khi mọi thiết bị đã được poll; đã sửa cùng PR.
 
 **U-19 — Một lệnh ghi VP chậm bất thường (P3, quan sát).**
 - `PUT /api/v1/points/VP7` mất ~4 s, trong khi hàng chục lệnh cùng loại khác mất ~0,1 s. Chưa tái hiện được.
@@ -198,12 +201,12 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 
 | Đợt | Finding | PR | Trạng thái |
 |---|---|---|---|
-| Ngay | U-01 | #795 | Chờ merge |
-| Ngay | U-02, U-03, U-05, U-14, U-17, U-21 (phần kiểm binary cũ) | #797 | Chờ merge; `go test` 21 package ok, vitest 267 file / 3 476 test, cổng layout PASS |
-| Sprint kế | U-06, U-08 (báo mức dùng), U-09, U-11, U-15, U-16 (`--check-only` + `mkddc-st-sim`), U-19 (log) | #803 | Chờ merge; ctest 1 639/1 639, `go test` 21 package ok, vitest 267 file / 3 478 test, cổng layout PASS |
-| Sprint kế | U-07 (gộp FC15), U-18 (giá trị trong Frame Monitor) | PR riêng, nhánh `fix/modbus-fc15-batch-20260927` | Đang làm, kèm đo trên bo |
+| Ngay | U-01 | #795 | Đã merge (`2d2eb368`) |
+| Ngay | U-02, U-03, U-05, U-14, U-17, U-21 (phần kiểm binary cũ) | #797 | Đã merge (`0e6785e2`); `go test` 21 package ok, vitest 267 file / 3 476 test, cổng layout PASS |
+| Sprint kế | U-06, U-08 (báo mức dùng), U-09, U-11, U-15, U-16 (`--check-only` + `mkddc-st-sim`), U-19 (log) | #803 | Đã merge (`823a739c`); ctest 1 639/1 639, `go test` 21 package ok, vitest 267 file / 3 478 test, cổng layout PASS |
+| Sprint kế | U-07 (gộp FC15), U-18 (giá trị trong Frame Monitor) | #804 | Chờ merge (xếp chồng lên #803); ctest 1 658/1 658, `go test` 21 package ok, vitest 267 file / 3 484 test, cổng layout PASS; trên bo 16 DO = 2 giao dịch FC15, lệch hai module 30 ms (`EV-MB-FC15-20260927`) |
 | Cần thiết kế / quyết định | U-04 #798, U-08 dùng chung slot #799, U-10 #800 + #367, U-12 #801, U-13 #802, U-20 #384 | — | Không tự code: thuộc cổng duyệt ADR-054/`DDD-LANG-PROG-001`/`DDD-CTRL-PROG-001` §7A hoặc quyết định sản phẩm |
-| Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | — | Deploy lại bo từ `main` sau khi #795 merge |
+| Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | — | #795 đã merge; còn phải deploy lại bo từ `main` (sau khi #804 merge thì gồm cả FC15 và tool ST có U-11) |
 
 Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastProvider` không huỷ timer khi unmount, làm cả bộ vitest exit 1 dù mọi test PASS. Lỗi này đã sửa trong #797.
 
@@ -218,6 +221,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.3 | 2026-09-28 | #795 (`2d2eb368`), #796 (`8bb24edf`, đưa báo cáo này vào `main`), #797 (`0e6785e2`), #803 (`823a739c`) đã merge: sửa mọi trạng thái "chờ merge" ở §2 và §5. U-07 và U-18 sửa ở PR #804 kèm số đo trên bo (`EV-MB-FC15-20260927`), thêm dòng trạng thái ở §3.2/§3.4. Ghi rủi ro còn lại của U-06 (phép suy dependency bằng regex) |
 | 1.2 | 2026-09-27 | Ghi tiến độ đợt Sprint kế (PR #803) và Issue cho các finding cần thiết kế/quyết định (#798–#802, bình luận #367/#384) |
 | 1.1 | 2026-09-27 | Ghi tiến độ: U-02/U-03/U-05/U-14/U-17/U-21 sửa ở PR #797; đính chính nhận định sai về `WatchTab.tsx:547` ở U-03; thêm §5 tiến độ |
 | 1.0 | 2026-09-27 | Bản đầu: 21 vấn đề rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo lab Foxlinx |
