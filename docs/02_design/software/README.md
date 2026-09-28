@@ -24,6 +24,15 @@ Tài liệu chi tiết được phục hồi nguyên văn. [Software Baseline](.
 - [Security/keystore design](SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md)
 - [Coding standard](SW_CODING_STANDARD_MK-DDC-24_VI.md)
 
+## Bản thiết kế đề xuất chờ duyệt (FIELD-USE 2026-09-27)
+
+Chưa phải authority; mỗi bản liệt kê câu hỏi cần người có thẩm quyền ký trước khi code.
+
+- [Trace nhất quán theo lần chạy Program](TRACE_RELEASE_COHERENT_SAMPLING_DESIGN_MK-DDC-24_VI.md) — **Proposed 2026-09-28**; Issue #798 (U-04)
+- [Dùng chung khung slot cho lời gọi FUNCTION](ST_FUNCTION_FRAME_SHARING_DESIGN_MK-DDC-24_VI.md) — **Proposed 2026-09-28**; Issue #799 (U-08)
+- [Toán tử bit, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số](ST_LANGUAGE_BITWISE_CONSTANT_INIT_DESIGN_MK-DDC-24_VI.md) — **Proposed 2026-09-28**; Issue #800 (U-10)
+- [Khối DDC cho thư viện SYSTEM](SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md) — **Proposed 2026-09-28**; Issue #801 (U-12)
+
 ## Legacy/deferred design
 
 - [Cloud agent design](SW_AGENT_DESIGN_MK-DDC-24_VI.md)

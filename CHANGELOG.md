@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added — Bản thiết kế/đặc tả chờ duyệt cho U-04, U-08, U-10, U-12 và phiếu quyết định PID U-13 (Issue #798–#802, 2026-09-28)
+
+- **Phạm vi:** chỉ tài liệu. Thêm `docs/02_design/software/{TRACE_RELEASE_COHERENT_SAMPLING_DESIGN,ST_FUNCTION_FRAME_SHARING_DESIGN,ST_LANGUAGE_BITWISE_CONSTANT_INIT_DESIGN}_MK-DDC-24_VI.md`, `docs/02_design/software/SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md`, `docs/07_records/reviews/PID_REVIEW_DECISION_REQUEST_2026-09-28.md`; cập nhật chỉ mục `docs/02_design/software/README.md`, `REC-DDC-FIELD-USE-20260927` 1.5 (§5) và `GUIDE-PROG-ST-DO16-001` 1.6 (ràng buộc 10).
+- **Lý do:** năm Issue đều ghi "cần thiết kế/duyệt trước khi code" (đổi hợp đồng IPC `programming_v1`/OpenAPI, layout artifact, hồ sơ ngôn ngữ, registry `rev-a.4`) hoặc là quyết định Controls/Safety + Product. Chủ dự án chọn soạn thiết kế, chưa code.
+- **Nội dung:** mỗi bản nêu hiện trạng đối chiếu mã `main@9910b88` kèm nguồn, phương án, đề xuất có lý do, ảnh hưởng hợp đồng, test đóng Issue và bảng câu hỏi cần người có thẩm quyền ký. Điểm đáng chú ý: #799 chỉ ra bẫy `f(f(x), f(y))` nếu trả thẳng slot khung đã giải phóng (compiler hiện trả `return_slot` trực tiếp) và cách tránh; #800 ghi rõ `SHL`/`SHR` đang nằm trong `deliberateExclusions` nên cần PO đảo loại trừ; #802 là phiếu quyết định, **không** ký token duyệt `PID`.
+- **Không làm:** không đổi mã, không đổi `approved`/token, không bump registry/profile/ABI, không ghi `DECISIONS.md`.
+- **Kiểm chứng:** `python3 scripts/docs_iso_harness.py --selftest` (phép kiểm 8: 10/10, 9: 9/9) và `--expect` PASS, khớp toàn bộ ngưỡng (0 code-span `docs/**` lệch, 0 hồ sơ lệch metadata/lịch sử).
+- **Refs:** Issue #798, #799, #800, #801, #802; `REC-DDC-FIELD-USE-20260927`.
+
 ### Fixed — Lane `e2e-real` xanh trở lại: ISS-PGM03-08 (#790), T59-505 (#786), build iobus tắt Modbus (2026-09-28)
 
 - **Phạm vi:** `apps/iobus/adapters/modbus_rtu/bus_worker.cpp`; `apps/web-ui/src/features/programming/api/queries.ts` + `queries.test.tsx`; `apps/web-ui/e2e/programming-real.spec.ts`.
