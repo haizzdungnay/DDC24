@@ -142,5 +142,24 @@ describe('WeeklyTab Google Calendar interactions', () => {
     expect(screen.getByText('01:55 – 20:35')).toBeInTheDocument()
     expect(screen.queryByText('20:35 – 23:59')).not.toBeInTheDocument()
   })
-})
+  it('does not create event on small click jitter under drag threshold', () => {
+    const onChange = vi.fn()
+    render(
+      <I18nProvider>
+        <WeeklyTab draft={mockDraft} canEdit={true} onChange={onChange} />
+      </I18nProvider>
+    )
 
+    const tueBtn = screen.getByRole('button', { name: 'T3' })
+    const col = tueBtn.parentElement?.querySelector('[data-day-col]')
+    expect(col).toBeTruthy()
+
+    // Pointerdown and tiny move of 3px (below 8px threshold), then pointerup
+    fireEvent.pointerDown(col!, { button: 0, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(window, { clientX: 102, clientY: 102 })
+    fireEvent.pointerUp(window)
+
+    // onChange should not be called to create an event
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})

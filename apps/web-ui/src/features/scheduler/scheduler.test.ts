@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ScheduleObject, ScheduleTimeValue } from '../../shared/types'
 import { describeDateRule, findExceptionConflicts, previewDateRule, weekNDayOfMonth } from './dateRules'
 import {
-  blockToTimeValues, capacityUsage, dayToBlocks, formatValue, oppositeValue, removeBlockFromDay, secondsToTime,
+  blockToTimeValues, capacityUsage, applySpanToWeekly, dayToBlocks, findOvernightSpan, formatValue, getNextDay, getPrevDay, oppositeValue, removeBlockFromDay, removePiecesFromWeekly, secondsToTime,
   timeToSeconds, weeklySummary
 } from './shared'
 
@@ -260,5 +260,67 @@ describe('đồng hồ dung lượng thật', () => {
 
   it('trần điểm ghi nội bộ khớp phần cứng: 4 AO + 4 DO + 32 AV + 16 BV + 8 MSV', () => {
     expect(capacityUsage([]).maxPoints).toBe(64)
+  })
+})
+
+
+describe('xử lý sự kiện xuyên đêm / qua ngày (Overnight spans)', () => {
+  const emptyWeekly = {
+    MON: [], TUE: [], WED: [], THU: [], FRI: [], SAT: [], SUN: []
+  }
+
+  it('tạo sự kiện từ 23:00 Thứ Hai đến 03:00 Thứ Ba', () => {
+    const weekly = applySpanToWeekly(
+      emptyWeekly,
+      'MON', 23 * 3600,
+      'TUE', 3 * 3600,
+      'ACTIVE',
+      'INACTIVE'
+    )
+    expect(weekly.MON).toEqual([{ time: '23:00:00', value: 'ACTIVE' }])
+    expect(weekly.TUE).toEqual([
+      { time: '00:00:00', value: 'ACTIVE' },
+      { time: '03:00:00', value: 'INACTIVE' }
+    ])
+
+    const monBlocks = dayToBlocks(weekly.MON, 'BINARY', 'INACTIVE')
+    const tueBlocks = dayToBlocks(weekly.TUE, 'BINARY', 'INACTIVE')
+    expect(monBlocks).toEqual([{ startSec: 23 * 3600, endSec: 86400, value: 'ACTIVE' }])
+    expect(tueBlocks).toEqual([{ startSec: 0, endSec: 3 * 3600, value: 'ACTIVE' }])
+  })
+
+  it('nhận diện sự kiện xuyên đêm là một thực thể thống nhất', () => {
+    const weekly = applySpanToWeekly(
+      emptyWeekly,
+      'MON', 23 * 3600,
+      'TUE', 3 * 3600,
+      'ACTIVE',
+      'INACTIVE'
+    )
+    const monBlocks = dayToBlocks(weekly.MON, 'BINARY', 'INACTIVE')
+    const spanFromMon = findOvernightSpan(weekly, 'MON', monBlocks[0], 'INACTIVE', 'BINARY')
+
+    expect(spanFromMon.isOvernight).toBe(true)
+    expect(spanFromMon.startDay).toBe('MON')
+    expect(spanFromMon.startSec).toBe(23 * 3600)
+    expect(spanFromMon.endDay).toBe('TUE')
+    expect(spanFromMon.endSec).toBe(3 * 3600)
+    expect(spanFromMon.pieces).toHaveLength(2)
+  })
+
+  it('xóa sự kiện xuyên đêm dọn sạch cả 2 ngày', () => {
+    const weekly = applySpanToWeekly(
+      emptyWeekly,
+      'MON', 23 * 3600,
+      'TUE', 3 * 3600,
+      'ACTIVE',
+      'INACTIVE'
+    )
+    const monBlocks = dayToBlocks(weekly.MON, 'BINARY', 'INACTIVE')
+    const span = findOvernightSpan(weekly, 'MON', monBlocks[0], 'INACTIVE', 'BINARY')
+
+    const cleaned = removePiecesFromWeekly(weekly, span.pieces, 'INACTIVE')
+    expect(cleaned.MON).toEqual([])
+    expect(cleaned.TUE).toEqual([])
   })
 })

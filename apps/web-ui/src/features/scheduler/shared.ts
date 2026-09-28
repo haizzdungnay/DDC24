@@ -205,6 +205,153 @@ export function removeBlockFromDay(
   })
 }
 
+
+export function getNextDay(day: ScheduleDayKey): ScheduleDayKey {
+  const i = DAY_KEYS.indexOf(day)
+  return DAY_KEYS[(i + 1) % DAY_KEYS.length]
+}
+
+export function getPrevDay(day: ScheduleDayKey): ScheduleDayKey {
+  const i = DAY_KEYS.indexOf(day)
+  return DAY_KEYS[(i + DAY_KEYS.length - 1) % DAY_KEYS.length]
+}
+
+export interface DayPiece {
+  day: ScheduleDayKey
+  startSec: number
+  endSec: number
+}
+
+export interface OvernightSpan {
+  startDay: ScheduleDayKey
+  startSec: number
+  endDay: ScheduleDayKey
+  endSec: number
+  value: ScheduleValue
+  isOvernight: boolean
+  pieces: DayPiece[]
+}
+
+/**
+ * Áp dụng một khoảng thời gian (kể cả xuyên ngày/qua đêm) vào lịch tuần.
+ */
+export function applySpanToWeekly(
+  weekly: ScheduleWeekly,
+  startDay: ScheduleDayKey,
+  startSec: number,
+  endDay: ScheduleDayKey,
+  endSec: number,
+  val: ScheduleValue,
+  defVal: ScheduleValue
+): ScheduleWeekly {
+  const nextWeekly = { ...weekly }
+  if (startDay === endDay && startSec < endSec) {
+    nextWeekly[startDay] = blockToTimeValues(nextWeekly[startDay] || [], startSec, endSec, val, defVal)
+    return nextWeekly
+  }
+
+  const effectiveEndDay = (startDay === endDay && startSec >= endSec) ? getNextDay(startDay) : endDay
+  const days: ScheduleDayKey[] = []
+  let cur = startDay
+  days.push(cur)
+  while (cur !== effectiveEndDay && days.length <= 7) {
+    cur = getNextDay(cur)
+    days.push(cur)
+  }
+
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i]
+    const dayEvents = nextWeekly[d] || []
+    if (i === 0) {
+      nextWeekly[d] = blockToTimeValues(dayEvents, startSec, 86_400, val, defVal)
+    } else if (i === days.length - 1) {
+      if (endSec > 0) {
+        nextWeekly[d] = blockToTimeValues(dayEvents, 0, endSec, val, defVal)
+      }
+    } else {
+      nextWeekly[d] = blockToTimeValues(dayEvents, 0, 86_400, val, defVal)
+    }
+  }
+  return nextWeekly
+}
+
+/**
+ * Xóa danh sách các mảnh thuộc một sự kiện khỏi lịch tuần.
+ */
+export function removePiecesFromWeekly(
+  weekly: ScheduleWeekly,
+  pieces: DayPiece[],
+  defVal: ScheduleValue
+): ScheduleWeekly {
+  const nextWeekly = { ...weekly }
+  for (const p of pieces) {
+    nextWeekly[p.day] = removeBlockFromDay(nextWeekly[p.day] || [], p.startSec, p.endSec, defVal)
+  }
+  return nextWeekly
+}
+
+/**
+ * Nhận diện một khối có phải là một phần của sự kiện xuyên đêm (ví dụ: 23:00 T2 -> 03:00 T3).
+ */
+export function findOvernightSpan(
+  weekly: ScheduleWeekly,
+  day: ScheduleDayKey,
+  block: TimeBlock,
+  defVal: ScheduleValue,
+  valType: ScheduleValueType
+): OvernightSpan {
+  const nextDay = getNextDay(day)
+  const prevDay = getPrevDay(day)
+
+  if (block.endSec === 86_400) {
+    const nextBlocks = dayToBlocks(weekly[nextDay] || [], valType, defVal)
+    const nextPiece = nextBlocks.find((b) => b.startSec === 0 && b.value === block.value)
+    if (nextPiece) {
+      return {
+        startDay: day,
+        startSec: block.startSec,
+        endDay: nextDay,
+        endSec: nextPiece.endSec,
+        value: block.value,
+        isOvernight: true,
+        pieces: [
+          { day, startSec: block.startSec, endSec: 86_400 },
+          { day: nextDay, startSec: 0, endSec: nextPiece.endSec }
+        ]
+      }
+    }
+  }
+
+  if (block.startSec === 0) {
+    const prevBlocks = dayToBlocks(weekly[prevDay] || [], valType, defVal)
+    const prevPiece = prevBlocks.find((b) => b.endSec === 86_400 && b.value === block.value)
+    if (prevPiece) {
+      return {
+        startDay: prevDay,
+        startSec: prevPiece.startSec,
+        endDay: day,
+        endSec: block.endSec,
+        value: block.value,
+        isOvernight: true,
+        pieces: [
+          { day: prevDay, startSec: prevPiece.startSec, endSec: 86_400 },
+          { day, startSec: 0, endSec: block.endSec }
+        ]
+      }
+    }
+  }
+
+  return {
+    startDay: day,
+    startSec: block.startSec,
+    endDay: day,
+    endSec: block.endSec,
+    value: block.value,
+    isOvernight: false,
+    pieces: [{ day, startSec: block.startSec, endSec: block.endSec }]
+  }
+}
+
 // ── Trạng thái ────────────────────────────────────────────────────────────
 
 export interface StatusPresentation {
