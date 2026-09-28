@@ -4,7 +4,7 @@
 **Ngày đo:** 2026-09-27 (kiểm lại chỉ đọc 2026-09-28)
 **Trạng thái:** U-07 **PASS** theo điều kiện đóng của `REC-DDC-FIELD-USE-20260927`: 16 DO đổi trong **2 giao dịch FC15** (13/13 loạt), lệch hai module **30 ms** = một giao dịch, 0 lỗi. U-18 **PASS** ở lớp API và giao diện trên bo. Relay vật lý **NOT RUN**: chưa đo điện tại tiếp điểm, nên đây không phải HIL.
 **Finding:** [`REC-DDC-FIELD-USE-20260927`](../../reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md) U-07 (Modbus ghi từng coil) và U-18 (Frame Monitor thiếu giá trị ghi).
-**Nhánh:** `fix/modbus-fc15-batch-20260927` — iobus `cdc198be`, web-api `df8dd91d`, FE `b66db421` + `39fb5056`.
+**Nhánh:** `fix/modbus-fc15-batch-20260927`, [PR #804](https://github.com/Mekong-HCM/MK-DDC-24/pull/804) — iobus `cdc198be`, web-api `df8dd91d`, FE `b66db421` + `39fb5056`.
 **Đích:** `OK1126B-buildroot` (Forlinx OK1126B-S), `mekong-fac.ddns.net`, web `:8082`, bus `rs485-1` 9600 8N1, 4 slave: CK508-04, CK508-05 (relay 8 kênh), CK509-06, CK509-07.
 **Tải thử:** Program `PRG_DO16_MODBUS` bản 1.3 ([`GUIDE-PROG-ST-DO16-001`](../../../06_operations/PROGRAMMING_ST_DO16_MODBUS_GUIDE.md)) chạy **AUTO** trên Revision Active `a0f107fa…`. Không đổi Program, Revision hay Virtual Point nào trong đợt đo.
 **Lớp bằng chứng:** TARGET (khung Modbus do iobus ghi nhận, bộ đếm chẩn đoán, giao diện web trên bo). Thời lượng khung là `elapsedUs` của lời gọi libmodbus, không phải máy phân tích dây.
