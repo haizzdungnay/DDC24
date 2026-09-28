@@ -433,7 +433,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 
 | Finding | Mức | Task | Kiểm chứng chính | Cổng | Trạng thái | Evidence |
 |---|---|---|---|---|---|---|
-| `F-PRG-PERF-001` | P0 | T63-301, T63-302, T63-303 | Tái hiện 16 Program @10 ms trên bo; test budget từng Program | G-D2 | T63-301 IN-PROGRESS — HOST: 16 × 4.095 @10 ms bị Check từ chối `ST-WORKER-CRASH` sau 61,8 s vì kết quả Check trần 1 MiB (finding [#815](https://github.com/Mekong-HCM/MK-DDC-24/issues/815)), không phải nhờ admission; lớn nhất còn qua 16 × 301, `budgetUs` 124, thực thi p95 63,4 µs; Active khôi phục đúng; TARGET NOT_RUN | [evidence §6](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
+| `F-PRG-PERF-001` | P0 | T63-301, T63-302, T63-303 | Tái hiện 16 Program @10 ms trên bo; test budget từng Program | G-D2 | T63-301 IN-PROGRESS — HOST: 16 × 4.095 @10 ms bị Check từ chối `ST-WORKER-CRASH` sau 61,8 s vì kết quả Check trần 1 MiB (finding [#815](https://github.com/Mekong-HCM/MK-DDC-24/issues/815)), không phải nhờ admission; lớn nhất còn qua 16 × 301, `budgetUs` 124, thực thi p95 63,4 µs; Active khôi phục đúng; TARGET NOT_RUN. T63-302 DONE — CR [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) Proposed (khuyến nghị B2 quy lỗi + C2 cảnh báo admission), chờ G-D2. T63-303 BLOCKED(G-D2) | [evidence §6](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) · [ADR-063](../adr/ADR-063-programming-ngan-sach-tung-program.md) |
 | `F-PRG-PERF-002` | P0 | T63-203 | Không I/O file trên luồng quét; missed step 0 | — | TODO | |
 | `F-PRG-PERF-003` | — | — | Giữ `SEQUENTIAL` | — | N/A(NO-ACTION) | §2.1 |
 | `F-PRG-PERF-004` | P2 | T63-304 | Check 32 Program lần đầu/lặp; jitter không xấu hơn | — | TODO | |
