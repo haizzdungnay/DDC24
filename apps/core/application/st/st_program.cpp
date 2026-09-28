@@ -270,6 +270,8 @@ const FuncSpec kFuncs[] = {
     {"UINT_TO_REAL", StFunc::UINT_TO_REAL, 1},
     {"REAL_TO_DINT", StFunc::REAL_TO_DINT, 1},
     {"REAL_TO_UINT", StFunc::REAL_TO_UINT, 1},
+    {"SHL",          StFunc::SHL,          2},
+    {"SHR",          StFunc::SHR,          2},
 };
 } // namespace
 

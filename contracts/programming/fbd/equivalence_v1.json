@@ -798,6 +798,52 @@
         ],
         "expected": 20.0
       }
+    },
+    {
+      "id": "EQ-038",
+      "typeRef": "SHL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "UINT"
+        },
+        {
+          "name": "B",
+          "type": "UINT"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "SHL(A, B)",
+      "vector": {
+        "values": [
+          40961,
+          3
+        ],
+        "expected": 8
+      }
+    },
+    {
+      "id": "EQ-039",
+      "typeRef": "SHR",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "UINT"
+        },
+        {
+          "name": "B",
+          "type": "UINT"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "SHR(A, B)",
+      "vector": {
+        "values": [
+          40961,
+          13
+        ],
+        "expected": 5
+      }
     }
   ],
   "stateTraces": [

@@ -247,7 +247,7 @@
       ],
       "properties": {
         "version": {
-          "const": "rev-a.4"
+          "const": "rev-a.5"
         }
       },
       "description": "Chỉ giữ version. Danh sách entry Control Library SYSTEM nằm ở `pou_library_registry_v1.json` — giữ bản sao ở đây từng khiến profile khai SCALE/DEADBAND/CTU/PI vốn không tồn tại trong compiler."

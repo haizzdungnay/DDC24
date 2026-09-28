@@ -41,7 +41,7 @@ export const ST_KEYWORDS = [
   'PROGRAM', 'END_PROGRAM',
   'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK',
   'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP',
-  'VAR_GLOBAL', 'VAR_EXTERNAL', 'VAR', 'RETAIN', 'END_VAR',
+  'VAR_GLOBAL', 'VAR_EXTERNAL', 'VAR', 'RETAIN', 'CONSTANT', 'END_VAR',
   'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF',
   'CASE', 'OF', 'END_CASE',
   'FOR', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT',
@@ -56,7 +56,7 @@ export const ST_KEYWORDS = [
  *  chỗ nhưng KHÔNG có luật văn phạm nào trong `parse_stmt()`. */
 export const ST_COMPLETION_KEYWORDS: readonly string[] = [
   'PROGRAM', 'END_PROGRAM',
-  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'RETAIN', 'END_VAR',
+  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'RETAIN', 'CONSTANT', 'END_VAR',
   'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF',
   'CASE', 'OF', 'END_CASE',
   'AND', 'OR', 'XOR', 'NOT', 'MOD',

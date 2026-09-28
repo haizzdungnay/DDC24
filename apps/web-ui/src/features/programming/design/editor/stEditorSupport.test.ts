@@ -86,12 +86,13 @@ describe('tokenizeStSource (WP-10 P0, đối chiếu ST_SUBSET_SPEC §10)', () =
     expect(kindOf('Fan')).toBe('identifier')
   })
 
-  it('22 hàm chuẩn + 9 FB type khớp đúng số lượng kFuncs[]/st_fb_type', () => {
-    // `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS
+  it('24 hàm chuẩn + 9 FB type khớp đúng số lượng kFuncs[]/st_fb_type', () => {
+    // `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS; Issue #800 thêm SHL/SHR
     // (`DDD-CTRL-PROG-001` §7A). Con số ghim ở đây là cố ý: tô màu cú pháp phải
     // đi cùng compiler, và một khối mới mà editor không tô sẽ trông như một
     // định danh người dùng tự đặt.
-    expect(ST_FUNCTION_NAMES).toHaveLength(22)
+    expect(ST_FUNCTION_NAMES).toHaveLength(24)
+    expect(ST_FUNCTION_NAMES).toEqual(expect.arrayContaining(['SHL', 'SHR']))
     expect(ST_FB_TYPE_NAMES).toHaveLength(9)
     expect([...ST_FB_TYPE_NAMES].sort()).toEqual(
       ['CTD', 'CTU', 'F_TRIG', 'HYSTERESIS', 'PID', 'R_TRIG', 'TOF', 'TON', 'TP'].sort()

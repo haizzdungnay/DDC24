@@ -1,7 +1,7 @@
 # ST Subset Specification — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-09-02 (đính chính §3.1/§5.5/§9/§12 theo `ISS-STED-08`, xem §14)
+> **Phiên bản:** 1.4 | 2026-09-28 (Issue #800: toán tử bit `UINT`, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số — xem §14)
 > **Workstream:** Supporting As-Built của compiler ST; plan C0.4 lịch sử đã bị
 > [Plan 53](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) thay
 > thế và phục hồi được tại commit `b69fdf1`.
@@ -65,6 +65,9 @@ END_VAR
 VAR RETAIN
     <khai báo biến giữ qua restart>
 END_VAR
+VAR CONSTANT
+    <tên> : <kiểu vô hướng> := <biểu thức hằng>;
+END_VAR
     <thân chương trình>
 END_PROGRAM
 ```
@@ -78,6 +81,17 @@ Quy tắc:
 - `VAR` là biến cục bộ, **mất giá trị khi restart** (cold start). Giữ giá trị giữa các chu kỳ.
 - `VAR RETAIN` giữ giá trị **qua restart** theo chính sách ở §7.
 - Instance Function Block chỉ được khai báo trong `VAR` hoặc `VAR RETAIN`.
+- **Giá trị khởi tạo** (Issue #800): `x : REAL := 21.5;` hợp lệ trong `VAR`, `VAR_OUTPUT`,
+  `VAR RETAIN` và `VAR CONSTANT`; **cấm** trong `VAR_INPUT` (giá trị đến từ binding mỗi chu
+  kỳ). Giá trị là **biểu thức hằng**: literal, hằng `VAR CONSTANT` khai **trước** nó và toán
+  tử — không gọi hàm, không đọc biến thường. Áp ở cold start; với `VAR RETAIN` giá trị đã lưu
+  thắng giá trị khởi tạo sau warm start. Trong FUNCTION người dùng, biến có giá trị khởi tạo
+  nhận lại giá trị đó ở **mỗi lời gọi**. Tràn, chia 0 hay số thực không hữu hạn khi gập là lỗi
+  biên dịch (`ST-SEM-008`/`ST-SEM-002`), không quấn vòng.
+- **`VAR CONSTANT`** (Issue #800): chỉ đọc (gán vào là `ST-SEM-003`), bắt buộc `:=`, chỉ kiểu
+  vô hướng, không đi cùng `RETAIN`. Hằng **không tốn slot ghi được**: compiler thay mọi chỗ đọc
+  bằng giá trị đã gập, nên hằng không xuất hiện trong bảng biến của artifact (Monitor/Trace
+  không theo dõi được hằng).
 
 ---
 
@@ -233,10 +247,14 @@ Thứ tự này theo IEC 61131-3 (bỏ mức `**`). **Không hỗ trợ toán t�
 | `-` (một ngôi) | `INT`, `REAL` | như toán hạng |
 | `<`,`>`,`<=`,`>=` | `INT×INT`, `REAL×REAL`, `TIME×TIME` | `BOOL` |
 | `=`, `<>` | `BOOL×BOOL`, `INT×INT`, `REAL×REAL`, `TIME×TIME` | `BOOL` |
-| `AND`, `OR`, `XOR` | `BOOL×BOOL` | `BOOL` |
-| `NOT` | `BOOL` | `BOOL` |
+| `*`, `/` với `TIME` (Issue #800) | `TIME×{INT,DINT,UINT,REAL}`; `{INT,DINT,UINT,REAL}×TIME` (chỉ `*`) | `TIME` |
+| `AND`, `OR`, `XOR` | `BOOL×BOOL` (logic); `UINT×UINT` (theo bit, Issue #800) | như toán hạng |
+| `NOT` | `BOOL` (logic); `UINT` (đảo 16 bit, Issue #800) | như toán hạng |
 
-`TIME * INT` và `TIME / INT` **không** được hỗ trợ ở Rev A.0 (dùng `REAL_TO_TIME` nếu cần).
+Toán tử bit **chỉ** nhận `UINT`: số có dấu (`INT`/`DINT`) và trộn `BOOL`/`UINT` là
+`ST-SEM-002`, vì bit của số âm phụ thuộc biểu diễn bù 2. `TIME / TIME` không có.
+`TIME × REAL` tính bằng số thực độ chính xác kép rồi làm tròn gần nhất (nửa ra xa 0);
+kết quả âm là `ST-RT-005`, tràn là `ST-RT-001`, chia 0 là `ST-RT-002`.
 
 ### 4.3 Ngữ nghĩa số học
 
@@ -340,10 +358,11 @@ sách ở đây giữ lại để đọc nhanh và **phải** khớp với hồ 
 | `LIMIT` | `(MN:T, IN:T, MX:T):T` | Kẹp `IN` vào `[MN,MX]`. `MN > MX` → `ST-RT-006` |
 | `SEL` | `(G:BOOL, IN0:T, IN1:T):T` | `G` sai → `IN0`, đúng → `IN1`. **Cả hai nhánh đều được đánh giá** (§4.4) |
 | `SQRT` | `(REAL):REAL` | Căn bậc hai. Đối số âm → `ST-RT-007` |
+| `SHL`, `SHR` | `(IN:UINT, N:UINT):UINT` | Dịch 16 bit trái/phải `N` vị trí; `N ≥ 16` cho `0` (không fault). Issue #800 |
 | `INT_TO_REAL`, `REAL_TO_INT`, `TIME_TO_REAL`, `REAL_TO_TIME` | §3.5 | |
 
-Không có: hàm lượng giác, `LN`/`LOG`/`EXP`, `EXPT`, `TRUNC`, `ROUND`, thao tác bit,
-thao tác chuỗi.
+Không có: hàm lượng giác, `LN`/`LOG`/`EXP`, `EXPT`, `TRUNC`, `ROUND`, xoay bit
+(`ROL`/`ROR`), thao tác chuỗi.
 
 ### 6.2 Function Block (có trạng thái)
 
@@ -708,3 +727,4 @@ Hành vi mong đợi (chu kỳ Task 1 s):
 | 1.1 | 2026-08-15 | **WP-04 (D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §7.3/§7.4).** Đính chính §3.1: `INT` là int16 (không phải int32 như 1.0 ghi sai); thêm `DINT`(int32)/`UINT`(uint16) — có thật trong `st_program.cpp`, 1.0 từng khẳng định sai là "không có". §3.5: thêm 10 hàm chuyển đổi `INT/DINT/UINT/REAL` có thật trong compiler nhưng thiếu ở 1.0. §6.2: thêm Function Block `PID` (8 input/2 output, có thật trong `st_program.cpp`) kèm ghi chú trạng thái phê duyệt — semantics PID **chưa được Controls+Safety review chính thức**, khác `DINT`/`UINT` (chỉ cần Test Result/V&V bổ sung, không cần review riêng). Xác nhận trực tiếp từ source, không suy đoán từ tài liệu khác. |
 | 1.2 | 2026-09-01 | **`ISS-STED-06` / `F-STED-007`.** Gỡ hẳn EBNF chép tay ở §10 và bảng đối chiếu grammar↔parser ở §11. Cả hai đã trôi khỏi compiler: EBNF thiếu luật `CASE` và POU người dùng, còn bảng §11 ghim ở commit `7ccf992` kết luận *"phủ ~40%"* trong khi sai gần như từng dòng. Thay bằng hồ sơ **sinh máy** `contracts/programming/st_language_profile_v1.json` + `ST_LANGUAGE_PROFILE.generated.md`, đo bằng cách cho parser nuốt thật một mẫu tối thiểu cho từng câu lệnh/toán tử. Một tài liệu văn phạm sai là công cụ sinh lỗi cho người viết chương trình; một bảng đối chiếu sai 100% còn nguy hiểm hơn không có bảng, vì nó trông như bằng chứng. |
 | 1.3 | 2026-09-02 | **`ISS-STED-08` / `F-STED-006`, `F-STED-009`.** Bốn đính chính, mỗi cái là một chỗ tài liệu nói sai về chính compiler đang chạy. **§3.1** — `TIME` có **hai** miền chứ không một: literal bị chặn ở **24 giờ** (`st_limits.hpp:57`, thi hành ở `st_parser.cpp:195`, mã `ST-LEX-002`), còn giá trị runtime chỉ bị chặn bởi tràn int64 (`ST-RT-001`) và kết quả âm (`ST-RT-005`). Bản 1.0/1.1 chỉ ghi *"0 … ~292 năm"* nên người đọc thiết kế test sẽ viết ca `T#48h` và không hiểu vì sao bị từ chối; nhưng rút gọn thành *"0..24 h"* cũng sai theo chiều ngược lại, vì nó hứa một bất biến runtime mà compiler không thi hành. **§5.5** — bỏ `CASE`, user `FUNCTION` và user `FUNCTION_BLOCK` khỏi danh sách "không có": cả ba **đã có** (kết luận `ISS-STED-07`, nay đo lại mỗi lần build). Nói "không có" về một thứ đã có khiến người viết chương trình đi vòng qua cấu trúc họ được phép dùng, và người lập kế hoạch xếp lịch làm lại thứ đã giao. **§9** — sửa D5 (`CASE`/POU người dùng đã có; chỉ vòng lặp là không) và D6 (sáu kiểu cơ sở, không phải chỉ `INT`/`REAL`); thêm D9 `RETURN`, D10 `**`/`EXPT`, D11 `VAR_IN_OUT` (chưa có nhưng **đã lên lịch**, #367); công bố **37 mục loại trừ mới** ở tầng kiểu/hàm/Function Block, mỗi mục **kèm lý do riêng**, đặt trong hồ sơ sinh máy thay vì chép tay — chép tay 49 mục là tạo một bản sao sẽ trôi khỏi compiler, đúng lỗi mà §10/§11 cũ đã mắc. **§12** — `ST-LEX-002` còn dùng cho literal `TIME` vượt trần 24 giờ, và `ST-RT-001` còn dùng cho tràn int64 khi cộng/trừ `TIME`; cả hai đều thiếu ở danh mục cũ. Kèm theo: cổng đối chiếu hai chiều được mở rộng sang **thư viện** và **hệ kiểu** (khai "không có `SIN`" trong khi đã có `SIN` sai y như khai "không có `CASE`" trong khi đã có `CASE`), và bổ sung `st_language_profile_gate` để kiểm **chính cổng** — một cổng luôn xanh có hai cách giải thích, và từ ngoài nhìn vào chúng giống hệt nhau. |
+| 1.4 | 2026-09-28 | **Issue #800 (U-10).** §2: `VAR CONSTANT` và giá trị khởi tạo khi khai báo (cấm ở `VAR_INPUT`, chỉ biểu thức hằng, áp lại mỗi lời gọi FUNCTION). §4.2: `AND`/`OR`/`XOR`/`NOT` trên `UINT` là phép theo bit; `TIME × số` và `TIME ÷ số`. §6.1: `SHL`/`SHR`. Hồ sơ ngôn ngữ sinh máy lên 1.1.0; thư viện SYSTEM `rev-a.5`. |

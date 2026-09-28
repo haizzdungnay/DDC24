@@ -203,10 +203,25 @@ class Parser {
     while (this.isKeyword(this.peek(), 'RETAIN', 'CONSTANT')) keywords.push(this.next().text.toUpperCase())
     this.attachTrailing(trivia)
 
+    /* Issue #800 — cùng ba luật với `st_parser.cpp`: `CONSTANT` chỉ sau `VAR`
+     * và không đi cùng `RETAIN`; hằng bắt buộc có `:=`; `VAR_INPUT` cấm giá trị
+     * khởi tạo. Formatter nhận rộng hơn compiler là mời người dùng viết thứ
+     * thiết bị sẽ từ chối (F-STED-011). */
+    const constant = keywords.includes('CONSTANT')
+    if (constant && (keywords[0] !== 'VAR' || keywords.includes('RETAIN'))) {
+      throw new StParseError('CONSTANT chỉ dùng với VAR và không đi cùng RETAIN', this.lastLine)
+    }
     const decls: StVarDecl[] = []
     while (!this.isKeyword(this.peek(), 'END_VAR')) {
       if (this.peek() === null) throw new StParseError('Khối VAR thiếu END_VAR', this.lastLine)
-      decls.push(this.parseVarDecl())
+      const decl = this.parseVarDecl()
+      if (constant && decl.initial === null) {
+        throw new StParseError(`Hằng "${decl.names.join(', ')}" cần ":= <biểu thức hằng>"`, this.lastLine)
+      }
+      if (keywords[0] === 'VAR_INPUT' && decl.initial !== null) {
+        throw new StParseError(`VAR_INPUT "${decl.names.join(', ')}" không được có giá trị khởi tạo`, this.lastLine)
+      }
+      decls.push(decl)
     }
     const endTrivia = this.takeTrivia()
     this.expectKeyword('END_VAR')

@@ -10,8 +10,8 @@
 
 | Trường | Giá trị |
 |---|---|
-| Phiên bản hồ sơ | `1.0.0` |
-| `sha256` | `31bf5f0b5776956270a3145586bb867dbc1af89865e618fda67a2c17f19ae36d` |
+| Phiên bản hồ sơ | `1.1.0` |
+| `sha256` | `907da8100db2c6683a371a0001f17182d8ebd2a239a3b57f2d60f26535b5b41e` |
 | Phiên bản compiler | `fwsom-st-1.2.0` |
 | Target profile | `revA-1t-1-5-30` (ABI `3841`) |
 | Chuẩn nền | IEC 61131-3:2013 (Ed. 3.0) — Structured Text |
@@ -96,6 +96,8 @@ biệt được *tài liệu nói gì* với *code làm gì* — đúng chỗ `D
 | `UINT_TO_REAL` | 1 | IEC |
 | `REAL_TO_DINT` | 1 | IEC |
 | `REAL_TO_UINT` | 1 | IEC |
+| `SHL` | 2 | IEC |
+| `SHR` | 2 | IEC |
 
 ## 5. Function Block chuẩn
 
@@ -167,10 +169,8 @@ bỏ"* áp cho **cú pháp/ngữ nghĩa ngôn ngữ**. Loại trừ một thứ 
 | `ATAN` | function | có | Cùng lý do với `SIN`. | ADR-054 phán quyết (4) |
 | `TRUNC` | function | có | `REAL_TO_INT` và họ hàm ép kiểu tường minh đã phủ nhu cầu cắt phần thập phân, với quy tắc làm tròn công bố rõ ở §3.5. Hai đường cho một việc là hai ngữ nghĩa để trôi khỏi nhau. | ADR-054 phán quyết (4) |
 | `MUX` | function | có | Chọn theo chỉ số cần kiểu hợp thành hoặc số tham số thay đổi; `SEL` phủ ca chọn hai nhánh, và `IF`/`CASE` phủ phần còn lại một cách đọc được hơn. | ADR-054 phán quyết (4) |
-| `SHL` | function | có | Thao tác dịch bit chỉ có nghĩa trên kiểu chuỗi bit (`BYTE`/`WORD`/`DWORD`), vốn hoãn sang đợt sau. Không có kiểu để dịch thì hàm dịch không có miền xác định. | ADR-054 phán quyết (4) |
-| `SHR` | function | có | Cùng lý do với `SHL`. | ADR-054 phán quyết (4) |
-| `ROL` | function | có | Cùng lý do với `SHL`. | ADR-054 phán quyết (4) |
-| `ROR` | function | có | Cùng lý do với `SHL`. | ADR-054 phán quyết (4) |
+| `ROL` | function | có | Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau. | ADR-054 phán quyết (4); Issue #800 |
+| `ROR` | function | có | Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau. | ADR-054 phán quyết (4); Issue #800 |
 | `LEN` | function | có | Hàm chuỗi theo sau kiểu `STRING`, vốn bị loại vì cấp phát động trong chu kỳ scan. Liệt kê riêng từng tên để cổng đối chiếu kiểm được từng cái, thay vì một dòng gộp không kiểm được. | ADR-054 phán quyết (4) |
 | `LEFT` | function | có | Hàm chuỗi, theo sau loại trừ `STRING` (cấp phát động trong chu kỳ scan). | ADR-054 phán quyết (4) |
 | `RIGHT` | function | có | Hàm chuỗi, theo sau loại trừ `STRING`. | ADR-054 phán quyết (4) |
@@ -202,10 +202,11 @@ pou            = program | function | function_block ;
 program        = 'PROGRAM' identifier { var_block } stmt_list 'END_PROGRAM' ;
 function       = 'FUNCTION' identifier ':' scalar_type { var_block } stmt_list 'END_FUNCTION' ;
 function_block = 'FUNCTION_BLOCK' identifier { var_block } stmt_list 'END_FUNCTION_BLOCK' ;
-var_block      = ( 'VAR' [ 'RETAIN' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;
-var_decl       = identifier ':' type_name ';' ;
+var_block      = ( 'VAR' [ 'RETAIN' | 'CONSTANT' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;
+var_decl       = identifier ':' type_name [ ':=' constant_expr ] ';' ;
 type_name      = scalar_type | fb_type_name | user_fb_name ;
 scalar_type    = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME' ;
+constant_expr  = expression ;  (* chỉ literal, VAR CONSTANT khai trước và toán tử; bắt buộc trong VAR CONSTANT, cấm trong VAR_INPUT *)
 stmt_list      = { statement } ;
 statement      = assignment | if_stmt | case_stmt | fb_call | signal_publish ;
 assignment     = variable ':=' expression ';' ;
@@ -239,4 +240,4 @@ comment        = '(*' { character } '*)' | '//' { character } newline ;
 
 ## 11. Từ khoá giữ chỗ
 
-`PROGRAM`, `END_PROGRAM`, `VAR`, `VAR_INPUT`, `VAR_OUTPUT`, `END_VAR`, `FUNCTION`, `END_FUNCTION`, `FUNCTION_BLOCK`, `END_FUNCTION_BLOCK`, `RETAIN`, `IF`, `THEN`, `ELSIF`, `ELSE`, `END_IF`, `AND`, `OR`, `XOR`, `NOT`, `MOD`, `TRUE`, `FALSE`, `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME`, `TON`, `TOF`, `R_TRIG`, `F_TRIG`, `PID`, `TP`, `CTU`, `CTD`, `HYSTERESIS`, `CASE`, `OF`, `END_CASE`, `FOR`, `END_FOR`, `WHILE`, `END_WHILE`, `REPEAT`, `UNTIL`, `END_REPEAT`, `EXIT`, `CONTINUE`, `RETURN`, `GOTO`, `VAR_GLOBAL`, `VAR_EXTERNAL`, `NATIVE`, `POINTER`, `REFERENCE`, `AT`, `ARRAY`, `STRUCT`, `STRING`, `WSTRING`, `VAR_IN_OUT`, `VAR_TEMP`
+`PROGRAM`, `END_PROGRAM`, `VAR`, `VAR_INPUT`, `VAR_OUTPUT`, `END_VAR`, `FUNCTION`, `END_FUNCTION`, `FUNCTION_BLOCK`, `END_FUNCTION_BLOCK`, `RETAIN`, `CONSTANT`, `IF`, `THEN`, `ELSIF`, `ELSE`, `END_IF`, `AND`, `OR`, `XOR`, `NOT`, `MOD`, `TRUE`, `FALSE`, `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME`, `TON`, `TOF`, `R_TRIG`, `F_TRIG`, `PID`, `TP`, `CTU`, `CTD`, `HYSTERESIS`, `CASE`, `OF`, `END_CASE`, `FOR`, `END_FOR`, `WHILE`, `END_WHILE`, `REPEAT`, `UNTIL`, `END_REPEAT`, `EXIT`, `CONTINUE`, `RETURN`, `GOTO`, `VAR_GLOBAL`, `VAR_EXTERNAL`, `NATIVE`, `POINTER`, `REFERENCE`, `AT`, `ARRAY`, `STRUCT`, `STRING`, `WSTRING`, `VAR_IN_OUT`, `VAR_TEMP`

@@ -224,10 +224,72 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
         /* AND/OR/XOR đánh giá đầy đủ, không rút gọn (SPEC §4.4): thời gian
          * thực thi không được phụ thuộc dữ liệu, nếu không WCET vô nghĩa. */
-        case StOp::AND: S[in.dst].b = S[in.a].b && S[in.b].b; pc++; break;
-        case StOp::OR:  S[in.dst].b = S[in.a].b || S[in.b].b; pc++; break;
-        case StOp::XOR: S[in.dst].b = S[in.a].b != S[in.b].b; pc++; break;
-        case StOp::NOT: S[in.dst].b = !S[in.a].b; pc++; break;
+        case StOp::AND:
+            if (in.type == StType::UINT) S[in.dst].i = (S[in.a].i & S[in.b].i) & 0xFFFF;
+            else S[in.dst].b = S[in.a].b && S[in.b].b;
+            pc++;
+            break;
+        case StOp::OR:
+            if (in.type == StType::UINT) S[in.dst].i = (S[in.a].i | S[in.b].i) & 0xFFFF;
+            else S[in.dst].b = S[in.a].b || S[in.b].b;
+            pc++;
+            break;
+        case StOp::XOR:
+            if (in.type == StType::UINT) S[in.dst].i = (S[in.a].i ^ S[in.b].i) & 0xFFFF;
+            else S[in.dst].b = S[in.a].b != S[in.b].b;
+            pc++;
+            break;
+        case StOp::NOT:
+            if (in.type == StType::UINT) S[in.dst].i = (~S[in.a].i) & 0xFFFF;
+            else S[in.dst].b = !S[in.a].b;
+            pc++;
+            break;
+
+        /* Issue #800 — dịch 16 bit; số bước >= 16 cho 0 (không fault): kết quả
+         * xác định và không phụ thuộc hành vi dịch quá độ rộng của C++. */
+        case StOp::SHL: {
+            const int32_t n = S[in.b].i;
+            S[in.dst].i = n >= 16 ? 0 : (S[in.a].i << n) & 0xFFFF;
+            pc++;
+            break;
+        }
+        case StOp::SHR: {
+            const int32_t n = S[in.b].i;
+            S[in.dst].i = n >= 16 ? 0 : (S[in.a].i & 0xFFFF) >> n;
+            pc++;
+            break;
+        }
+
+        /* Issue #800 — TIME × số / TIME ÷ số. Số nguyên: int64 có kiểm tràn.
+         * REAL: tính bằng double rồi làm tròn gần nhất (nửa ra xa 0) như
+         * REAL_TO_INT. Kết quả âm là fault như `-` của TIME. */
+        case StOp::TMUL:
+        case StOp::TDIV: {
+            const int64_t t = S[in.a].t;
+            int64_t result = 0;
+            if (in.type == StType::REAL) {
+                const float k = S[in.b].r;
+                if (!std::isfinite(k)) ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                if (in.op == StOp::TDIV && k == 0.0f) ST_FAULT(st_diag_code::kRtDivByZero);
+                const double ns = in.op == StOp::TMUL ? static_cast<double>(t) * k
+                                                      : static_cast<double>(t) / k;
+                if (!std::isfinite(ns) || std::fabs(ns) > 9.2e18)
+                    ST_FAULT(st_diag_code::kRtIntOverflow);
+                result = static_cast<int64_t>(std::llround(ns));
+            } else {
+                const int64_t k = S[in.b].i;
+                if (in.op == StOp::TDIV) {
+                    if (k == 0) ST_FAULT(st_diag_code::kRtDivByZero);
+                    result = t / k;
+                } else if (__builtin_mul_overflow(t, k, &result)) {
+                    ST_FAULT(st_diag_code::kRtIntOverflow);
+                }
+            }
+            if (result < 0) ST_FAULT(st_diag_code::kRtNegativeTime);
+            S[in.dst].t = result;
+            pc++;
+            break;
+        }
 
         case StOp::ABS:
             if (st_type_is_integer(in.type)) {

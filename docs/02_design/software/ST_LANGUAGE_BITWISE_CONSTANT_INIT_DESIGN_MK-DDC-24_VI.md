@@ -1,9 +1,8 @@
 # Thiết kế đề xuất: toán tử bit trên số nguyên, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số
 
 > **Document ID:** SW-ST-BITWISE-CONST-INIT-MK-DDC-24-VI
-> **Phiên bản:** 0.1
-> **Trạng thái:** Proposed — chờ System Architect + Product Owner duyệt bản cập nhật
-> `DDD-LANG-PROG-001` và hồ sơ ngôn ngữ sinh máy; **chưa code**
+> **Phiên bản:** 0.2
+> **Trạng thái:** **Accepted + Implemented 2026-09-28** — chủ dự án chấp thuận Q1–Q3 theo đề xuất; Q4 hiện thực **không** bump ABI (lý do §7)
 > **Issue:** [#800](https://github.com/Mekong-HCM/MK-DDC-24/issues/800) (finding **U-10** của
 > [`REC-DDC-FIELD-USE-20260927`](../../07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md));
 > liên quan #367 (`ARRAY`/`STRUCT`/`VAR_IN_OUT`, thiết kế ở
@@ -131,10 +130,23 @@ thêm tổ hợp kiểu.
 | Q3 | Phạm vi giá trị khởi tạo: chỉ biểu thức hằng | Có | System Architect |
 | Q4 | Chấp nhận bump ABI IR cho opcode bit | Có, đi cùng đợt #367 nếu trùng lịch để chỉ bump một lần | Compiler Lead |
 
-Tài liệu này **không** thay chữ ký cho Q1–Q4.
+Chủ dự án chấp thuận Q1–Q3 đúng theo đề xuất ngày 2026-09-28 (ghi ở `DECISIONS.md`).
+
+## 7. Kết quả hiện thực
+
+| Mục | Kết quả |
+|---|---|
+| Q4 (ABI) | **Không** bump `targetAbi`. Opcode mới `TMUL 0x26`, `TDIV 0x27`, `SHL 0x44`, `SHR 0x45` là bổ sung; loader cũ gặp chúng trả `unknown opcode` và từ chối nạp (fail-closed). Bump ABI sẽ làm mọi artifact đã ký trên bo không nạp được dù không dùng tính năng mới. Ghi ở `DDD-LANG-PROG-001` §4.4 |
+| Registry | `SHL`/`SHR` thêm vào thư viện SYSTEM, bump có kiểm soát `rev-a.4 → rev-a.5` (profile, schema `const`, G1 pin + lịch sử bất biến, golden package sinh lại bằng `mkddc-st-package-golden`, vector conformance ST↔FBD `EQ-038`/`EQ-039`) |
+| Hồ sơ ngôn ngữ | `st_language_profile_v1` 1.0.0 → **1.1.0**, sinh lại từ compiler; bỏ `SHL`/`SHR` khỏi `deliberateExclusions`; văn phạm `var_block`/`var_decl`/`constant_expr`; `CONSTANT` là từ khoá |
+| Mã diagnostic | Không thêm mã mới: gán vào hằng dùng `ST-SEM-003` (chỉ đọc), tràn khi gập `ST-SEM-008`, còn lại `ST-SEM-002`/`ST-SYN-001` |
+| T-800-1..6 | `apps/core/application/st/tests/test_st_language_u10.cpp` (10 test, chạy thật trên runtime) |
+| T-800-7 | Corpus văn phạm +7 vector (5 nhận, 2 từ chối); `st_language_profile_contract`/`_gate` xanh; FE formatter từ chối đúng hai ca ngoài subset |
+| T-800-8 | `GUIDE-PROG-ST-DO16-001` 1.7: `FB_MASK_SPLIT` bằng `AND` theo bit, mặt nạ bằng `VAR CONSTANT`; `mkddc-st-sim` 3 001 chu kỳ cho CSV **giống hệt từng byte** bản đang chạy trên bo |
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.2 | 2026-09-28 | Chủ dự án chấp thuận; hiện thực; §7 kết quả và quyết định không bump ABI |
 | 0.1 | 2026-09-28 | Bản đề xuất đầu tiên cho Issue #800 (U-10): hiện trạng đối chiếu `main@9910b88` và hồ sơ ngôn ngữ, đề xuất cho toán tử bit trên `UINT`, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số; ảnh hưởng hợp đồng, test đóng Issue, câu hỏi duyệt |

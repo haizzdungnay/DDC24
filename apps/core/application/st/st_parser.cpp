@@ -570,6 +570,7 @@ private:
 
     /* Cờ đánh dấu khối VAR_* nào đã gặp — mỗi loại tối đa 1 lần (SPEC §2). */
     bool seen_input_ = false, seen_output_ = false, seen_local_ = false, seen_retain_ = false;
+    bool seen_constant_ = false;
 
     class DepthGuard {
     public:
@@ -586,7 +587,7 @@ private:
         static const char* kKeywords[] = {
             "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
             "FUNCTION", "END_FUNCTION", "FUNCTION_BLOCK", "END_FUNCTION_BLOCK",
-            "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
+            "RETAIN", "CONSTANT", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
             "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
             "TON", "TOF", "R_TRIG", "F_TRIG", "PID", "TP", "CTU", "CTD",
@@ -825,6 +826,19 @@ private:
             seen = &seen_retain_;
             label = "VAR RETAIN";
         }
+        /* Issue #800 — `VAR CONSTANT`: hằng có tên, gập lúc biên dịch, không
+         * tốn slot ghi được. Chỉ mở cho `VAR`: `VAR_INPUT`/`VAR_OUTPUT` hằng
+         * vô nghĩa (giá trị đến từ binding hoặc đi ra binding), còn
+         * `VAR CONSTANT RETAIN` là một hằng "nhớ qua mất điện" — mâu thuẫn. */
+        bool constant = false;
+        if (storage == StStorage::VAR_LOCAL && at_kw("CONSTANT")) {
+            advance();
+            constant = true;
+            seen = &seen_constant_;
+            label = "VAR CONSTANT";
+            if (at_kw("RETAIN"))
+                return fail("VAR CONSTANT cannot be RETAIN; a constant has nothing to retain", diag);
+        }
 
         if (*seen)
             return fail(std::string("duplicate ") + label + " block (each may appear at most once)",
@@ -833,7 +847,7 @@ private:
 
         while (!at_kw("END_VAR")) {
             if (at_end()) return fail("unexpected end of source inside VAR block", diag);
-            if (!parse_var_decl(out, storage, diag)) {
+            if (!parse_var_decl(out, storage, constant, diag)) {
                 record(diag);
                 if (!can_recover() || !synchronize_declaration()) return false;
                 continue;
@@ -846,7 +860,7 @@ private:
      * đúng MỘT điểm thoát lỗi — nếu không, mười nhánh `return false` rải rác
      * đều phải tự nhớ gọi `record` + `synchronize`, và chỗ quên sẽ là chỗ
      * parser âm thầm nuốt lỗi. */
-    bool parse_var_decl(StProgram* out, StStorage storage, StDiagnostic* diag)
+    bool parse_var_decl(StProgram* out, StStorage storage, bool constant, StDiagnostic* diag)
     {
             if (!at_ident()) return fail("expected variable name", diag);
             if (is_keyword(peek().upper))
@@ -858,6 +872,9 @@ private:
             const Token type_tok = advance();
 
             const StFbType fb = st_fb_type_from_name(type_tok.upper);
+            if (constant && (fb != StFbType::NONE || !scalar_type_name(type_tok.upper)))
+                return fail("VAR CONSTANT may only declare BOOL, INT, DINT, UINT, REAL or TIME",
+                            diag);
             if (fb != StFbType::NONE) {
                 if (storage == StStorage::VAR_INPUT || storage == StStorage::VAR_OUTPUT)
                     return fail("function block instances may only be declared in VAR or VAR RETAIN",
@@ -904,6 +921,7 @@ private:
                 StVarDecl d;
                 d.name = name_tok.text;
                 d.storage = storage;
+                d.constant = constant;
                 d.line = name_tok.line;
                 d.column = name_tok.column;
                 d.length = name_tok.length;
@@ -918,6 +936,24 @@ private:
                              "unknown type '" + type_tok.text + "'",
                              type_tok.line, type_tok.column, type_tok.length);
                     return false;
+                }
+                /* Issue #800 — giá trị khởi tạo `x : REAL := 21.5;`. Parser chỉ ghi
+                 * lại biểu thức; semantic kiểm nó là biểu thức HẰNG và gập ra
+                 * giá trị, vì chỉ semantic biết kiểu của literal đa hình. */
+                if (peek().kind == Token::Kind::ColonEq) {
+                    if (storage == StStorage::VAR_INPUT)
+                        return fail("VAR_INPUT '" + d.name +
+                                        "' cannot have an initial value; its value comes from "
+                                        "the binding every cycle",
+                                    diag);
+                    advance();
+                    std::unique_ptr<StExpr> init;
+                    if (!parse_expr(&init, diag)) return false;
+                    d.init_expr = std::shared_ptr<StExpr>(std::move(init));
+                } else if (constant) {
+                    return fail("VAR CONSTANT '" + d.name +
+                                    "' requires ':= <constant expression>'",
+                                diag);
                 }
                 if (out->vars.size() >= st_limits::kMaxVariables) {
                     set_diag(diag, st_diag_code::kTooManyVariables,

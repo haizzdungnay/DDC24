@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added — Ngôn ngữ ST: toán tử bit trên `UINT`, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số (Issue #800, U-10, 2026-09-28)
+
+- **Phạm vi:** compiler/runtime `apps/core/application/st/{st_parser,st_semantic,st_compile,st_exec,st_loader,st_program,st_fbd_compile}.*`, `st_ir.hpp`; test mới `test_st_language_u10.cpp`; thư viện SYSTEM `rev-a.4 → rev-a.5` (registry, profile + schema, G1 pin + lịch sử, golden package, golden build manifest ST/FBD, chốt `pgm02`, vector conformance `EQ-038`/`EQ-039`, `verify_programming_fbd_contract.py`); hồ sơ ngôn ngữ 1.0.0 → 1.1.0 (curated + sinh lại); corpus văn phạm +7; tệp hằng sinh C++/Go/TS; FE `stEditorSupport.ts`, `stFormat/parser.ts`, `stCoreReservedWords.generated.ts` + test; Go `library_test.go`; tài liệu `ST_SUBSET_SPEC` 1.4, `DDD-LANG-PROG-001` 1.4 §4.4, thiết kế `SW-ST-BITWISE-CONST-INIT` 0.2, `GUIDE-PROG-ST-DO16-001` 1.7, `DECISIONS.md`, `REC-DDC-FIELD-USE` 1.7.
+- **Triệu chứng:** chương trình 16 DO phải tách bit bằng `MOD 2` và `/ 2` (khối `FB_MASK_SPLIT` 32 lệnh), để hằng "ma thuật" 21845/43690/61680 rải trong mã, không khai được giá trị khởi tạo, và đi vòng `TIME_TO_REAL`/`REAL_TO_TIME` để nhân thời gian.
+- **Cách làm (chủ dự án chấp thuận Q1–Q3 theo đề xuất):** `AND`/`OR`/`XOR`/`NOT` trên `UINT` là phép theo bit (số có dấu và trộn `BOOL`/`UINT` là `ST-SEM-002`); `SHL`/`SHR(UINT, UINT)`, `N ≥ 16` cho 0; `VAR CONSTANT` (bắt buộc `:=`, chỉ đọc `ST-SEM-003`, không `RETAIN`, không tốn slot ghi); giá trị khởi tạo là biểu thức hằng gập lúc biên dịch với đúng luật lỗi của runtime (cấm ở `VAR_INPUT`; FUNCTION áp lại mỗi lời gọi); `TIME × {INT,DINT,UINT,REAL}` và `TIME ÷ số` (tràn/âm/chia 0 là fault). Opcode mới `TMUL 0x26`, `TDIV 0x27`, `SHL 0x44`, `SHR 0x45`.
+- **Không bump `targetAbi` (Q4):** opcode là bổ sung, loader cũ từ chối opcode lạ (fail-closed); bump ABI sẽ làm mọi artifact đã ký trên bo không nạp được. Ghi ở `DDD-LANG-PROG-001` §4.4. Tool ST cũ hơn thay đổi này vẫn báo `ST-SYN-001` với cú pháp mới — ghi ở guide 16 DO.
+- **Kiểm chứng:** 10 test C++ mới chạy thật trên runtime; `mkddc-st-sim` 300 s ảo (3001 chu kỳ, 163 lần đổi DO): chương trình 16 DO viết lại bằng `AND`/`VAR CONSTANT` cho CSV **giống hệt từng byte** bản đang chạy trên bo (lệnh 1587 → 1525, slot ghi 433 → 431). C++ `cmake --fresh` (Modbus+BACnet+HMI ON) configure/build exit 0, `ctest` **1671/1671**; `verify-project.sh --component layout` exit 0; G1 10/10, FBD contract, artifact manifest, PGM-02 contract, `st_profile_gate` 6/6 PASS; ba generator `--check` PASS; `go vet` exit 0, `go test ./... -count=1` 21 package ok; vitest 267 file / 3502 test pass; `npm run lint`, `npm run build` exit 0; `docs_iso_harness.py --expect` PASS.
+- **Refs:** Issue #800, `REC-DDC-FIELD-USE-20260927` U-10, ADR-054.
+
 ### Changed — Compiler ST dùng chung khung slot cho lời gọi FUNCTION đã kết thúc (Issue #799, U-08, 2026-09-28)
 
 - **Phạm vi:** `apps/core/application/st/st_compile.cpp`; test mới `apps/core/application/st/tests/test_st_function_frame.cpp` (+ `apps/core/CMakeLists.txt`); `SW-ST-FN-FRAME-SHARING-MK-DDC-24-VI` 0.2; `DECISIONS.md` (Lịch sử cập nhật).

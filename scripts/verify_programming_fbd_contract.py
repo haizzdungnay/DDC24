@@ -34,6 +34,8 @@ PURE_FUNCTIONS = {
     "AND", "OR", "XOR", "NOT", "EQ", "NE", "LT", "LE", "GT", "GE",
     "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
     "SEL", "SQRT", "SCALE", "DEADBAND",
+    # Issue #800 — dịch bit trên UINT, registry `rev-a.5`.
+    "SHL", "SHR",
 }
 # `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). `PI` giữ lại vì đây là
 # danh sách "kiểu nào ĐƯỢC PHÉP có state", không phải danh sách entry đang có.

@@ -181,6 +181,57 @@
       "note": "STRUCT thuộc đợt gần theo ADR-054 điểm 5, cùng VAR_IN_OUT và ARRAY tĩnh. Compiler từ chối ở pha SEMANTIC (`ST-SEM-005`, kiểu không rõ) chứ không phải pha cú pháp: `STRUCT` được giữ chỗ như một từ khoá nên lexer nhận nó, và chỗ hỏng là 'không có kiểu tên STRUCT'.",
       "source": "PROGRAM P_corpus\nVAR s : STRUCT a : REAL; END_STRUCT; END_VAR\nEND_PROGRAM\n",
       "rejectedWith": "ST-SEM-005"
+    },
+    {
+      "id": "bitwise-uint",
+      "rule": "and_expr",
+      "accepted": true,
+      "note": "Issue #800 — AND/OR/XOR/NOT trên UINT là phép theo bit; trên BOOL vẫn là logic.",
+      "source": "PROGRAM P_corpus\nVAR u : UINT; v : UINT; t : TIME; k : DINT; END_VAR\nu := (u AND v) OR (NOT v XOR 255);\nEND_PROGRAM\n"
+    },
+    {
+      "id": "shift-uint",
+      "rule": "func_call",
+      "accepted": true,
+      "note": "Issue #800 — SHL/SHR trên UINT 16 bit; số bước từ 16 trở lên cho 0.",
+      "source": "PROGRAM P_corpus\nVAR u : UINT; v : UINT; t : TIME; k : DINT; END_VAR\nu := SHL(v, 3) OR SHR(v, 13);\nEND_PROGRAM\n"
+    },
+    {
+      "id": "var-constant",
+      "rule": "var_block",
+      "accepted": true,
+      "note": "Issue #800 — VAR CONSTANT với biểu thức hằng tham chiếu hằng khai trước.",
+      "source": "PROGRAM P_corpus\nVAR CONSTANT MASK : UINT := 43690; INV : UINT := NOT MASK; END_VAR\nVAR u : UINT; END_VAR\nu := INV;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "var-initial-value",
+      "rule": "var_decl",
+      "accepted": true,
+      "note": "Issue #800 — giá trị khởi tạo khi khai báo cho VAR/VAR_OUTPUT/VAR RETAIN.",
+      "source": "PROGRAM P_corpus\nVAR_OUTPUT sp : REAL := 21.5; END_VAR\nVAR RETAIN n : DINT := 5; END_VAR\nn := n + 1;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "time-times-number",
+      "rule": "mul_expr",
+      "accepted": true,
+      "note": "Issue #800 — TIME × số / TIME ÷ số cho kết quả TIME.",
+      "source": "PROGRAM P_corpus\nVAR u : UINT; v : UINT; t : TIME; k : DINT; END_VAR\nt := t * k + t / 2;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "var-constant-requires-value",
+      "rule": "var_decl",
+      "accepted": false,
+      "note": "Hằng không có giá trị là lỗi cú pháp: VAR CONSTANT bắt buộc ':= <biểu thức hằng>'.",
+      "source": "PROGRAM P_corpus\nVAR CONSTANT K : INT; END_VAR\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "var-input-initial-value",
+      "rule": "var_decl",
+      "accepted": false,
+      "note": "VAR_INPUT nhận giá trị từ binding mỗi chu kỳ; giá trị khởi tạo ở đó hoặc bị đè ngay, hoặc che mất việc thiếu binding.",
+      "source": "PROGRAM P_corpus\nVAR_INPUT x : REAL := 1.0; END_VAR\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
     }
   ]
 }
