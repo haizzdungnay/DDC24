@@ -488,17 +488,19 @@ function TraceTable({ trace, itemByVariableId, pick }: { trace: ProgrammingTrace
     <div className="max-h-72 overflow-auto">
       <table className="w-full min-w-[900px] text-left text-xs">
         <caption className="sr-only">{pick('Mười snapshot trace gần nhất; các giá trị trong cùng sequence thuộc cùng một chu kỳ Core.', 'The ten most recent trace snapshots; values sharing a sequence come from one Core scan.')}</caption>
-        <thead><tr className="text-[var(--c-text-dim)]"><th scope="col"># / time</th><th scope="col">{pick('Biến', 'Variable')}</th><th scope="col">{pick('Đề xuất đầu ra', 'Output candidate')}</th><th scope="col">Actual</th><th scope="col">{pick('Nguồn / ưu tiên', 'Source / priority')}</th><th scope="col">{pick('Chất lượng', 'Quality')}</th></tr></thead>
+        <thead><tr className="text-[var(--c-text-dim)]"><th scope="col"># / time</th><th scope="col">{pick('Biến', 'Variable')}</th><th scope="col">{pick('Đề xuất đầu ra', 'Output candidate')}</th><th scope="col">{pick('Đọc lại (tuổi)', 'Read-back (age)')}</th><th scope="col">{pick('Nguồn / ưu tiên', 'Source / priority')}</th><th scope="col">{pick('Chất lượng', 'Quality')}</th></tr></thead>
         <tbody>{recent.flatMap((sample) => sample.values.map((value, index) => {
           const item = itemByVariableId.get(value.variableId)
           const isKnownInput = item?.direction === 'READ'
           const owner = effectiveTraceOwner(value, item, pick)
           return (
             <tr key={`${sample.sequence}-${value.variableId}`} className="border-t border-[var(--c-border)] align-top">
-              <td>{index === 0 ? `${sample.cycle !== undefined ? `${pick('chu kỳ', 'cycle')} ${sample.cycle}` : sample.sequence} · ${formatObservedAt(sample.observedAt, pick).text}` : ''}</td>
+              <td>{index === 0 ? `${sample.cycle !== undefined ? `${pick('chu kỳ', 'cycle')} ${sample.cycle}` : sample.sequence} · ${formatObservedAt(sample.observedAt, pick).text}` : ''}{typeof value.releaseSeq === 'number' ? <span className="block text-[var(--c-text-dim)]">{pick('lần chạy', 'run')} {value.releaseSeq}</span> : null}</td>
               <th scope="row" className="font-normal"><span className="text-[var(--c-text)]">{item?.variableName ?? shortId(value.variableId)}</span><br/><span className="font-mono text-[var(--c-text-dim)]">{shortId(value.variableId)}</span></th>
-              <td className="font-mono">{isKnownInput ? <NotApplicable pick={pick} /> : <Value value={value.programValue} unit={item?.unit} pick={pick} />}</td>
-              <td className="font-mono"><Value value={value.actualValue} unit={item?.unit} unavailable={actualIsUnavailable(value.quality, value.freshness)} pick={pick} /></td>
+              <td className="font-mono">{value.unavailableReason === 'NOT_RELEASED'
+                ? <span title={pick('Program không chạy ở boundary của mẫu này; giá trị chỉ lấy tại lần chạy để cặp vào/ra cùng một lần chạy', 'The Program did not run at this sample boundary; values are only taken at a run so inputs and outputs belong to the same run')}>{pick('không chạy', 'not run')}</span>
+                : isKnownInput ? <NotApplicable pick={pick} /> : <Value value={value.programValue} unit={item?.unit} pick={pick} />}</td>
+              <td className="font-mono"><TraceReadback value={value} unit={item?.unit} pick={pick} /></td>
               <td>{owner} / {value.effectivePriority === null ? <NoData pick={pick} /> : `${pick('mức', 'level')} ${value.effectivePriority}`}</td>
               <td>{value.quality} · {value.freshness}</td>
             </tr>
@@ -507,6 +509,17 @@ function TraceTable({ trace, itemByVariableId, pick }: { trace: ProgrammingTrace
       </table>
     </div>
   )
+}
+
+/* Issue #798 — cột đọc lại: số đọc về từ điểm (feedback AO/DO, poll Modbus) kèm
+ * tuổi, KHÔNG phải lệnh. Server đời trước không có `readbackValue` thì rơi về
+ * `actualValue` như trước. */
+function TraceReadback({ value, unit, pick }: { value: ProgrammingTraceValue; unit?: string; pick: PickCopy }) {
+  if (value.readbackValue === undefined) {
+    return <Value value={value.actualValue} unit={unit} unavailable={actualIsUnavailable(value.quality, value.freshness)} pick={pick} />
+  }
+  if (!isDisplayScalar(value.readbackValue)) return <NoData pick={pick} />
+  return <>{String(value.readbackValue)}{unit ? ` ${unit}` : ''}{typeof value.readbackAgeMs === 'number' ? <span className="text-[var(--c-text-dim)]"> · {value.readbackAgeMs} ms</span> : null}</>
 }
 
 function Value({ value, unit, unavailable = false, pick }: { value: unknown; unit?: string; unavailable?: boolean; pick: PickCopy }) {

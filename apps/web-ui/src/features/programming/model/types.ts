@@ -277,7 +277,16 @@ export interface ProgrammingTraceAccepted {
 export interface ProgrammingTraceValue {
   variableId: string
   programValue: unknown
+  /** @deprecated Issue #798: bằng `readbackValue`, không còn chép `programValue`. */
   actualValue: unknown
+  /* Issue #798 — lệnh Program ghi ra điểm, số đọc lại gần nhất và tuổi của nó;
+   * vắng mặt ở server đời trước. */
+  commandedValue?: unknown
+  readbackValue?: unknown
+  readbackAgeMs?: number | null
+  /* Số lần chạy của Program nguồn tại mẫu. */
+  releaseSeq?: number | null
+  unavailableReason?: 'UNRESOLVED' | 'NOT_RELEASED' | null
   overriddenBy: string | null
   effectivePriority: number | null
   quality: ProgrammingMonitorSample['quality']
