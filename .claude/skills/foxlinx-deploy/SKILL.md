@@ -200,11 +200,12 @@ Báo user kèm:
 - **Luôn backup** trước khi ghi đè binary/dist, kể cả `artifact-manifest.json`.
 - **Manifest chỉ ghi từ file build** (`deploy-record`); không điền sha256 đọc từ bo.
 - **Binary đang chạy** thì `scp` thất bại — phải `pkill` trước.
-- **Có restart core** và Program có đầu vào Virtual Point (Issue #827): Core có bản
-  sửa #827 thì Program tự qua `WAITING` ("Chờ đầu vào") về `RUNNING` sau khi web đẩy
-  VP (≤ ~10 s), không thao tác tay — chỉ kiểm không còn Program `WAITING` quá 60 s.
-  Core cũ hơn bản sửa thì Program bị `FAULTED ST-RT-008`: Disable → Enable qua
-  `runtime-intent` theo mục "Lưu ý" của `DEPLOY_FOXLINX.md`, kiểm Active không đổi.
+- **Có restart core** và Program có đầu vào Virtual Point (Issue #827): bo lab chạy
+  Core có bản sửa từ 2026-09-28 (`main@265f1a8b`). Program tự qua `WAITING` ("Chờ
+  đầu vào") về `RUNNING` khi web đẩy VP (≤ 10 s), không thao tác tay; kiểm không còn
+  Program `WAITING` quá 60 s. Chỉ Program `FAULTED ST-RT-008` thật (đầu vào xấu
+  ≥ 60 s) mới cần Disable → Enable qua `runtime-intent`, theo mục "Lưu ý" của
+  `DEPLOY_FOXLINX.md`.
 - **Không dựng binary Go trong git worktree**: thiếu `vcs.revision` nên bước 6b
   exit 2 — dựng từ bản clone thường.
 
