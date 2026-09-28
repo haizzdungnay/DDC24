@@ -148,12 +148,18 @@ func sha256Sum(raw []byte) []byte {
 	return sum[:]
 }
 
-// T59-205: PID giữ nhãn REVIEW_REQUIRED cho tới khi có evidence Controls/Safety.
-// Test này khoá SỰ THẬT hiện tại: `VS-PROG-U12` chưa chạy nên PID phải đang bị
-// chặn. Ai đó "mở" PID mà không kèm evidence sẽ làm test đỏ, không lặng lẽ qua.
-func TestReviewGateBlocksPidUntilControlsSafetyEvidence(t *testing.T) {
+// T59-205 — CƠ CHẾ: feature Approved=false bị chặn, feature ngoài bảng không bị
+// chặn. Bảng production sau #802 không còn feature chưa duyệt, nên test cơ chế
+// thay tạm bảng bằng bản chặn PID rồi khôi phục — không dựa vào việc profile
+// tình cờ còn chặn một thứ gì đó.
+func TestReviewGateBlocksUnapprovedFeature(t *testing.T) {
+	saved := ReviewGatedFeatures
+	t.Cleanup(func() { ReviewGatedFeatures = saved })
+	ReviewGatedFeatures = [len(saved)]ReviewGatedFeature{}
+	ReviewGatedFeatures[0] = ReviewGatedFeature{FeatureID: "PID"}
+
 	if !ReviewGateBlocks("PID") {
-		t.Fatal("PID phải bị chặn khi chưa có approval token")
+		t.Fatal("PID chưa có token phải bị chặn")
 	}
 	if ReviewGateBlocks("TON") {
 		t.Fatal("TON không bị gate mà vẫn bị chặn")
@@ -163,9 +169,62 @@ func TestReviewGateBlocksPidUntilControlsSafetyEvidence(t *testing.T) {
 	if ReviewGateBlocks("KHONG_CO_TRONG_BANG") {
 		t.Fatal("feature ngoài bảng không được bị chặn")
 	}
+}
+
+// Issue #802 — TRẠNG THÁI production: PID mang token suy ra đúng công thức của
+// generator từ chính contract và gắn libraryVersion hiện hành.
+func TestPidApprovedWithTokenDerivedFromContract(t *testing.T) {
+	if ReviewGateBlocks("PID") {
+		t.Fatal("PID đã ký token (EV-PROG-PID-APPROVAL-20260928) mà vẫn bị chặn")
+	}
 	for _, item := range ReviewGatedFeatures {
 		if item.Approved != (item.ApprovalToken != "") {
 			t.Fatalf("cờ Approved lệch token: %+v", item)
 		}
 	}
+
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Join(filepath.Dir(file), "../../../../..")
+	raw, err := os.ReadFile(filepath.Join(root, "contracts/programming/product_profile_v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		CoreLibrary struct {
+			Version string `json:"version"`
+		} `json:"coreLibrary"`
+		ReviewGatedFeatures []struct {
+			FeatureID           string  `json:"featureId"`
+			ApprovalEvidenceRef *string `json:"approvalEvidenceRef"`
+			ApprovalToken       *string `json:"approvalToken"`
+		} `json:"reviewGatedFeatures"`
+	}
+	if err := json.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	if contract.CoreLibrary.Version != ProfileLibraryVersion {
+		t.Fatalf("libraryVersion contract=%q sinh=%q", contract.CoreLibrary.Version, ProfileLibraryVersion)
+	}
+	for _, item := range contract.ReviewGatedFeatures {
+		if item.FeatureID != "PID" {
+			continue
+		}
+		if item.ApprovalEvidenceRef == nil || item.ApprovalToken == nil {
+			t.Fatal("PID phải có approvalEvidenceRef và approvalToken")
+		}
+		if *item.ApprovalEvidenceRef != "EV-PROG-PID-APPROVAL-20260928" {
+			t.Fatalf("approvalEvidenceRef=%q", *item.ApprovalEvidenceRef)
+		}
+		payload := "mkddc-controls-safety-approval:v1:PID:" + contract.CoreLibrary.Version + ":" +
+			*item.ApprovalEvidenceRef
+		want := hex.EncodeToString(sha256Sum([]byte(payload)))
+		if *item.ApprovalToken != want {
+			t.Fatalf("token contract=%s; suy ra=%s", *item.ApprovalToken, want)
+		}
+		if ReviewGatedFeatures[0].ApprovalToken != want {
+			t.Fatalf("token sinh Go=%s; suy ra=%s", ReviewGatedFeatures[0].ApprovalToken, want)
+		}
+		return
+	}
+	t.Fatal("contract không khai PID trong reviewGatedFeatures")
 }
