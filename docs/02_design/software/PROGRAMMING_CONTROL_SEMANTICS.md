@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
 | Ngày | 2026-09-28 |
 | Chủ quản | Controls Lead + Core Lead |
@@ -121,8 +121,35 @@ bất kỳ Program hủy toàn bộ staging của cycle.
 
 `GOOD` dùng bình thường. `STALE/BAD/UNKNOWN/OFFLINE` không được chuyển thành 0.
 Mỗi binding khai policy `REQUIRED` hoặc `OPTIONAL_WITH_FALLBACK`; fallback phải là
-giá trị typed/versioned trong Revision và sinh warning/alarm. Required bad quality
-gây cycle fault và hold-last; mất liên tục quá threshold gây Task FAULT.
+giá trị typed/versioned trong Revision và sinh warning/alarm.
+
+**Required input chưa GOOD — chờ có ngưỡng (Issue #827, DECISIONS 2026-09-28
+Q1–Q4).** Một binding REQUIRED không GOOD/mapped/coercible (hoặc Program chưa có
+snapshot đầu vào của base step) thì ở release đó:
+
+| Tình huống | Hành vi |
+|---|---|
+| Lần xấu đầu tiên kể từ lần kích hoạt/bật gần nhất | Program vào `WAITING`, `waitingReason = INPUT_NOT_READY`; ghi mốc `input_bad_since_ns` (chỉ ghi lần đầu) |
+| Đang `WAITING` vì đầu vào | Không execute, không publish, không tăng `faultCount`, không đổi `runCount`/`lastRunMonoNs`; slot giữ nguyên |
+| Đầu ra khi chờ | Program **đã từng** publish: proposal mức 5 giữ hold-last trong TTL `ADR-051` (60 s kể từ lần publish cuối) rồi rút như §6. Program **chưa từng** publish (ngay sau khi Core khởi động): không có proposal nào, AO/DO đứng ở safe state `no_ctrl` (T7) như trước |
+| Đầu vào GOOD trở lại trước ngưỡng | Tự về `RUNNING` ở release kế, publish lại ngay; không cần ack. Mốc xoá — lần mất sau đếm lại từ đầu |
+| Xấu liên tục ≥ **60 s** (`st_input_wait::kFaultThresholdMs`, đồng hồ tick) | FAULT **Program** `ST-RT-008` đúng một lần. **Không FAULT Task**: profile Rev A chỉ có một Task, FAULT Task là kéo mọi Program khác xuống. Phục hồi như mọi fault Program: Disable → Enable (hoặc `reset_fault`) |
+
+Vì sao 60 s: lớn hơn khoảng hở thật sau khi Core khởi động (slot AV/BV/MSV về
+0/BAD; web đẩy VP bằng `syncBoundVirtualPointsToCore` một lần lúc web khởi động và
+`runVirtualPointReconciler` mỗi 10 s; cộng ~20 s nếu web cũng đang khởi động), và
+bằng TTL hold-last nên lệnh cuối không bao giờ sống quá TTL trong lúc chờ — FAULT
+tới cùng lúc hoặc sau khi TTL đã rút. Core **không** tự khôi phục VP từ `state.snap`:
+web áp chính sách khởi động lại VP (`applyRestartPolicyOnBoot`, ISS-PIO-14) trước
+khi đẩy xuống, Core tự khôi phục là bỏ qua chính sách đó.
+
+`WAITING` vì Published Signal BLOCK_PROGRAM/WAIT (`ST-RT-011`) mang lý do
+`SIGNAL_NOT_READY` và vẫn rút proposal NGAY như trước — hai lý do cần hai phản ứng
+khác nhau nên được công bố riêng (`waitingReason` ở IPC `point_snapshot` và REST
+`ProgrammingProgramListItem`, OpenAPI 1.51.0). Task vẫn báo `RUNNING` khi Program
+của nó đang `WAITING` (Task vẫn dispatch). Barrier chu kỳ đầu của Commission coi
+`WAITING` là PENDING: gói mới có Program chờ đầu vào đứng `ACTIVE_CANDIDATE` tối đa
+60 s rồi hoặc qua barrier khi đầu vào GOOD, hoặc rollback cả gói khi Program FAULT.
 
 ## 6. Arbitration priority 5 và hold-last
 
@@ -485,7 +512,7 @@ thuộc target capacity decision.
 |---|---|---|---|
 | div0/overflow/non-finite | executor | hủy staging | Task FAULT, source map |
 | invalid jump/op/budget | executor invariant | hủy | Task FAULT + incident artifact |
-| required input bad | mapping | hold-last bounded | auto recover threshold hoặc ack |
+| required input bad | mapping (`st_load_inputs`) | không execute/publish; hold-last trong TTL 60 s (Program chưa từng publish: không giữ gì, `no_ctrl`) | `WAITING` + `INPUT_NOT_READY`; GOOD trước 60 s ⇒ tự về `RUNNING`; liên tục ≥ 60 s ⇒ **Program** FAULT `ST-RT-008` (không Task FAULT), phục hồi Disable → Enable (§5, Issue #827) |
 | one overrun | monotonic duration | hủy cycle nếu deadline miss | warning/count |
 | 3 consecutive overrun | counter | no new proposal | Task FAULT; không plant-wide safe |
 | IOP/watchdog fault | independent safety | theo SafetyManager | safety authority, không program override |
@@ -631,6 +658,7 @@ thành sự kiện tương thích artifact).
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.7 | 2026-09-28 | §5 và bảng fault §9: điền số và hành vi đã chốt cho required input bad (Issue #827, DECISIONS Q1–Q4) — `WAITING` + `INPUT_NOT_READY`, ngưỡng 60 s, FAULT Program `ST-RT-008` chứ không FAULT Task, tự phục hồi trước ngưỡng; hold-last trong TTL cho Program đã publish, `no_ctrl` cho Program chưa publish; `waitingReason` qua IPC/REST. Host `ctest` PASS (6 ca `ProgrammingStartupInputWait`) | Core + Controls |
 | 1.6 | 2026-09-28 | §7: Controls/Safety duyệt `PID` (Issue #802) — ngưỡng override 1 %, `iMin/iMax` dùng chung biên output, hành vi fault và freeze khi override; bỏ TARGET-PENDING cho phần đã duyệt; §15 đóng phần "PID set". Bằng chứng HOST `EV-PROG-PID-APPROVAL-20260928`; AO thật trên bo NOT RUN | Core + Controls |
 | 1.5 | 2026-09-28 | §7B: khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS` (wire 10–13), `BITS_TO_WORD`, `UPTIME` — ràng buộc wire/RETAIN/FAULT (Issue #801, registry `rev-a.6`). Host PASS | Core + Controls |
 | 1.4 | 2026-09-27 | §13 và `DD-11`/`DD-13`: ngưỡng `VS-PROG-009` theo `VVP-PROG-001` v2.4 — ≥ 10 chu kỳ mỗi lớp, C1–C4 PASS, missed release = 0 (chủ sở hữu chốt lại sau soak lần 3). Không đổi trạng thái kiểm chứng | Core + Controls |
