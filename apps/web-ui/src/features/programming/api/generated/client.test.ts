@@ -178,7 +178,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // không thêm operation Programming.
     // `1.47.0` — Trace tách `commandedValue`/`readbackValue`/`readbackAgeMs`, thêm
     // `releaseSeq`/`unavailableReason`, `actualValue` deprecated (Issue #798).
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.47.0");
+    // `1.48.0` — Plan 63 T63-101: `SystemStatus.shm_reader` (bộ đếm reader seqlock SHM);
+    // không thêm operation Programming.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.48.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

@@ -59,6 +59,8 @@ type SystemStatus struct {
 	Versions         VersionStatus            `json:"versions"`
 	IOP              IOPStatus                `json:"iop"`
 	Scan             ScanStatus               `json:"scan"`
+	// SHMReader chỉ có khi core client là CoreClient thật (T63-101).
+	SHMReader *SHMReaderMetrics `json:"shm_reader,omitempty"`
 }
 
 type ServiceHealth struct {
@@ -138,6 +140,13 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		Versions:         versions,
 		IOP:              core.IOP,
 		Scan:             core.Scan,
+	}
+	// T63-101: counter retry/fail của reader SHM đi cùng endpoint metric sẵn có,
+	// để probe Plan 63 §6 lấy delta đầu/cuối cửa sổ đo mà không cần route mới.
+	if src, ok := a.core.(shmReaderMetricsSource); ok {
+		shm := src.SHMReaderMetrics()
+		shm.Since = a.startedAt.UTC().Format(time.RFC3339)
+		status.SHMReader = &shm
 	}
 	writeJSON(w, http.StatusOK, status)
 }
