@@ -63,6 +63,12 @@ export function restingValue(valueType: ScheduleValueType): ScheduleValue {
   }
 }
 
+export function oppositeValue(val: ScheduleValue, valueType: ScheduleValueType): ScheduleValue {
+  if (valueType === 'BINARY') return val === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+  if (valueType === 'BOOLEAN') return !val
+  return Number(val) === 0 ? 1 : 0
+}
+
 export function activeValue(valueType: ScheduleValueType): ScheduleValue {
   switch (valueType) {
     case 'BINARY': return 'ACTIVE'
@@ -131,16 +137,28 @@ export interface TimeBlock {
  * Time-Value. Giao diện phải hiện được cả hai chiều, nếu không người dùng
  * không hiểu vì sao một khoảng 08:00→18:00 lại sinh HAI sự kiện.
  */
-export function dayToBlocks(day: ScheduleTimeValue[], valueType: ScheduleValueType): TimeBlock[] {
+export function dayToBlocks(
+  day: ScheduleTimeValue[],
+  valueType: ScheduleValueType,
+  defaultValue?: ScheduleValue
+): TimeBlock[] {
   const sorted = sortTimeValues(day)
   const blocks: TimeBlock[] = []
   for (let i = 0; i < sorted.length; i++) {
     const startSec = timeToSeconds(sorted[i].time)
     if (startSec < 0) continue
     const endSec = i + 1 < sorted.length ? timeToSeconds(sorted[i + 1].time) : 86_400
-    // Chỉ vẽ khối cho giá trị khác giá trị nghỉ; khoảng "nghỉ" là nền.
-    if (isActiveValue(sorted[i].value, valueType)) {
-      blocks.push({ startSec, endSec, value: sorted[i].value })
+    // Chỉ vẽ khối cho giá trị khác giá trị nghỉ/mặc định; khoảng "nghỉ" là nền.
+    const isRest = defaultValue !== undefined
+      ? sorted[i].value === defaultValue
+      : !isActiveValue(sorted[i].value, valueType)
+    if (!isRest && endSec > startSec) {
+      const last = blocks[blocks.length - 1]
+      if (last && last.endSec === startSec && last.value === sorted[i].value) {
+        last.endSec = endSec
+      } else {
+        blocks.push({ startSec, endSec, value: sorted[i].value })
+      }
     }
   }
   return blocks
@@ -164,7 +182,7 @@ export function blockToTimeValues(
     return s < startSec || s > endSec
   })
   kept.push({ time: secondsToTime(startSec), value })
-  if (endSec < 86_400) kept.push({ time: secondsToTime(endSec), value: defaultValue })
+  if (endSec < 86_400 && defaultValue !== value) kept.push({ time: secondsToTime(endSec), value: defaultValue })
   return sortTimeValues(kept)
 }
 

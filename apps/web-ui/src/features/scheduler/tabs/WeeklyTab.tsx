@@ -6,7 +6,7 @@ import type { ScheduleDayKey, ScheduleObject, ScheduleTimeValue, ScheduleValue }
 import { cn } from '../../../shared/utils'
 import {
   DAY_KEYS, DAY_LABELS, EM_DASH, activeValue, blockToTimeValues, dayToBlocks,
-  formatValue, isActiveValue, removeBlockFromDay, secondsToTime, shortTime, sortTimeValues, timeToSeconds,
+  formatValue, isActiveValue, oppositeValue, removeBlockFromDay, secondsToTime, shortTime, sortTimeValues, timeToSeconds,
   type TimeBlock
 } from '../shared'
 
@@ -55,7 +55,7 @@ export function WeeklyTab({
   } | null>(null)
 
   const defaultValue = draft.schedule_default.value
-  const onValue = activeValue(draft.value_type)
+  const onValue = oppositeValue(defaultValue, draft.value_type)
 
   const setDay = (day: ScheduleDayKey, events: ScheduleTimeValue[]) => {
     onChange({ weekly_schedule: { ...draft.weekly_schedule, [day]: sortTimeValues(events) } })
@@ -97,7 +97,52 @@ export function WeeklyTab({
     }
   }
 
-  function removeEvent(day: ScheduleDayKey, index: number) {
+    function addSpan(
+    anchorDay: ScheduleDayKey,
+    anchorSec: number,
+    currDay: ScheduleDayKey,
+    currSec: number,
+    val = onValue
+  ) {
+    const aIdx = DAY_KEYS.indexOf(anchorDay)
+    const cIdx = DAY_KEYS.indexOf(currDay)
+    if (aIdx === cIdx) {
+      const start = Math.min(anchorSec, currSec)
+      const end = Math.max(anchorSec, currSec)
+      if (end - start >= STEP_SEC) {
+        addBlock(anchorDay, start, end, val)
+      }
+      return
+    }
+
+    const minIdx = Math.min(aIdx, cIdx)
+    const maxIdx = Math.max(aIdx, cIdx)
+    const isForward = aIdx <= cIdx
+    const startSec = isForward ? anchorSec : currSec
+    const endSec = isForward ? currSec : anchorSec
+
+    const weekly = { ...draft.weekly_schedule }
+
+    for (let i = minIdx; i <= maxIdx; i++) {
+      const day = DAY_KEYS[i]
+      let dayEvents = weekly[day]
+      if (i === minIdx) {
+        dayEvents = blockToTimeValues(dayEvents, startSec, 86_400, val, defaultValue)
+      } else if (i === maxIdx) {
+        if (endSec >= STEP_SEC) {
+          dayEvents = blockToTimeValues(dayEvents, 0, endSec, val, defaultValue)
+        }
+      } else {
+        dayEvents = blockToTimeValues(dayEvents, 0, 86_400, val, defaultValue)
+      }
+      weekly[day] = sortTimeValues(dayEvents)
+    }
+
+    onChange({ weekly_schedule: weekly })
+    setActiveDay(currDay)
+  }
+
+function removeEvent(day: ScheduleDayKey, index: number) {
     const next = draft.weekly_schedule[day].filter((_, i) => i !== index)
     setDay(day, next)
     setSelected(null)
@@ -152,6 +197,7 @@ export function WeeklyTab({
           onSelect={(day, index) => { setSelected({ day, index }); setActiveDay(day) }}
           onDayFocus={setActiveDay}
           onAddBlock={addBlock}
+          onAddSpan={addSpan}
           onRemoveBlock={removeBlock}
           onResizeBlock={resizeBlock}
           onMoveBlock={moveBlock}
@@ -226,8 +272,6 @@ export function WeeklyTab({
           }}
           onRemove={(index) => removeEvent(activeDay, index)}
         />
-
-        <KeyboardHelp />
       </section>
 
       {/* Context Menu chuẩn Google Calendar */}
@@ -468,9 +512,10 @@ export function WeeklyTab({
 type DragAction =
   | {
       type: 'create'
-      day: ScheduleDayKey
+      anchorDay: ScheduleDayKey
       anchorSec: number
-      currentSec: number
+      currDay: ScheduleDayKey
+      currSec: number
     }
   | {
       type: 'resize-top'
@@ -502,7 +547,7 @@ type DragAction =
 
 function WeekGrid({
   draft, canEdit, selected, onValue, defaultValue, onSelect, onDayFocus,
-  onAddBlock, onRemoveBlock, onResizeBlock, onMoveBlock, onOpenEditModal, onOpenContextMenu
+  onAddBlock, onAddSpan, onRemoveBlock, onResizeBlock, onMoveBlock, onOpenEditModal, onOpenContextMenu
 }: {
   draft: ScheduleObject
   canEdit: boolean
@@ -512,6 +557,7 @@ function WeekGrid({
   onSelect: (day: ScheduleDayKey, index: number) => void
   onDayFocus: (day: ScheduleDayKey) => void
   onAddBlock: (day: ScheduleDayKey, startSec: number, endSec: number) => void
+  onAddSpan: (anchorDay: ScheduleDayKey, anchorSec: number, currDay: ScheduleDayKey, currSec: number) => void
   onRemoveBlock: (day: ScheduleDayKey, startSec: number, endSec: number) => void
   onResizeBlock: (day: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) => void
   onMoveBlock: (fromDay: ScheduleDayKey, toDay: ScheduleDayKey, oldStart: number, oldEnd: number, newStart: number, newEnd: number, val: ScheduleValue) => void
@@ -519,6 +565,23 @@ function WeekGrid({
   onOpenContextMenu: (e: React.MouseEvent, day: ScheduleDayKey, block?: TimeBlock, timeSec?: number) => void
 }) {
   const nowPct = useNowPercent(draft.timezone)
+  function getDayFromX(clientX: number): ScheduleDayKey | null {
+    for (const day of DAY_KEYS) {
+      const el = dayColRefs.current[day]
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      if (clientX >= rect.left && clientX <= rect.right) {
+        return day
+      }
+    }
+    const firstCol = dayColRefs.current[DAY_KEYS[0]]
+    if (firstCol && clientX < firstCol.getBoundingClientRect().left) return DAY_KEYS[0]
+    const lastCol = dayColRefs.current[DAY_KEYS[DAY_KEYS.length - 1]]
+    if (lastCol && clientX > lastCol.getBoundingClientRect().right) return DAY_KEYS[DAY_KEYS.length - 1]
+    return null
+  }
+
+
   const dayColRefs = useRef<Record<string, HTMLElement | null>>({})
   const [dragAction, setDragAction] = useState<DragAction | null>(null)
   const [hoverGuide, setHoverGuide] = useState<{ day: ScheduleDayKey; sec: number; y: number } | null>(null)
@@ -536,18 +599,20 @@ function WeekGrid({
     if (!dragAction) return
 
     const handlePointerMove = (e: PointerEvent) => {
-      const elUnder = document.elementFromPoint(e.clientX, e.clientY)
-      const dayColEl = elUnder?.closest<HTMLElement>('[data-day-col]')
-      const hoveredDay = (dayColEl?.dataset.day as ScheduleDayKey) || (dragAction.type === 'move' ? dragAction.targetDay : dragAction.day)
-
-      const refCol = dayColEl || dayColRefs.current[dragAction.type === 'move' ? dragAction.targetDay : dragAction.day]
+      const hoveredDay = getDayFromX(e.clientX)
+      const targetColDay = hoveredDay || (dragAction.type === 'move' ? dragAction.targetDay : (dragAction.type === 'create' ? dragAction.currDay : dragAction.day))
+      const refCol = dayColRefs.current[targetColDay]
       if (!refCol) return
       const sec = yToSec(e.clientY, refCol)
 
       setDragAction((curr) => {
         if (!curr) return null
         if (curr.type === 'create') {
-          return { ...curr, currentSec: sec }
+          return {
+            ...curr,
+            currDay: hoveredDay || curr.currDay,
+            currSec: sec
+          }
         }
         if (curr.type === 'resize-top') {
           const snapped = Math.min(sec, curr.origEndSec - STEP_SEC)
@@ -562,7 +627,7 @@ function WeekGrid({
           const clampedStart = Math.max(0, Math.min(86_400 - curr.duration, Math.round(rawStart / STEP_SEC) * STEP_SEC))
           return {
             ...curr,
-            targetDay: hoveredDay,
+            targetDay: hoveredDay || curr.targetDay,
             currentStartSec: clampedStart
           }
         }
@@ -574,12 +639,18 @@ function WeekGrid({
       setDragAction((curr) => {
         if (curr && canEdit) {
           if (curr.type === 'create') {
-            const start = Math.min(curr.anchorSec, curr.currentSec)
-            const end = Math.max(curr.anchorSec, curr.currentSec)
-            if (end - start >= STEP_SEC) {
-              onAddBlock(curr.day, start, end)
+            const aIdx = DAY_KEYS.indexOf(curr.anchorDay)
+            const cIdx = DAY_KEYS.indexOf(curr.currDay)
+            if (aIdx === cIdx) {
+              const start = Math.min(curr.anchorSec, curr.currSec)
+              const end = Math.max(curr.anchorSec, curr.currSec)
+              if (end - start >= STEP_SEC) {
+                onAddBlock(curr.anchorDay, start, end)
+              } else {
+                onDayFocus(curr.anchorDay)
+              }
             } else {
-              onDayFocus(curr.day)
+              onAddSpan(curr.anchorDay, curr.anchorSec, curr.currDay, curr.currSec)
             }
           } else if (curr.type === 'resize-top') {
             if (curr.currentSec !== curr.origStartSec) {
@@ -614,7 +685,7 @@ function WeekGrid({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [dragAction, canEdit, onAddBlock, onDayFocus, onResizeBlock, onMoveBlock])
+  }, [dragAction, canEdit, onAddBlock, onAddSpan, onDayFocus, onResizeBlock, onMoveBlock])
 
   return (
     <div className="flex gap-1 overflow-x-auto">
@@ -627,7 +698,7 @@ function WeekGrid({
       </div>
 
       {DAY_KEYS.map((day) => {
-        const blocks = dayToBlocks(draft.weekly_schedule[day], draft.value_type)
+        const blocks = dayToBlocks(draft.weekly_schedule[day], draft.value_type, defaultValue)
         const events = sortTimeValues(draft.weekly_schedule[day])
         return (
           <div key={day} className="min-w-[4.5rem] flex-1">
@@ -651,9 +722,10 @@ function WeekGrid({
                 const sec = yToSec(e.clientY, e.currentTarget)
                 setDragAction({
                   type: 'create',
-                  day,
+                  anchorDay: day,
                   anchorSec: sec,
-                  currentSec: sec
+                  currDay: day,
+                  currSec: sec
                 })
               }}
               onDoubleClick={(e) => {
@@ -834,20 +906,58 @@ function WeekGrid({
                 )
               })}
 
-              {/* Ghost block xem trước khi Kéo tạo mới */}
-              {dragAction?.type === 'create' && dragAction.day === day && (
-                <div
-                  className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-80 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-lg backdrop-blur-[1px]"
-                  style={{
-                    top: (Math.min(dragAction.anchorSec, dragAction.currentSec) / 86_400) * GRID_HEIGHT,
-                    height: Math.max(14, (Math.abs(dragAction.currentSec - dragAction.anchorSec) / 86_400) * GRID_HEIGHT)
-                  }}
-                >
-                  <span>
-                    {shortTime(secondsToTime(Math.min(dragAction.anchorSec, dragAction.currentSec)))} – {shortTime(secondsToTime(Math.max(dragAction.anchorSec, dragAction.currentSec)))}
-                  </span>
-                </div>
-              )}
+              {/* Ghost block xem trước khi Kéo tạo mới (hỗ trợ cả kéo qua nhiều ngày) */}
+              {dragAction?.type === 'create' && (() => {
+                const aIdx = DAY_KEYS.indexOf(dragAction.anchorDay)
+                const cIdx = DAY_KEYS.indexOf(dragAction.currDay)
+                const dIdx = DAY_KEYS.indexOf(day)
+                const minIdx = Math.min(aIdx, cIdx)
+                const maxIdx = Math.max(aIdx, cIdx)
+
+                if (dIdx < minIdx || dIdx > maxIdx) return null
+
+                let topSec = 0
+                let botSec = 0
+                let label = ''
+
+                if (minIdx === maxIdx) {
+                  topSec = Math.min(dragAction.anchorSec, dragAction.currSec)
+                  botSec = Math.max(dragAction.anchorSec, dragAction.currSec)
+                  label = shortTime(secondsToTime(topSec)) + ' – ' + shortTime(secondsToTime(botSec))
+                } else {
+                  const isForward = aIdx <= cIdx
+                  const startSec = isForward ? dragAction.anchorSec : dragAction.currSec
+                  const endSec = isForward ? dragAction.currSec : dragAction.anchorSec
+
+                  if (dIdx === minIdx) {
+                    topSec = startSec
+                    botSec = 86_400
+                    label = shortTime(secondsToTime(startSec)) + ' – 24:00'
+                  } else if (dIdx === maxIdx) {
+                    topSec = 0
+                    botSec = endSec
+                    label = '00:00 – ' + shortTime(secondsToTime(endSec))
+                  } else {
+                    topSec = 0
+                    botSec = 86_400
+                    label = 'Cả ngày'
+                  }
+                }
+
+                if (botSec - topSec <= 0) return null
+
+                return (
+                  <div
+                    className="pointer-events-none absolute inset-x-0.5 rounded border-2 border-dashed border-white bg-[var(--c-accent)] opacity-80 z-30 flex items-center justify-center text-[10px] font-semibold text-white shadow-lg backdrop-blur-[1px]"
+                    style={{
+                      top: (topSec / 86_400) * GRID_HEIGHT,
+                      height: Math.max(14, ((botSec - topSec) / 86_400) * GRID_HEIGHT)
+                    }}
+                  >
+                    <span className="truncate px-1">{label}</span>
+                  </div>
+                )
+              })()}
 
               {/* Ghost block xem trước khi Kéo mép trên */}
               {dragAction?.type === 'resize-top' && dragAction.day === day && (
@@ -1066,19 +1176,7 @@ function CopyDayPanel({
   )
 }
 
-function KeyboardHelp() {
-  return (
-    <details className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
-      <summary className="cursor-pointer font-semibold">Thao tác kiểu Google Calendar & Bàn phím</summary>
-      <ul className="mt-2 space-y-1">
-        <li><kbd>Tab</kbd> — chuyển giữa các sự kiện</li>
-        <li><kbd>←</kbd> <kbd>→</kbd> — dời sự kiện 5 phút</li>
-        <li><kbd>Delete</kbd> — xoá sự kiện đang chọn</li>
-        <li>Gõ trực tiếp vào ô giờ để đặt thời điểm chính xác</li>
-      </ul>
-    </details>
-  )
-}
+
 
 function LegendSwatch({ className, label }: { className: string; label: string }) {
   return (

@@ -108,4 +108,39 @@ describe('WeeklyTab Google Calendar interactions', () => {
       })
     })
   })
+
+  it('does not render keyboard help details element', () => {
+    const onChange = vi.fn()
+    render(
+      <I18nProvider>
+        <WeeklyTab draft={mockDraft} canEdit={true} onChange={onChange} />
+      </I18nProvider>
+    )
+
+    expect(screen.queryByText(/Thao tác kiểu Google Calendar/i)).not.toBeInTheDocument()
+  })
+
+  it('renders single block correctly when defaultValue is ACTIVE', () => {
+    const onChange = vi.fn()
+    const activeDraft = {
+      ...mockDraft,
+      schedule_default: { value: 'ACTIVE' },
+      weekly_schedule: {
+        ...mockDraft.weekly_schedule,
+        MON: [
+          { time: '01:55:00', value: 'INACTIVE' },
+          { time: '20:35:00', value: 'ACTIVE' }
+        ]
+      }
+    }
+    render(
+      <I18nProvider>
+        <WeeklyTab draft={activeDraft} canEdit={true} onChange={onChange} />
+      </I18nProvider>
+    )
+
+    expect(screen.getByText('01:55 – 20:35')).toBeInTheDocument()
+    expect(screen.queryByText('20:35 – 23:59')).not.toBeInTheDocument()
+  })
 })
+

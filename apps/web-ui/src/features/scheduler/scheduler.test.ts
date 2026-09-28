@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ScheduleObject, ScheduleTimeValue } from '../../shared/types'
 import { describeDateRule, findExceptionConflicts, previewDateRule, weekNDayOfMonth } from './dateRules'
 import {
-  blockToTimeValues, capacityUsage, dayToBlocks, formatValue, removeBlockFromDay, secondsToTime,
+  blockToTimeValues, capacityUsage, dayToBlocks, formatValue, oppositeValue, removeBlockFromDay, secondsToTime,
   timeToSeconds, weeklySummary
 } from './shared'
 
@@ -88,7 +88,45 @@ describe('biên dịch Start/End ↔ Time-Value', () => {
       { time: '18:00:00', value: 'INACTIVE' }
     ])
   })
+
+  it('khi defaultValue là BẬT (ACTIVE), khối vẽ là TẮT (INACTIVE)', () => {
+    const day: ScheduleTimeValue[] = [
+      { time: '01:55:00', value: 'INACTIVE' },
+      { time: '20:35:00', value: 'ACTIVE' }
+    ]
+    const blocks = dayToBlocks(day, 'BINARY', 'ACTIVE')
+    expect(blocks).toEqual([
+      { startSec: 1 * 3600 + 55 * 60, endSec: 20 * 3600 + 35 * 60, value: 'INACTIVE' }
+    ])
+  })
+
+  it('gộp các đoạn liền nhau có cùng giá trị', () => {
+    const day: ScheduleTimeValue[] = [
+      { time: '08:00:00', value: 'ACTIVE' },
+      { time: '12:00:00', value: 'ACTIVE' },
+      { time: '18:00:00', value: 'INACTIVE' }
+    ]
+    const blocks = dayToBlocks(day, 'BINARY', 'INACTIVE')
+    expect(blocks).toEqual([
+      { startSec: 8 * 3600, endSec: 18 * 3600, value: 'ACTIVE' }
+    ])
+  })
+
+  it('oppositeValue đảo đúng kiểu BINARY, BOOLEAN, REAL', () => {
+    expect(oppositeValue('ACTIVE', 'BINARY')).toBe('INACTIVE')
+    expect(oppositeValue('INACTIVE', 'BINARY')).toBe('ACTIVE')
+    expect(oppositeValue(true, 'BOOLEAN')).toBe(false)
+    expect(oppositeValue(false, 'BOOLEAN')).toBe(true)
+    expect(oppositeValue(1, 'REAL')).toBe(0)
+    expect(oppositeValue(0, 'REAL')).toBe(1)
+  })
+
+  it('blockToTimeValues không tạo mốc trùng khi value trùng defaultValue', () => {
+    const day = blockToTimeValues([], 8 * 3600, 17 * 3600, 'ACTIVE', 'ACTIVE')
+    expect(day).toEqual([{ time: '08:00:00', value: 'ACTIVE' }])
+  })
 })
+
 
 describe('tóm tắt lịch tuần cho cột hẹp', () => {
   const weekly = {
