@@ -1,8 +1,8 @@
 # Thiết kế đề xuất: dùng chung khung slot cho lời gọi FUNCTION đã kết thúc
 
 > **Document ID:** SW-ST-FN-FRAME-SHARING-MK-DDC-24-VI
-> **Phiên bản:** 0.1
-> **Trạng thái:** Proposed — chờ Compiler Lead duyệt (đổi layout artifact); **chưa code**
+> **Phiên bản:** 0.2
+> **Trạng thái:** **Accepted + Implemented 2026-09-28** — chủ dự án chấp thuận Q1–Q4 đúng theo đề xuất (§6); hiện thực và số đo ở §7
 > **Issue:** [#799](https://github.com/Mekong-HCM/MK-DDC-24/issues/799) (finding **U-08** của
 > [`REC-DDC-FIELD-USE-20260927`](../../07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md))
 > **Mốc mã nguồn đối chiếu:** `main@9910b88` (2026-09-28)
@@ -107,10 +107,22 @@ nâng trần khi số đo trên target cho thấy còn dư RAM.
 | Q3 | Nâng `kMaxWritableSlots` trong cùng đợt hay tách riêng | Tách riêng, sau số đo |
 | Q4 | Có cần cờ compiler để tắt dùng chung khung khi chẩn đoán | Không; differential test thay cho cờ |
 
-Tài liệu này **không** thay chữ ký cho Q1–Q4.
+Chủ dự án chấp thuận cả bốn câu theo đúng cột "Đề xuất" ngày 2026-09-28 (ghi ở
+`DECISIONS.md` mục Lịch sử cập nhật gần nhất).
+
+## 7. Kết quả hiện thực
+
+| Mục | Kết quả |
+|---|---|
+| Mã | `apps/core/application/st/st_compile.cpp`: `allocate_frame_slot` cấp khung sau vùng tạm (`frame_base_`/`frame_top_`), trả khung khi lời gọi kết thúc; kết quả chép ra `push_temp()` của người gọi; biến khung không vào `out_->variables` (loader cấm hai biến cùng slot) |
+| T-799-1/2 | `StFunctionFrame.NestedCallsOfTheSameFunctionDoNotClobberArguments`, `ThreeLevelNestingAndCallsInsideConditions` (chạy thật trên runtime, artifact ký). Với bản dùng chung khung nhưng **bỏ** bước chép kết quả, cả hai đỏ — chứng minh test bắt đúng bẫy ở §3 mục 3 |
+| T-799-3 | `mkddc-st-sim` chạy `PRG_DO16_MODBUS` 300 s ảo (3 001 chu kỳ, 163 lần đổi đầu ra DO, AUTO → khoá kênh → đảo chiều → STAGING → MANUAL → mất `InPermit`): CSV bản cũ và bản mới **giống hệt từng byte** |
+| T-799-4 | `--check-only` `PRG_DO16_MODBUS`: slot ghi **467 → 433** (−34), tổng slot 553 → 519; lệnh 1 576 → 1 587 (+1 `MOV` mỗi lời gọi). Phần còn lại chủ yếu là trạng thái instance FB (16 × `FB_DO_CHANNEL`), không dùng chung được theo §2 |
+| T-799-5 | Không golden artifact nào chứa lời gọi FUNCTION người dùng: `ctest` 1 661/1 661 và `verify_programming_g1_contracts.py` PASS không cần re-pin. Q3: `kMaxWritableSlots` giữ 512 |
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.2 | 2026-09-28 | Chủ dự án chấp thuận Q1–Q4; hiện thực ngăn xếp khung FUNCTION; §7 số đo và test |
 | 0.1 | 2026-09-28 | Bản đề xuất đầu tiên cho Issue #799 (U-08): hiện trạng cấp slot đối chiếu `main@9910b88`, ngăn xếp khung FUNCTION, bẫy `f(f(x), f(y))` và cách tránh, ảnh hưởng artifact, test đóng Issue, câu hỏi duyệt |
