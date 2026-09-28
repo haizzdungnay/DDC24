@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Added — Kiểm Issue #827 trên bo lab: Program tự chạy lại sau restart Core/reboot, không FAULT; mở #833 và #832 (U-22, 2026-09-28)
+
+- **Phạm vi:** chỉ tài liệu và bằng chứng, không đổi mã.
+  - Hồ sơ mới `docs/07_records/test-evidence/programming/2026-09-28-startup-input-wait-target.md` (`EV-PROG-STARTUP-WAIT-827-TARGET` 1.0) kèm fixture `fixtures/2026-09-28-startup-input-wait-827/`: bộ lấy mẫu, bộ phân tích, kết quả từng lần đo, read-back manifest.
+  - Cập nhật `DEPLOY_FOXLINX.md` (mục Lưu ý), `.claude/skills/foxlinx-deploy/SKILL.md`, `GUIDE-PROG-ST-DO16-001` 1.13, `REC-DDC-FIELD-USE-20260927` 2.3 và `EV-PROG-TRACE-798-TARGET` §5.1.
+- **Deploy `main@265f1a8b` lên bo** (12:08–12:18Z):
+  - `mkddc-core` khoá RELEASE `2fb77aa42e7fe446`, sha `3799ff33…`;
+  - `mkddc-web` sha `1e0a8be8…`, dựng từ bản clone thường (`vcs.revision=265f1a8b`, `modified=false`); cả ba unit chạy cùng binary;
+  - FE `index.html` `3f77bcef…`, dựng bằng `build:release` với cờ V2;
+  - iobus và tool ST giữ `4c49e78b` (profile `a4396636…` trùng web, toolchain `ok`).
+
+  `deploy-record` ghi 3 mục, giữ 5; `readback` **11 kiểm, 0 lệch** (sau reboot vẫn 11/0). Sao lưu ở `/data/mkddc/deploy-backups/20260928T120830Z-main-265f1a8b/`, gồm cả FE của máy `192.168.1.42` (thay lúc 09:40Z) mà lượt này ghi đè theo đề bài.
+- **T1 — chỉ restart Core, web chạy, 3 lần: PASS.**
+  - Chuỗi trạng thái: `DISABLED` → `WAITING` + `INPUT_NOT_READY` (3 / 11 / 38 mẫu ở nhịp 200 ms) → tự `RUNNING`.
+  - Program chạy lại (lệnh FC15 đầu tiên) sau **3,58 / 5,01 / 10,64 s** tính từ lệnh restart (min / trung vị / max), tức 1,74 / 3,22 / 8,79 s tính từ lúc Core sẵn sàng. Pha chờ kết thúc đúng lúc vòng đối chiếu VP 10 s đẩy 9 VP.
+  - `faultCount` 0, không thao tác tay.
+  - UI thật (Chrome DevTools MCP) hiện "Chờ đầu vào" kèm "tự chạy khi đầu vào GOOD; lỗi sau 60 s".
+- **T2 — dừng web, restart Core, chờ 75 s: PASS phần trạng thái.**
+  - Core giữ Program `DISABLED`, `enabled=false` suốt 75 s (301 mẫu đọc thẳng `point_snapshot`); không `WAITING`, không FAULT.
+  - Bật web thì `RUNNING` sau **0,53 s**, vì web đẩy VP ngay lúc khởi động, trước cả khi HTTP listen.
+  - REST: 257/257 mẫu `RUNNING`, health 6/6.
+- **T3 — reboot cả bo (chủ bo cho phép): PASS phần trạng thái.**
+  - Program chạy lần đầu ở 11,23 s kể từ lúc kernel khởi động: **3,28 s** sau `Network is Online`, 0,57 s sau `core.ready`, 16,8 s sau lệnh reboot. Không thao tác tay; `faultCount` 0.
+  - Trạng thái trung gian trước 17,5 s không lấy mẫu trực tiếp được: bộ lấy mẫu dạng unit systemd chạy lúc khởi động bị từ chối vì là cơ chế tồn tại qua reboot, và đã gỡ trước khi reboot.
+- **T2b** (ngưỡng 60 s trên bo) **NOT_RUN**: không có cách giữ một VP đã bind ở BAD mà không đổi dữ liệu vào hay cấu hình của người dùng. Thay bằng test host chạy lại trên `265f1a8b`: `cmake --fresh` (Modbus + BACnet + HMI ON) CFG_EXIT=0, BUILD_EXIT=0, `ProgrammingStartupInputWait.*` **8/8 PASS**.
+- **Phát hiện, mở Issue, chưa sửa** (đề bài không sửa mã):
+  - [#833](https://github.com/Mekong-HCM/MK-DDC-24/issues/833): relay Modbus đang đóng **giữ nguyên trạng thái cuối** trong khoảng chờ — 77 s ở T2, qua cả reboot ở T3 — không về "Giá trị an toàn" 0, dù Core báo `safeState=true`. Không lần nào đóng mới một relay. Lệch `DDD-CTRL-PROG-001` §5 và dòng `Controller/Core Fault` của #384.
+  - [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832): `restartPolicy: initial` bị bỏ qua với VP `multistate`, vì `sameVirtualPointValue` so chuỗi rỗng. `DO16_MODE` vẫn 10 (AUTO) sau bốn lần web khởi động, kể cả reboot. Tái hiện host bằng test tạm: `reset=0 value=10`.
+  - Đã bình luận số đo vào #830 (mốc "trước" cho Q6) và #384.
+- **Sau lượt đo:** Active `0c29f4f1…` không đổi, `PRG_DO16_MODBUS` `RUNNING`, health 6/6, Programming `READY`, cấu hình 12 VP không đổi. Task: 0 overrun, 0 lỡ release, jitter tối đa 28 µs. Không phải Disable → Enable lần nào.
+- **Kiểm chứng tài liệu:** `docs_iso_harness --expect` và `verify-project.sh --component layout` (số đo ở PR).
+- **Refs:** Issue #827, #831, #832, #833, #830, #384, `REC-DDC-FIELD-USE-20260927` U-22.
+
 ### Fixed — Core khởi động không còn làm Program có đầu vào Virtual Point FAULTED `ST-RT-008`: chờ đầu vào có ngưỡng 60 s (Issue #827, U-22, 2026-09-28)
 
 - **Phạm vi:** Core `apps/core/application/st/st_scheduler.{hpp,cpp}` (`StWaitingReason`, `st_input_wait::kFaultThresholdMs`, `input_bad_since_ns`), `st_process_image.{hpp,cpp}` (chính sách rút), `st_runtime_snapshot.cpp` + `domain/graph/runtime_point_snapshot.{hpp,cpp}` (`waitingReason` trong IPC `point_snapshot`; Task không báo `STOPPED` khi Program `WAITING`); test mới `application/programming/tests/test_programming_startup_input_wait.cpp` (8 ca) và 4 ca sửa trong `test_st_integration.cpp`. web-api `internal/app/{dto.go,programming_pointcatalog.go}`, `internal/programming/application/{monitor.go,programs.go}` + test. OpenAPI **1.50.0 → 1.51.0** (`ProgrammingProgramWaitingReason`, `ProgrammingProgramListItem.waitingReason`), re-pin `g1_contract_join_v1.json` + `pgm02_workspace_v1.json`, sinh lại client FE. FE `overviewViewModel.ts`, `ProgramsSummaryTable.tsx` ("Chờ đầu vào"/"Chờ tín hiệu") + test. Tài liệu `DDD-CTRL-PROG-001` 1.7 §5/§9, `DECISIONS.md`, `REC-DDC-FIELD-USE` 2.2 (U-22), `EV-PROG-TRACE-798-TARGET` §5.1 (ghi chú cập nhật), `DEPLOY_FOXLINX.md` mục Lưu ý, skill `foxlinx-deploy`, guide 16 DO 1.12 §9.6.
