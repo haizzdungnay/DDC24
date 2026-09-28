@@ -28,6 +28,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -281,24 +282,36 @@ TEST(StLibraryConformance, NoVectorTargetsAnEntryOutsideTheRegistry)
  * từ đường production. Không có test này, một call site quên truyền options mặc
  * định sẽ biến bộ conformance thành đường vòng qua review gate — đúng thứ mà
  * chính review gate tồn tại để chặn. */
-TEST(StLibraryConformance, ProductionFbdEntryPointStillBlocksReviewGatedEntries)
+/* Issue #802: đường FBD vẫn HỎI review gate (bảng giả chặn PID thì bị chặn đúng
+ * mã), nhưng với bảng production — PID đã ký token — đường mặc định dựng được.
+ * Tên cũ `ProductionFbdEntryPointStillBlocksReviewGatedEntries` khẳng định trạng
+ * thái "PID bị chặn"; nay phần cơ chế giữ nguyên, phần trạng thái đảo theo profile. */
+TEST(StLibraryConformance, FbdEntryPointEnforcesReviewGateAndAcceptsApprovedPid)
 {
     const json contract = read_contract();
     const json* pid_trace = nullptr;
     for (const auto& trace : contract["stateTraces"])
         if (trace["typeRef"] == "PID") pid_trace = &trace;
-    ASSERT_NE(pid_trace, nullptr) << "corpus phải có trace cho entry bị gate";
+    ASSERT_NE(pid_trace, nullptr) << "corpus phải có trace cho entry review-gated";
 
     const std::string source = make_trace_graph(*pid_trace).dump();
-    const FbdCompileResult blocked = compile_fbd_source(source);
-    EXPECT_FALSE(blocked.ok) << "đường production KHÔNG được tự mở review gate";
+    StCompileOptions gated;
+    gated.review_gate_blocks = [](std::string_view feature_id) { return feature_id == "PID"; };
+    const FbdCompileResult blocked = compile_fbd_source(source, gated);
+    EXPECT_FALSE(blocked.ok) << "đường FBD phải hỏi review gate, không tự mở";
     ASSERT_FALSE(blocked.issues.empty());
     EXPECT_EQ(blocked.issues[0].code, std::string(st_diag_code::kPidApprovalMissing));
 
+    const FbdCompileResult production = compile_fbd_source(source);
+    EXPECT_TRUE(production.ok)
+        << "PID đã ký token (EV-PROG-PID-APPROVAL-20260928) — đường production phải dựng được: "
+        << (production.issues.empty() ? "không có issue" : production.issues[0].code);
+
     StCompileOptions harness;
     harness.enforce_review_gate = false;
+    harness.review_gate_blocks = gated.review_gate_blocks;
     EXPECT_TRUE(compile_fbd_source(source, harness).ok)
-        << "đường conformance phải dựng được, nếu không thì không có evidence để mở gate";
+        << "đường conformance phải dựng được bất kể trạng thái token";
 }
 
 TEST(StLibraryConformance, EveryStatefulEntryMatchesCycleByCycleInStAndFbd)

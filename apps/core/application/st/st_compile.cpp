@@ -1280,7 +1280,7 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
                               options.program_identity, bag)) return false;
     if (options.enforce_review_gate) {
         for (const auto& pou : owned)
-            if (!st_review_gate_check(*pou, target)) return false;
+            if (!st_review_gate_check(*pou, target, options.review_gate_blocks)) return false;
     }
     StFbLayoutResult fb_layout;
     if (!st_plan_fb_instance_layout(sources, library, &fb_layout, target)) return false;
@@ -1366,7 +1366,8 @@ bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic*
     if (!parse_st_program(source, &prog, diag, bag)) return false;
     if (options.published_signals.empty() && options.program_identity.empty()) {
         if (!typecheck_st_program(&prog, diag, bag)) return false;
-        if (options.enforce_review_gate && !st_review_gate_check(prog, diag))
+        if (options.enforce_review_gate &&
+            !st_review_gate_check(prog, diag, options.review_gate_blocks))
             return add_and_fail(bag, diag);
         if (!compile_st_to_ir(prog, source, out, diag)) return add_and_fail(bag, diag);
         return true;
@@ -1377,7 +1378,8 @@ bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic*
     if (!typecheck_st_pou_set(sources, registry, diag, options.published_signals,
                               options.program_identity, bag))
         return false;
-    if (options.enforce_review_gate && !st_review_gate_check(prog, diag))
+    if (options.enforce_review_gate &&
+        !st_review_gate_check(prog, diag, options.review_gate_blocks))
         return add_and_fail(bag, diag);
     if (!compile_st_to_ir_linked(prog, source, sources, registry, out, nullptr,
                                  diag, options))

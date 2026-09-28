@@ -766,7 +766,8 @@ FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOpti
 
     /* FBD đi cùng một chính sách Check với ST. Nếu chỉ ST bị gate thì vẽ PID
      * bằng FBD trở thành đường vòng hợp lệ. */
-    if (options.enforce_review_gate && !st_review_gate_check(program, &diagnostic)) {
+    if (options.enforce_review_gate &&
+        !st_review_gate_check(program, &diagnostic, options.review_gate_blocks)) {
         add_issue(&result.issues, diagnostic.code.c_str(), "$.reviewGate");
         return result;
     }
