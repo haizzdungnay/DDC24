@@ -1,7 +1,7 @@
 # Lộ trình thư viện chuẩn ST — làm gì, không làm gì, vì sao
 
 > **Document ID:** SW-ST-LIB-ROADMAP-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-09-02
+> **Phiên bản:** 1.1 | 2026-09-28 (Issue #802: `PID` đã được duyệt)
 > **Nguồn quyết định:** `ADR-054` điểm 3 — chữ ký chủ sở hữu 2026-08-31.
 > **Issue:** [#368](https://github.com/Mekong-HCM/MK-DDC-24/issues/368) (`ISS-STED-17`)
 
@@ -38,7 +38,7 @@ pháp/ngữ nghĩa ngôn ngữ**, **không** áp cho thư viện điều khiển
 
 | Khối | Vì sao giữ |
 |---|---|
-| `PID` | Khối điều khiển cốt lõi của DDC. Giữ nguyên cùng cổng review Controls/Safety (`ST-PID-001`, `st_review_gate_check`) — cổng **không đổi** |
+| `PID` | Khối điều khiển cốt lõi của DDC. Giữ nguyên cùng cổng review Controls/Safety (`ST-PID-001`, `st_review_gate_check`) — cổng **không đổi**. Controls/Safety đã duyệt 2026-09-28 (Issue #802), profile mang token, `PID` dùng được |
 | `HYSTERESIS` | So sánh có nhớ; ca dùng HVAC phổ biến |
 | `SCALE` | Quy đổi tuyến tính raw ↔ engineering |
 | `DEADBAND` | Vùng chết quanh setpoint |
@@ -108,3 +108,10 @@ Bảng §3.1 là **đề xuất ưu tiên**, không phải cam kết lịch. M�
 vẫn cần issue riêng với thiết kế ngữ nghĩa của nó — đặc biệt `MUX` (arity thay
 đổi) và `CTUD` (`LD` và `PV` cùng lúc), hai chỗ dễ chọn sai ngữ nghĩa mà vẫn
 chạy được.
+
+## Lịch sử sửa đổi
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.1 | 2026-09-28 | Bảng mở rộng nhà sản xuất: `PID` đã được Controls/Safety duyệt (Issue #802) |
+| 1.0 | 2026-09-02 | Bản đầu theo `ADR-054` điểm 3 |

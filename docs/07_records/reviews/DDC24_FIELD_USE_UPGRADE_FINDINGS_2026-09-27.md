@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 1.9 |
+| Phiên bản | 2.0 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
@@ -51,7 +51,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | U-10 | P2 | Ngôn ngữ ST | Thiếu ARRAY/STRUCT, toán tử bit trên số nguyên, `VAR CONSTANT`, giá trị khởi tạo, phép nhân TIME | #367 (ARRAY/STRUCT/VAR_IN_OUT, đã thêm bằng chứng); phần còn lại #800. Cần duyệt `DDD-LANG-PROG-001` |
 | U-11 | P3 | Compiler | Nhãn CASE bị bung thành tập giá trị, nên dải lớn bị từ chối | **Đã sửa ở PR #803, đã merge**; `DDD-LANG-PROG-001` 1.3 ghi lại luật trần theo số nhãn (PR #804). Tool ST mới đã deploy lên bo 2026-09-28: `--check-only` trên bo nhận `16..32767:` |
 | U-12 | P2 | Thư viện hệ thống | Thiếu khối DDC thường dùng; tự viết thì dễ sai (phiên này mắc 4 lỗi trong các khối tự viết) | Cần duyệt đặc tả khối (DDD-CTRL §7A): #801 |
-| U-13 | P1 | Sản phẩm | `PID` bị cổng review chặn, nên không Program nào dùng được vòng PID | Chờ quyết định Controls/Safety + Product: #802 |
+| U-13 | P1 | Sản phẩm | `PID` bị cổng review chặn, nên không Program nào dùng được vòng PID | **Đã làm** (#802): Controls/Safety duyệt, token ký cho `rev-a.6`, PID dùng được |
 | U-14 | P3 | API | Sai `baseRevisionId` khi PATCH Draft chỉ nhận `409` chung chung | **Đã sửa ở PR #797, đã merge** |
 | U-15 | P3 | API | `upsertObject` thay cả object, dễ xoá mất biến và binding khi chỉ muốn sửa mã | **Đã sửa ở PR #803, đã merge**: op `replaceProgramSource` đã có sẵn nhưng chưa được kiểm; nay nhận `objectId` theo hợp đồng và có test |
 | U-16 | P3 | Công cụ | CLI biên dịch đòi khoá ký cả khi chỉ kiểm cú pháp; chưa có công cụ mô phỏng Program cho người viết | **Đã làm ở PR #803, đã merge**: `--check-only` và công cụ host `mkddc-st-sim` (chạy package theo kịch bản trên đúng engine SIMULATE, xuất CSV) |
@@ -151,6 +151,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 **U-13 — `PID` bị chặn (P1, quyết định sản phẩm).**
 - `st_profile_generated.hpp:68` đánh dấu `PID` là `REVIEW_REQUIRED` và chưa được duyệt, nên Check từ chối mọi Program dùng `PID`. Với bộ điều khiển DDC cho HVAC, vòng PID là chức năng lõi.
 - *Đề xuất:* hoàn tất review Controls/Safety và ký token, hoặc công bố lộ trình. Trong lúc chờ, ghi rõ trong tài liệu người dùng.
+- *Trạng thái (2026-09-28):* **đã làm** ở Issue #802 — chủ dự án chọn phương án 1, duyệt ngưỡng override 1 %, `iMin/iMax` dùng chung biên output, hành vi fault và freeze khi override; token `3c527219…` cho `rev-a.6` trong profile. Check nhận `PID` trên ST/FBD; API thư viện và palette FBD trả `AVAILABLE`. Bằng chứng HOST [`EV-PROG-PID-APPROVAL-20260928`](../test-evidence/programming/2026-09-28-pid-approval-evidence.md); vòng kín với AO thật trên bo NOT RUN.
 
 ### 3.4 API, công cụ, tài liệu, vận hành
 
@@ -194,7 +195,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Ngay | Merge #795 (U-01); U-02 + U-03 (Trace trung thực); U-05; U-14; U-17; U-21 | Lỗi đúng/sai hoặc gây hiểu nhầm, sửa nhỏ, rủi ro thấp |
 | Sprint kế | U-07 (gộp FC15; đánh thức theo sự kiện đã có từ G7); U-06; U-15; U-16 (`--check-only`); U-18; U-09 | Tăng hiệu năng I/O mở rộng và năng suất người viết chương trình |
 | Trung hạn | #367 + toán tử bit + `VAR CONSTANT` (U-10); U-08; U-12 (khối DDC trong thư viện SYSTEM); U-11; U-04; `mkddc-st-sim` (U-16) | Thay đổi ngôn ngữ/compiler, cần thiết kế và review |
-| Cần quyết định sản phẩm | U-13 (duyệt `PID`); U-20 (#384) | Thuộc thẩm quyền Controls/Safety và Product |
+| Cần quyết định sản phẩm | U-13 (duyệt `PID` — **đã làm** #802); U-20 (#384) | Thuộc thẩm quyền Controls/Safety và Product |
 | Theo dõi | U-19 | Chưa tái hiện |
 
 ## 5. Tiến độ xử lý
@@ -209,6 +210,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Thiết kế đã duyệt | U-08 dùng chung khung FUNCTION | #799 | **Đã làm**: `PRG_DO16_MODBUS` slot ghi 467 → 433; mô phỏng 3001 chu kỳ cũ/mới giống hệt; ctest 1661/1661 |
 | Thiết kế đã duyệt | U-10 toán tử bit, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số | #800 | **Đã làm**: SYSTEM `rev-a.5`, hồ sơ ngôn ngữ 1.1.0; `FB_MASK_SPLIT` viết lại bằng `AND`, mô phỏng 3001 chu kỳ giống hệt bản trên bo |
 | Thiết kế đã duyệt | U-12 khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS`/`BITS_TO_WORD`/`UPTIME` | #801 | **Đã làm**: SYSTEM `rev-a.6`, hồ sơ ngôn ngữ 1.2.0; `PRG_DO16_MODBUS` bản khối SYSTEM lệnh IR 1 525 → 792; mô phỏng 3001 chu kỳ chỉ khác nhịp STAGING (đúng `STAGE_DELAY`); 4 lỗi hiện trường có test tái hiện |
+| Quyết định sản phẩm | U-13 duyệt `PID` | #802 | **Đã làm**: phương án 1 của `REC-PID-DECISION-REQUEST-20260928`; harness PID 15/15 và vòng kín τ = 5 s 4/4 (hội tụ ±2 % sau 7,0 s, rời bão hoà ngay chu kỳ đầu, vọt lố 1,25 %, override giữ tích phân trôi ≤ 0,00001, OUT lúc nhả 70,90 so với 100 ở phản chứng); token ký cho `rev-a.6`; cơ chế cổng giữ nguyên, test bằng bảng giả. Lớp HOST; AO thật NOT RUN |
 | Thiết kế đã duyệt | U-04 Trace nhất quán theo lần chạy, tách lệnh / đọc lại | #798 | **Đã làm (HOST)**: mẫu Core lấy tại release kèm `releaseSeq`, ô `NOT_RELEASED`; `commandedValue`/`readbackValue`/`readbackAgeMs`, `actualValue` deprecated; OpenAPI 1.47.0. Test Core T-798-1..4 (lệnh đóng, đọc lại mở); kiểm trên bo chờ deploy |
 | Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | #805 | **Xong**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi). Health `ok`, Programming `READY`, toolchain `ok` profile `1cb61fec…`, Active người dùng giữ nguyên, 48/48 điểm Modbus `GOOD` (12 kênh UI cục bộ UI-01..04, UI-09..16 báo `bad`, trạng thái có sẵn trước lượt deploy, ngoài phạm vi), FC15 × 8 ở pha BLINK, 0 khung lỗi |
 
@@ -225,6 +227,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.0 | 2026-09-28 | §2, §3.3, §5: U-13 (#802) đã làm — `PID` được duyệt và dùng được |
 | 1.9 | 2026-09-28 | §5: U-04 (#798) đã làm ở mức HOST |
 | 1.8 | 2026-09-28 | §5: U-12 (#801) đã làm |
 | 1.7 | 2026-09-28 | §5: U-10 (#800) đã làm |

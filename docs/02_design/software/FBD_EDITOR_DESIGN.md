@@ -1,7 +1,7 @@
 # FBD Editor Design — Palette, Interface Node, Inspector
 
 **Document ID:** DDD-FBD-EDITOR-PROG-001
-**Phiên bản:** 1.1
+**Phiên bản:** 1.2
 **Trạng thái:** Active — mở Document Gate #6 (`PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`)
 **Tác giả:** System Engineering, theo Lệnh triển khai CTO/Owner 2026-08-15 (D-02)
 **Phạm vi:** Bổ sung cho `PROGRAMMING_FE_DESIGN.md` §5 "Structured FBD Rev A" —
@@ -86,7 +86,7 @@ chọn kiểu — cố định theo tên hàm.
 
 | typeRef | Port | Cảnh báo bắt buộc |
 |---|---|---|
-| `PID` | SP,PV,KP,KI,KD,OUT_MIN,OUT_MAX,ACTUAL:REAL → OUT:REAL, TRACKING:BOOL | Palette phải hiện badge "Chưa Controls+Safety review — không dùng cho logic sản xuất" cạnh mục này (đúng `ST_SUBSET_SPEC` §6.2 đính chính WP-04); không chặn tạo node (vẫn Implemented, chỉ chưa duyệt), chỉ cảnh báo |
+| `PID` | SP,PV,KP,KI,KD,OUT_MIN,OUT_MAX,ACTUAL:REAL → OUT:REAL, TRACKING:BOOL | Badge "Chưa Controls+Safety review — không dùng cho logic sản xuất" và khoá thêm vào canvas CHỈ khi bảng review gate của profile chưa duyệt (`fbd/palette.ts` → `model/reviewGate.ts`). Từ 2026-09-28 (Issue #802) profile đã ký token cho `PID`: palette trả `AVAILABLE`, không badge |
 
 ---
 
@@ -194,7 +194,8 @@ phím tắt hiện có `Insert/↑↓/Enter/Delete/Alt+↑↓/Ctrl+Z/Y` vẫn ng
       không suy đoán.
 - [x] Không thêm node kind/hàm nào ngoài registry đã đồng bộ ở WP-03.
 - [x] `PID` giữ nguyên trạng thái "Implemented, chưa duyệt production" đúng
-      D-06 — không tự ý nâng cấp badge.
+      D-06 — không tự ý nâng cấp badge. *Cập nhật 2026-09-28:* badge bỏ theo
+      token Controls/Safety trong profile (Issue #802), không phải do sửa tay.
 
 ## 6. Lịch sử sửa đổi
 
@@ -202,3 +203,4 @@ phím tắt hiện có `Insert/↑↓/Enter/Delete/Alt+↑↓/Ctrl+Z/Y` vẫn ng
 |---|---|---|
 | 1.0 | 2026-08-15 | Tạo mới để mở Document Gate #6 (D-02, Plan 56 WP-05/06/07). Palette 9 nhóm, node giao diện INPUT/OUTPUT/CONSTANT, Inspector theo node kind, 3 command mới cho `commands.ts`. |
 | 1.1 | 2026-08-15 | Sửa §3.1: đọc trực tiếp `declare_function_blocks()` phát hiện FB node THỰC RA nhận 2 tham số `instance`/`retained` (bản 1.0 nói "không sửa được gì" — sai). Thêm command `SET_NODE_FB_PARAMS`. |
+| 1.2 | 2026-09-28 | Issue #802: trạng thái chờ review của palette (badge, khoá thêm vào canvas) đọc từ bảng review gate của profile qua `model/reviewGate.ts`; `PID` đã duyệt nên `AVAILABLE`, không badge. |
