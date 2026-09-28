@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.4 |
+| Phiên bản | 1.5 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Controls Lead + Core Lead |
@@ -412,6 +412,37 @@ else:               Q = giữ nguyên chu kỳ trước
 3. `Q` là RETAIN được: sau mất điện, một quạt đang chạy trong vùng trễ phải trở
    lại đúng trạng thái nó đang có, không phải nhảy theo ngưỡng gần nhất.
 
+## 7B. Khối DDC SYSTEM — `RELAY_GUARD`, `STAGER`, `PULSE_GEN`, `WORD_TO_BITS`, `BITS_TO_WORD`, `UPTIME`
+
+Issue #801, registry `rev-a.6`. Đặc tả đầy đủ, bằng chứng hiện trường và câu trả
+lời duyệt Q1–Q5 ở
+[`SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI`](SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md);
+mục này chỉ chốt phần ràng buộc wire/RETAIN như §7A.
+
+| Block | Wire `StFbType` | Vào | Ra | State RETAIN |
+|---|---:|---|---|---|
+| `RELAY_GUARD` | 10 | `CMD:BOOL`, `ENABLE:BOOL`, `MIN_ON:TIME`, `MIN_OFF:TIME` | `Q:BOOL`, `WAITING:BOOL`, `STARTS:DINT` | `STARTS:u32` = 4 B |
+| `STAGER` | 11 | `RUN:BOOL`, `DEMAND:REAL`, `MAX_STAGES:INT`, `STAGE_DELAY:TIME`, `HOLD:BOOL` | `STAGES:INT`, `TARGET:INT`, `MASK:UINT` | số bậc `u8` ≤ 16 = 1 B |
+| `PULSE_GEN` | 12 | `RUN:BOOL`, `T_ON:TIME`, `T_OFF:TIME` | `Q:BOOL`, `TICK:BOOL`, `COUNT:DINT` | `COUNT:u32` = 4 B |
+| `WORD_TO_BITS` | 13 | `IN:UINT` | `B00`…`B15:BOOL` | 1 B dự trữ (codec không nhận kích thước 0) |
+
+1. **Thời gian theo đồng hồ release của Core**, không đếm lần gọi: đổi chu kỳ
+   Program không đổi hành vi. `PULSE_GEN` giữ mốc đảo pha tuyệt đối và cộng dồn;
+   `STAGER` khởi động lại đồng hồ `STAGE_DELAY` ngay tại lần đổi bậc.
+2. **Tham số vô nghĩa là FAULT `ST-RT-006`**: `MAX_STAGES` ngoài 1…16,
+   `T_ON + T_OFF = 0`. `DEMAND` NaN/Inf là `ST-RT-004`.
+3. **Trạng thái ban đầu an toàn**: mọi đầu ra `FALSE`/0; `RELAY_GUARD` phải nghỉ
+   đủ `MIN_OFF` sau cold start trước lần đóng đầu. `ENABLE = FALSE` tắt ngay, bỏ
+   qua `MIN_ON`.
+4. **RETAIN chỉ giữ số đếm quy trình**; `Q` và mốc thời gian không qua restart,
+   nên sau mất điện relay đi lại đường nghỉ tối thiểu.
+5. `BITS_TO_WORD(B00, …, B15) : UINT` là FUNCTION khai triển (như §7A.6) với
+   đúng 16 đối số `BOOL`. `UPTIME() : TIME` là thời gian từ lần thực thi đầu của
+   Program; chỉ gọi được trong PROGRAM/FUNCTION_BLOCK (trong FUNCTION →
+   `ST-POU-002`).
+6. Không bump `targetAbi`: giá trị wire và opcode `UPTIME = 0x56` là bổ sung;
+   loader cũ từ chối artifact dùng chúng (fail-closed).
+
 ## 8. State machine Task
 
 | State | Entry | Event/guard | Next/action |
@@ -584,6 +615,7 @@ thành sự kiện tương thích artifact).
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.5 | 2026-09-28 | §7B: khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS` (wire 10–13), `BITS_TO_WORD`, `UPTIME` — ràng buộc wire/RETAIN/FAULT (Issue #801, registry `rev-a.6`). Host PASS | Core + Controls |
 | 1.4 | 2026-09-27 | §13 và `DD-11`/`DD-13`: ngưỡng `VS-PROG-009` theo `VVP-PROG-001` v2.4 — ≥ 10 chu kỳ mỗi lớp, C1–C4 PASS, missed release = 0 (chủ sở hữu chốt lại sau soak lần 3). Không đổi trạng thái kiểm chứng | Core + Controls |
 | 1.3 | 2026-09-27 | §6 thêm trường hợp đổi gói (F20): instance rời gói khi Commission/Restore/rollback chu kỳ đầu là instance bị rút. Điểm gói mới cũng nắm được bàn giao liên tục (không nhả, không glitch EXT, không tạo lại `no_ctrl`), điểm còn lại rút như Disable (AO/DO về tầng dưới, EXT về `safe_value`). Bỏ dòng "chưa thuộc phạm vi" của F06. Host PASS; target chưa đo | Core + Controls |
 | 1.2 | 2026-09-27 | §13 theo ADR-061: `CTRL-T-001` dùng tập chu kỳ {10…50000} ms trên base step 10 ms với C1–C4; ngưỡng `VS-PROG-009` là 10 000 chu kỳ cho chu kỳ ≤ 5 s, soak 24 h cho 10 s/50 s (X20, chủ sở hữu chốt 2026-09-27). Không đổi trạng thái kiểm chứng | Core + Controls |

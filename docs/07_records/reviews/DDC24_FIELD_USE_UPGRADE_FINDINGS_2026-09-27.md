@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 1.7 |
+| Phiên bản | 1.8 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
@@ -208,6 +208,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Cần thiết kế / quyết định | U-04 #798, U-08 dùng chung slot #799, U-10 #800 + #367, U-12 #801, U-13 #802, U-20 #384 | — | Không tự code: thuộc cổng duyệt ADR-054/`DDD-LANG-PROG-001`/`DDD-CTRL-PROG-001` §7A hoặc quyết định sản phẩm. Ngày 2026-09-28 đã soạn bản thiết kế/đặc tả chờ duyệt: [U-04](../../02_design/software/TRACE_RELEASE_COHERENT_SAMPLING_DESIGN_MK-DDC-24_VI.md), [U-08](../../02_design/software/ST_FUNCTION_FRAME_SHARING_DESIGN_MK-DDC-24_VI.md), [U-10](../../02_design/software/ST_LANGUAGE_BITWISE_CONSTANT_INIT_DESIGN_MK-DDC-24_VI.md), [U-12](../../02_design/software/SYSTEM_DDC_BLOCKS_SPEC_MK-DDC-24_VI.md) và phiếu quyết định [U-13](PID_REVIEW_DECISION_REQUEST_2026-09-28.md); chưa có dòng mã nào |
 | Thiết kế đã duyệt | U-08 dùng chung khung FUNCTION | #799 | **Đã làm**: `PRG_DO16_MODBUS` slot ghi 467 → 433; mô phỏng 3001 chu kỳ cũ/mới giống hệt; ctest 1661/1661 |
 | Thiết kế đã duyệt | U-10 toán tử bit, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số | #800 | **Đã làm**: SYSTEM `rev-a.5`, hồ sơ ngôn ngữ 1.1.0; `FB_MASK_SPLIT` viết lại bằng `AND`, mô phỏng 3001 chu kỳ giống hệt bản trên bo |
+| Thiết kế đã duyệt | U-12 khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS`/`BITS_TO_WORD`/`UPTIME` | #801 | **Đã làm**: SYSTEM `rev-a.6`, hồ sơ ngôn ngữ 1.2.0; `PRG_DO16_MODBUS` bản khối SYSTEM lệnh IR 1 525 → 792; mô phỏng 3001 chu kỳ chỉ khác nhịp STAGING (đúng `STAGE_DELAY`); 4 lỗi hiện trường có test tái hiện |
 | Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | #805 | **Xong**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi). Health `ok`, Programming `READY`, toolchain `ok` profile `1cb61fec…`, Active người dùng giữ nguyên, 48/48 điểm Modbus `GOOD` (12 kênh UI cục bộ UI-01..04, UI-09..16 báo `bad`, trạng thái có sẵn trước lượt deploy, ngoài phạm vi), FC15 × 8 ở pha BLINK, 0 khung lỗi |
 
 Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastProvider` không huỷ timer khi unmount, làm cả bộ vitest exit 1 dù mọi test PASS. Lỗi này đã sửa trong #797.
@@ -223,6 +224,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.8 | 2026-09-28 | §5: U-12 (#801) đã làm |
 | 1.7 | 2026-09-28 | §5: U-10 (#800) đã làm |
 | 1.6 | 2026-09-28 | §5: U-08 dùng chung khung FUNCTION đã làm (#799) |
 | 1.5 | 2026-09-28 | §5: liên kết bản thiết kế/đặc tả chờ duyệt cho U-04 (#798), U-08 (#799), U-10 (#800), U-12 (#801) và phiếu quyết định U-13 (#802); không đổi trạng thái finding |
