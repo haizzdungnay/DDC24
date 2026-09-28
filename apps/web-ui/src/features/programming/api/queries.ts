@@ -3,6 +3,7 @@ import { useProgrammingApiClient } from './authClient'
 import { ProgrammingApiError } from './generated/client'
 import { programmingErrorCopy } from './errorCopy'
 import { useI18n } from '../../../shared/i18n'
+import { startVisibleInterval } from '../../../shared/hooks/visibleInterval'
 import { judgeProducerStamp } from '../runtime/producerStamp'
 import { createLatestRenderBudget, type LatestRenderBudget } from '../runtime/liveRenderBudget'
 import type {
@@ -108,12 +109,13 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0, enabl
       }
     }
     run()
-    const timer = intervalMs > 0 ? window.setInterval(run, intervalMs) : null
+    // T63-108: tab ẩn thì không poll; hiện lại thì đọc bù nếu đã quá nhịp.
+    const stopTimer = intervalMs > 0 ? startVisibleInterval(run, intervalMs) : null
     return () => {
       active.current = false
       generation.current += 1
       rerunAfterFlight.current = false
-      if (timer !== null) window.clearInterval(timer)
+      stopTimer?.()
     }
     // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
     // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
@@ -1112,9 +1114,10 @@ export function useProgrammingRuntimeMonitor(enabled = true): ProgrammingRuntime
       return undefined
     }
     run()
-    const timer = window.setInterval(run, 1000)
+    // T63-108: tab ẩn thì không poll monitor; hiện lại thì đọc bù ngay.
+    const stopTimer = startVisibleInterval(run, 1000)
     return () => {
-      window.clearInterval(timer)
+      stopTimer()
       // Invalidate request đang bay; Promise hoàn tất sau unmount không được
       // cập nhật state hoặc tái hiện snapshot của thế hệ cũ.
       generation.current += 1

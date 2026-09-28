@@ -72,6 +72,69 @@ type OverviewAlarmCounts struct {
 	Info     int `json:"info"`
 	Unacked  int `json:"unacked"`
 	Total    int `json:"total"`
+	// ActiveOrUnacked là SỐ TRÊN CHUÔNG của shell (T63-108): chuông nay đọc
+	// snapshot này thay cho vòng poll `GET /alarms` mỗi giây, nên con số phải
+	// giữ ĐÚNG ngữ nghĩa chuông đã có — xem `countShellBellAlarms`. Không thay
+	// được bằng `Total`: `Total` đếm mọi hàng khác `cleared`, chuông thì không.
+	ActiveOrUnacked int `json:"activeOrUnacked"`
+}
+
+/* countShellBellAlarms đếm như chuông shell đã đếm trước T63-108.
+ *
+ * Chuông cũ chạy ở TRÌNH DUYỆT trên thân `GET /alarms`:
+ *
+ *   (alarm.active ?? (status === 'active' || status === 'acked')) || status === 'unack'
+ *
+ * với `status` qua `alarmStatusFrom` của FE. Điều quyết định là cái chuông
+ * THẤY TRÊN DÂY, không phải struct Go: `AlarmDTO.Active` là `bool` kèm
+ * `omitempty`, nên `active=false` KHÔNG có mặt trong JSON và phía FE nhận
+ * `undefined` ⇒ rơi về nhánh theo `status`. Hệ quả cụ thể: hàng chốt tay đã hết
+ * điều kiện và đã xác nhận (`acked`, `active=false`, chờ `return`) VẪN được
+ * chuông cũ đếm. Hàng mà chuông cũ KHÔNG đếm nhưng `Total` đếm là hàng `shelved`
+ * có `active=false`. Test `TestShellBellCountMatchesTheWireRule` giữ quy tắc
+ * này khớp với chính JSON mà `/alarms` phát ra.
+ *
+ * Danh sách đếm là đúng danh sách `/alarms` trả khi Core đọc được:
+ * `mergeAlarmHistoryRows(…, false)` — bỏ hàng không có ID, ID trùng giữ hàng
+ * sau, không đọc kho lịch sử. Khi Core KHÔNG đọc được, overview gắn `degraded:
+ * alarms` và chuông tự quay về poll `/alarms` (dựng lại từ lịch sử), nên số
+ * này khi đó không được dùng. */
+func countShellBellAlarms(alarms []AlarmDTO) int {
+	count := 0
+	for _, alarm := range alarms {
+		if shellBellCountsAlarm(alarm) {
+			count++
+		}
+	}
+	return count
+}
+
+func shellBellCountsAlarm(alarm AlarmDTO) bool {
+	if alarm.Active {
+		return true
+	}
+	switch shellBellStatus(alarm.Status) {
+	case "active", "acked", "unack":
+		return true
+	}
+	return false
+}
+
+// shellBellStatus chép `alarmStatusFrom` (apps/web-ui/src/shared/api/client.ts):
+// giá trị lạ hoặc rỗng thành `active`, nên cũng được chuông đếm.
+func shellBellStatus(status string) string {
+	s := strings.ToLower(status)
+	switch s {
+	case "unack", "acked", "cleared", "shelved":
+		return s
+	case "acknowledged":
+		return "acked"
+	case "unacknowledged":
+		return "unack"
+	case "clear", "resolved", "normal":
+		return "cleared"
+	}
+	return "active"
 }
 
 // OverviewPointGroup là một hàng của Operating Summary (§7). Không có hàng DI:
@@ -240,6 +303,7 @@ func (a *App) buildOverview(ctx context.Context) OverviewResponse {
 		out.Degraded = append(out.Degraded, "alarms")
 	}
 	out.Alarms = summarizeAlarms(alarms)
+	out.Alarms.ActiveOrUnacked = countShellBellAlarms(a.mergeAlarmHistoryRows(ctx, alarms, false))
 
 	modbus, modbusOK := a.readModbusHealthInput(ctx)
 	if !modbusOK {

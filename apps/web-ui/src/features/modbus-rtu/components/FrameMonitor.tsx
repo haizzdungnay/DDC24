@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
+import { startVisibleInterval } from '../../../shared/hooks/visibleInterval'
 import type { ModbusFramesResponse } from '../../../shared/types'
 import { buttonClass, frameValueText } from '../shared'
 
@@ -52,8 +53,8 @@ export function FrameMonitor({ bus = 0 }: { bus?: number }) {
   useEffect(() => {
     void load()
     if (!live) return undefined
-    const timer = window.setInterval(() => { void load() }, 2000)
-    return () => window.clearInterval(timer)
+    // T63-108: tab ẩn thì không poll khung; hiện lại thì đọc bù ngay.
+    return startVisibleInterval(() => { void load() }, 2000)
     /* Chủ ý chỉ phụ thuộc `bus` và `live`: `load` được dựng lại mỗi render, đưa
        nó vào deps sẽ tạo lại interval liên tục và biến "2 giây một lần" thành
        một vòng poll không kiểm soát. */

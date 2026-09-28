@@ -221,7 +221,40 @@ chỉ khi delta `core.jitter seqlock_fail` trong 2 × 30 phút đo sạch > 0; s
 đo lại (delta phải về 0, `core.step_wcet io_us` tăng ≤ ≈ 20 µs ở phút xấu
 nhất, không có `core.base_step_missed` mới).
 
-## 10. SHA-256
+## 10. T63-108 — nguồn polling của FE và ETag/304 (`PERF-API-03`)
+
+Thư mục `t63-108-host/`. Mức **HOST**: Playwright + Chromium 1194, `mkddc-web`
+build từ cây làm việc, **một tab Dashboard**. Thành phần giả: `/points` trả qua
+`route`, WebSocket giả bằng `routeWebSocket` đẩy mỗi 200 ms, Core giả
+`fake_core.py` (chỉ `alarm_list`). Mọi request khác tới `mkddc-web` thật.
+Playwright tắt cache HTTP khi có `route`, nên 304 đo riêng bằng `measure_304.mjs`
+(không `route`).
+
+| Kiểm | File | Trước (`main@265f1a8b`) | Sau |
+|---|---|---|---|
+| 30 phút, có WS | `m30-{BEFORE,AFTER}-ws.json` | 6.180 GET = 3,433 GET/s | 2.280 GET = 1,267 GET/s (**−63,1 %**) |
+| Tuổi giá trị đang hiển thị p50/p95/max | cùng file | 77 / 189 / 445 ms | 102 / 191 / 327 ms |
+| 60 s, không WS | `m-{BEFORE,AFTER}-poll.json` | 206 GET | 100 GET (−51,5 %) |
+| Tab ẩn | `m30-*.json` → `hidden` | 3,445 GET/s | 0 GET/s |
+| `/alarms` trên trang Cảnh báo, trình duyệt thật | `m304-*.json` | 60 × 200 trong 40 s | 20/20 × 304 kèm `If-None-Match` |
+| CPU server `/alarms`, lịch sử 20.000 sự kiện, Core đọc được | `bench-alarms.json` | 197,9 ms/lượt | 0,5 ms/lượt |
+| Chuông shell sau khi chuyển sang `overview.alarms.activeOrUnacked` | `bell-parity.json` | 2 (poll `/alarms`) | 2 (`total` = 3) |
+| Bản cuối, 60 s | `m-BELL-{ws,poll}.json` | — | 76 GET (có WS) / 100 GET (không WS) |
+| Kiểm đỏ (đột biến phải làm test đỏ) | `red-results-all.json`, `red-results-bell.json` | — | 28/28 đỏ, bản khôi phục xanh |
+
+Lượt đo 30 phút chạy trên bản chuông đọc `total`. Bản cuối đọc `activeOrUnacked`
+và chỉ đo lại 60 s (`m-BELL-*`); số GET theo route giống hệt.
+
+Chạy lại: `MKDDC_WEB_PASSWORD=… node measure_polling2.mjs <url> <nhãn> <out.json>
+<giây> <giây-ẩn> {ws|poll|board}`. Script chỉ lấy credential từ `MKDDC_WEB_USER`
+và `MKDDC_WEB_PASSWORD`. Đường dẫn tuyệt đối trong script là của container đã
+chạy đo. Chế độ `board` không giả gì, cache bật; tuổi giá trị đọc từ ô ghim nên
+máy đo và bo phải cùng NTP.
+
+Trên bo **NOT_RUN** (§3): GET/s 1 tab 30 phút trước/sau, tuổi giá trị, CPU
+`mkddc-web`, 304 qua HTTPS thật, và phân rã khoảng 5,2 request/s theo route.
+
+## 11. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

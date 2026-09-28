@@ -75,3 +75,94 @@ describe('useApi request ordering', () => {
     }
   })
 })
+
+/* T63-108 (PERF-API-03) — tab ẩn thì không poll; hiện lại thì đọc bù ngay nếu
+ * đã quá nhịp; lượt đọc nền không chồng lên một lượt đang bay. */
+describe('useApi polling budget (T63-108)', () => {
+  let visibility: DocumentVisibilityState = 'visible'
+  const setVisibility = (next: DocumentVisibilityState) => {
+    visibility = next
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+  const advance = async (ms: number) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  it('skips poll ticks while the tab is hidden and reads at once when it becomes visible again', async () => {
+    vi.useFakeTimers()
+    visibility = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    try {
+      const fetcher = vi.fn(async () => 'v')
+      renderHook(() => useApi(fetcher, [], { refreshMs: 1000 }))
+      await advance(0)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+
+      act(() => setVisibility('hidden'))
+      await advance(30_000)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+
+      act(() => setVisibility('visible'))
+      await advance(0)
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      await advance(1000)
+      expect(fetcher).toHaveBeenCalledTimes(3)
+    } finally {
+      visibility = 'visible'
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not read again on becoming visible when the last read is still within one interval', async () => {
+    vi.useFakeTimers()
+    visibility = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    try {
+      const fetcher = vi.fn(async () => 'v')
+      renderHook(() => useApi(fetcher, [], { refreshMs: 30_000 }))
+      await advance(0)
+      act(() => setVisibility('hidden'))
+      await advance(5000)
+      act(() => setVisibility('visible'))
+      await advance(0)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {
+      visibility = 'visible'
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not open a second background request while one is still in flight', async () => {
+    vi.useFakeTimers()
+    try {
+      let release!: (value: string) => void
+      const fetcher = vi.fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockImplementationOnce(() => new Promise<string>((resolve) => { release = resolve }))
+        .mockResolvedValue('later')
+      const hook = renderHook(() => useApi(fetcher, [], { refreshMs: 1000 }))
+      await advance(0)
+      expect(hook.result.current.error).toBeInstanceOf(TypeError)
+      await advance(1000) // nhịp poll mở lượt đọc thứ hai, lượt này treo
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      // Hẹn giờ thử lại mất mạng (2 s), sự kiện `online` và các nhịp poll kế tiếp
+      // đều tới trong lúc lượt thứ hai còn bay: không lượt nào được mở request mới.
+      await advance(1000)
+      act(() => { window.dispatchEvent(new Event('online')) })
+      await advance(2000)
+      expect(fetcher).toHaveBeenCalledTimes(2)
+
+      await act(async () => { release('second') })
+      expect(hook.result.current.data).toBe('second')
+      expect(hook.result.current.error).toBeNull()
+      await advance(1000)
+      expect(fetcher).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

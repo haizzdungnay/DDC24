@@ -2,7 +2,6 @@ import { ArrowRight, ChevronRight, Download, ListFilter, Maximize2, Pin, PinOff,
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { apiClient } from '../../shared/api/client'
 import { fetchActivity } from '../../shared/api/overview'
 import { Button } from '../../shared/components/Button'
 import { buildSnapshot, downloadJson, snapshotFilename } from '../../shared/diagnosticsExport'
@@ -19,7 +18,8 @@ import {
   SeverityBadge,
 } from '../../shared/components/pa3/StateAtoms'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { useApi } from '../../shared/hooks/useApi'
+import { useLivePoints } from '../../shared/hooks/useLivePoints'
+import { useSharedPoll } from '../../shared/hooks/useSharedPoll'
 import { useI18n } from '../../shared/i18n'
 import { resolveDrilldown, safeInternalLink } from '../../shared/overview/drilldown'
 import {
@@ -29,7 +29,6 @@ import {
   type OverrideOwner
 } from '../../shared/overview/overrides'
 import { useOverview } from '../../shared/overview/OverviewProvider'
-import { useRealtime } from '../../shared/realtime'
 import type { ActivityEvent, OverviewAttentionItem, OverviewDomainHealth, OverviewResponse, Point, TrendSample } from '../../shared/types'
 import {
   attentionDetailText,
@@ -46,17 +45,21 @@ import {
   formatDateTime,
   formatValue,
   isChannelNotConfigured,
-  isFreshIso,
-  mergePointsById,
   pointDisplayTag,
   pointNumber
 } from '../../shared/utils'
 
-const REALTIME_STALE_MS = 2500
 const MAX_LANDING_TREND_SERIES = 4
 const TREND_SAMPLE_LIMIT = 60
 const trendColors = ['var(--c-accent)', 'var(--c-good-fg)', 'var(--c-warn-fg)', 'var(--c-accent-2)']
-const emptyPoints: Point[] = []
+/* T63-108 (PERF-API-03): nhật ký hoạt động của Landing — một vòng poll cho mỗi
+ * loại, dùng chung giữa các khối (`useSharedPoll`). */
+const DASHBOARD_ACTIVITY_MS = 10_000
+const ACTIVITY_PANEL_ROWS = 12
+const USER_ACTIVITY_KEY = 'dashboard:activity:user:200'
+const SYSTEM_ACTIVITY_KEY = 'dashboard:activity:system:12'
+const fetchUserActivity = () => fetchActivity({ limit: 200, kind: 'user' })
+const fetchSystemActivity = () => fetchActivity({ limit: ACTIVITY_PANEL_ROWS, kind: 'system' })
 
 /**
  * Landing PA3 — Adaptive Hybrid Control Workspace.
@@ -493,18 +496,16 @@ function NumberCell({ value, warn, danger }: { value: number; warn?: boolean; da
  */
 function OverrideOwnershipPanel() {
   const { pick } = useI18n()
-  const realtime = useRealtime()
-  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
+  const pointsState = useLivePoints()
   /* Lấy nhật ký NGƯỜI DÙNG để tìm ai ra lệnh. `limit` kịch trần trang của
      backend (`activityMaxPage = 200`) vì một lệnh ép tay cũ hơn 200 sự kiện sẽ
      không tìm thấy actor — và khi đó cột "Người ra lệnh" hiện `—` kèm lý do,
-     không bịa ra "hệ thống". */
-  const activityState = useApi(useCallback(() => fetchActivity({ limit: 200, kind: 'user' }), []), [], { refreshMs: 10000 })
+     không bịa ra "hệ thống".
+     T63-108: vòng poll này DÙNG CHUNG với tab "Người dùng" của khối Hoạt động
+     (khối đó cắt 12 dòng đầu), thay vì hai vòng `/activity` mỗi 10 s. */
+  const activityState = useSharedPoll(USER_ACTIVITY_KEY, fetchUserActivity, DASHBOARD_ACTIVITY_MS)
 
-  const polled = pointsState.data ?? emptyPoints
-  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
-    ? mergePointsById(polled, realtime.allPoints)
-    : polled
+  const points = pointsState.points
   const owners = useMemo(
     () => collectOverrideOwners(points, activityState.data?.items ?? []),
     [points, activityState.data]
@@ -515,7 +516,7 @@ function OverrideOwnershipPanel() {
      lệnh ép tay. Đây KHÔNG phải "không có lệnh nào": trình bày "không đọc được"
      thành "mọi thứ bình thường" trên màn hình bàn giao ca là lỗi an toàn vận
      hành, cùng họ với `FE-DATA-01`. */
-  const cannotConclude = pointsState.data === null
+  const cannotConclude = pointsState.polled === null
 
   return (
     <Panel
@@ -654,18 +655,14 @@ function writePins(key: string, ids: string[]) {
 function MyWorkspace({ overview }: { overview: OverviewResponse }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const realtime = useRealtime()
-  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
+  const pointsState = useLivePoints()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const storageKey = workspaceKey(overview.controller.deviceName ?? '', session?.username ?? '')
   const [pins, setPins] = useState<string[]>(() => readPins(storageKey))
   useEffect(() => { setPins(readPins(storageKey)) }, [storageKey])
 
-  const polled = pointsState.data ?? emptyPoints
-  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
-    ? mergePointsById(polled, realtime.allPoints)
-    : polled
+  const points = pointsState.points
   const byId = useMemo(() => new Map(points.map((point) => [point.id, point])), [points])
 
   const toggle = useCallback((id: string) => {
@@ -677,7 +674,7 @@ function MyWorkspace({ overview }: { overview: OverviewResponse }) {
   }, [storageKey])
 
   const resolved = pins.map((id) => ({ id, point: byId.get(id) }))
-  const orphans = resolved.filter((item) => !item.point && pointsState.data !== null)
+  const orphans = resolved.filter((item) => !item.point && pointsState.polled !== null)
 
   return (
     <Panel
@@ -786,8 +783,7 @@ const trendPrefsKey = 'mkddc:v1:landing-trend-points'
 function TrendPreview() {
   const { pick } = useI18n()
   const navigate = useNavigate()
-  const realtime = useRealtime()
-  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
+  const { points } = useLivePoints()
   const [selected, setSelected] = useState<string[]>(() => {
     try {
       const raw = window.localStorage.getItem(trendPrefsKey)
@@ -800,10 +796,6 @@ function TrendPreview() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [samples, setSamples] = useState<TrendSample[]>([])
 
-  const polled = pointsState.data ?? emptyPoints
-  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
-    ? mergePointsById(polled, realtime.allPoints)
-    : polled
   const candidates = useMemo(
     () => points.filter((point) => pointNumber(point) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
     [points]
@@ -964,7 +956,18 @@ const activityActionLabels: Record<string, [string, string]> = {
 function ActivityPanel() {
   const { pick } = useI18n()
   const [kind, setKind] = useState<'user' | 'system'>('user')
-  const activity = useApi(useCallback(() => fetchActivity({ limit: 12, kind }), [kind]), [kind], { refreshMs: 10000 })
+  /* T63-108: tab "Người dùng" đọc chung vòng poll 200 sự kiện của khối "Ai đang
+     giữ quyền" (trang trả mới nhất trước, nên 12 dòng đầu y hệt một lần đọc
+     `limit=12`); tab "Hệ thống" có vòng riêng, chỉ chạy khi đang mở tab đó. */
+  const polled = useSharedPoll(
+    kind === 'user' ? USER_ACTIVITY_KEY : SYSTEM_ACTIVITY_KEY,
+    kind === 'user' ? fetchUserActivity : fetchSystemActivity,
+    DASHBOARD_ACTIVITY_MS
+  )
+  const activity = {
+    ...polled,
+    data: polled.data ? { ...polled.data, items: polled.data.items.slice(0, ACTIVITY_PANEL_ROWS) } : null
+  }
 
   return (
     <Panel

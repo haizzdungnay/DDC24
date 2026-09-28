@@ -187,7 +187,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // (nhãn cửa sổ/epoch); không thêm operation Programming.
     // `1.51.0` — Issue #827: `ProgrammingProgramListItem.waitingReason`
     // (INPUT_NOT_READY | SIGNAL_NOT_READY | null); không thêm operation.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.51.0");
+    // `1.52.0` — Plan 63 T63-108: ETag/304 cho `GET /alarms`, `GET /me` và
+    // `Overview.alarms.activeOrUnacked`; không thêm operation Programming.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.52.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

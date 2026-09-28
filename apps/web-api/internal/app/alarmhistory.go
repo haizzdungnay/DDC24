@@ -118,6 +118,14 @@ func (s *AlarmHistoryStore) ListFiltered(ctx context.Context, limit int, filter 
 		capHint = alarmHistoryDefaultLimit
 	}
 	events := make([]AlarmHistoryEvent, 0, capHint)
+	/* T63-108 (PERF-API-03): giữ `limit` sự kiện CUỐI bằng vòng đệm, không dịch
+	 * mảng. Bản trước `copy(events, events[1:])` sau MỖI sự kiện vượt `limit`:
+	 * O(số dòng × limit). Với tệp lịch sử 20 000 dòng và `limit = 1000` (đúng
+	 * mức `/alarms` dùng khi Core im và mức trang Cảnh báo/metrics dùng), đo
+	 * HOST ~190 ms CPU cho MỘT lượt đọc — và tệp này chỉ có thêm, không bao giờ
+	 * ngắn lại. Vòng đệm cho cùng kết quả (cùng các sự kiện, cùng thứ tự) với
+	 * O(số dòng). */
+	head := 0
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -133,14 +141,21 @@ func (s *AlarmHistoryStore) ListFiltered(ctx context.Context, limit int, filter 
 		if !alarmHistoryMatches(event, filter) {
 			continue
 		}
-		events = append(events, event)
-		if limit > 0 && len(events) > limit {
-			copy(events, events[1:])
-			events = events[:limit]
+		if limit > 0 && len(events) == limit {
+			events[head] = event
+			head = (head + 1) % limit
+			continue
 		}
+		events = append(events, event)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan alarm history: %w", err)
+	}
+	if head > 0 {
+		// Phần tử cũ nhất đang ở `head`: xoay về đúng thứ tự trong tệp.
+		ordered := make([]AlarmHistoryEvent, 0, len(events))
+		ordered = append(ordered, events[head:]...)
+		events = append(ordered, events[:head]...)
 	}
 	return events, nil
 }
@@ -517,9 +532,20 @@ func (a *App) mergeAlarmHistoryRows(ctx context.Context, alarms []AlarmDTO, incl
 	if a == nil || a.alarmHistory == nil {
 		return alarms
 	}
-	events, err := a.alarmHistory.ListFiltered(ctx, alarmHistoryMaxLimit, AlarmHistoryFilter{})
-	if err != nil {
-		return alarms
+	/* T63-108 (PERF-API-03): chỉ đọc kho lịch sử khi THẬT SỰ cần dựng lại hàng
+	 * từ lịch sử (`includeMissing` — Core không đọc được). Bản trước đọc trọn
+	 * tệp lịch sử (quét + giải mã JSON từng dòng, giữ 1000 dòng cuối, dưới khoá
+	 * của kho — khoá mà vòng ghi lịch sử mỗi giây cũng cần) ở MỌI lượt
+	 * `GET /alarms`, rồi bỏ đi toàn bộ kết quả vì vòng lặp bên dưới `continue`
+	 * mọi sự kiện khi `includeMissing == false`. `/alarms` là GET bị poll dày
+	 * nhất của trang Cảnh báo (2 s), nên đó là I/O vô ích tỷ lệ với cỡ lịch sử. */
+	var events []AlarmHistoryEvent
+	if includeMissing {
+		var err error
+		events, err = a.alarmHistory.ListFiltered(ctx, alarmHistoryMaxLimit, AlarmHistoryFilter{})
+		if err != nil {
+			return alarms
+		}
 	}
 	byID := make(map[string]AlarmDTO, len(alarms))
 	liveIDs := make(map[string]bool, len(alarms))

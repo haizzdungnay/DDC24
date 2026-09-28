@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Square, TimerReset } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { startVisibleInterval } from '../../../shared/hooks/visibleInterval'
 import { formatTechnicalDateTime, type HmiLocale } from '../../../shared/dateTime'
 import { createUuid } from '../../../shared/crypto'
 import { Panel } from '../../../shared/components/Panel'
@@ -92,10 +93,11 @@ export function WatchTab() {
         }
       )
     }
-    const timer = window.setInterval(poll, 500)
+    // T63-108: tab ẩn thì không poll trace (bản ghi vẫn chạy phía server).
+    const stopTimer = startVisibleInterval(poll, 500)
     return () => {
       active = false
-      window.clearInterval(timer)
+      stopTimer()
     }
   }, [client, pick, runningTraceId])
 

@@ -7,9 +7,11 @@ import {
   readAlarmSoundPreference,
   shouldAnnunciate
 } from '../alarms/annunciation'
+import { useShellAlarms } from '../alarms/useShellAlarms'
 import { apiClient } from '../api/client'
 import { IS_DEMO } from '../config'
 import { useApi } from '../hooks/useApi'
+import { useOptionalOverview } from '../overview/OverviewProvider'
 import { useRealtime } from '../realtime'
 import { useI18n } from '../i18n'
 import { isProgrammingFocusRoute, NavDrawer, NavRail } from './NavRail'
@@ -23,20 +25,25 @@ export function AppShell() {
   const { connectionState } = useRealtime()
   const { session } = useAuth()
   const { t } = useI18n()
-  const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
-  const health = useApi(apiClient.getHealth, [], { refreshMs: 5000 })
+  /* T63-108 (PERF-API-03): số trên chuông đọc từ snapshot overview (1 s) thay
+     cho vòng poll `/alarms` riêng mỗi 1 s; `/alarms` chỉ còn là đường dự phòng
+     khi snapshot không đáng tin cho cảnh báo — xem `useShellAlarms`. */
+  const alarms = useShellAlarms(useOptionalOverview())
+  /* `/system/status` ở đây chỉ để lấy tên thiết bị và firmware cho thanh bên —
+     hai thứ đổi theo lần cấu hình/cập nhật, không theo giây. 5 s → 30 s. */
+  const health = useApi(apiClient.getHealth, [], { refreshMs: 30000 })
   const me = useApi(() => IS_DEMO ? Promise.resolve(session) : apiClient.getMe(), [session], { refreshMs: IS_DEMO ? undefined : 30000 })
   const [navOpen, setNavOpen] = useState(false)
-  const alarmCount = alarms.data?.filter((alarm) => (alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')) || alarm.status === 'unack').length ?? 0
+  const alarmCount = alarms.total
   const currentUser = me.data ?? session
   const programmingWorkspace = location.pathname.startsWith('/eng/programming')
   const programmingFocus = isProgrammingFocusRoute(location.pathname)
 
   useEffect(() => {
-    const refresh = () => { void alarms.refetch() }
+    const refresh = alarms.refresh
     window.addEventListener('mkddc:alarms-updated', refresh)
     return () => window.removeEventListener('mkddc:alarms-updated', refresh)
-  }, [alarms.refetch])
+  }, [alarms.refresh])
 
   /* T57-1.5 / `ADR-034` — annunciation hai lớp.
    *
@@ -49,7 +56,7 @@ export function AppShell() {
    * unack > 0": kêu liên tục suốt ca là cách chắc chắn nhất để người trực tắt
    * tiếng vĩnh viễn, tức là mất hẳn lớp annunciation (ISA-18.2 alarm fatigue).
    */
-  const unacked = alarms.data?.filter((alarm) => alarm.status === 'unack').length ?? 0
+  const unacked = alarms.unacked
   const previousUnackedRef = useRef(-1)
   const toneRef = useRef<AlarmTone | null>(null)
   const [annunciating, setAnnunciating] = useState(false)

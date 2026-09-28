@@ -1,0 +1,7 @@
+{
+  "note": "T63-108 bổ sung — chuông TopBar ở Chromium 1194 thật (không route), Core giả fake_core_bell.py trả 3 hàng",
+  "alarms_wire": [["ALM-1", "unack", true], ["ALM-2", "acked", "<vắng: omitempty>"], ["ALM-3", "shelved", "<vắng: omitempty>"]],
+  "overview_alarms_after": {"unacked": 1, "total": 3, "activeOrUnacked": 2},
+  "bell_badge": {"before_HEAD_265f1a8b_poll_alarms": "2", "after_overview_activeOrUnacked": "2"},
+  "alarms_GET_in_first_4s": {"before": 5, "after": 1}
+}

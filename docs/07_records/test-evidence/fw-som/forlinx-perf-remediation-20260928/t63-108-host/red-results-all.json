@@ -1,0 +1,313 @@
+{
+  "results": [
+    {
+      "mutation": "M1 useApi: bỏ dừng-khi-ẩn + đọc bù",
+      "tests": [
+        "src/shared/hooks/useApi.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 5 passed (6)",
+      "failed": [
+        "skips poll ticks while the tab is hidden and reads at once when it becomes visible again 8ms",
+        "src/shared/hooks/useApi.test.tsx > useApi polling budget (T63-108) > skips poll ticks while the tab is hidden and reads at once when it becomes visible again"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M2 useApi: bỏ khử request nền đang bay",
+      "tests": [
+        "src/shared/hooks/useApi.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 5 passed (6)",
+      "failed": [
+        "does not open a second background request while one is still in flight 10ms",
+        "src/shared/hooks/useApi.test.tsx > useApi polling budget (T63-108) > does not open a second background request while one is still in flight"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M3 OverviewProvider: nhịp 1 s → 2 s",
+      "tests": [
+        "src/shared/overview/OverviewProvider.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 2 passed (3)",
+      "failed": [
+        "refreshes every second by default, so the alarm bell fed from it stays within 1 s 19ms",
+        "src/shared/overview/OverviewProvider.test.tsx > OverviewProvider polling > refreshes every second by default, so the alarm bell fed from it stays within 1 s"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M4 OverviewProvider: bỏ dừng-khi-ẩn",
+      "tests": [
+        "src/shared/overview/OverviewProvider.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 2 passed (3)",
+      "failed": [
+        "stops polling while the tab is hidden and reloads as soon as it is visible again 14ms",
+        "src/shared/overview/OverviewProvider.test.tsx > OverviewProvider polling > stops polling while the tab is hidden and reloads as soon as it is visible again"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M5 useSharedPoll: bỏ khử trùng request đang bay",
+      "tests": [
+        "src/shared/hooks/useSharedPoll.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "3 failed | 5 passed (8)",
+      "failed": [
+        "three subscribers of one key share ONE timer and ONE request per tick 36ms",
+        "dedupes an in-flight request: refetch while a request flies does not open a second one 6ms",
+        "uses the shortest interval any subscriber asks for, and relaxes when that subscriber leaves 8ms",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > three subscribers of one key share ONE timer and ONE request per tick",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > dedupes an in-flight request: refetch while a request flies does not open a second one",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > uses the shortest interval any subscriber asks for, and relaxes when that subscriber leaves"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M6 useSharedPoll: bỏ dừng-khi-ẩn",
+      "tests": [
+        "src/shared/hooks/useSharedPoll.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 7 passed (8)",
+      "failed": [
+        "does not poll while the tab is hidden and catches up at once when it becomes visible 8ms",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > does not poll while the tab is hidden and catches up at once when it becomes visible"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M7 useSharedPoll: bỏ đọc bù khi hiện lại",
+      "tests": [
+        "src/shared/hooks/useSharedPoll.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 7 passed (8)",
+      "failed": [
+        "does not poll while the tab is hidden and catches up at once when it becomes visible 8ms",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > does not poll while the tab is hidden and catches up at once when it becomes visible"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M8 useSharedPoll: bỏ đọc ngay khi nhịp ngắn lại",
+      "tests": [
+        "src/shared/hooks/useSharedPoll.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 7 passed (8)",
+      "failed": [
+        "reads immediately when the interval shrinks and the data is already older than the new interval 7ms",
+        "src/shared/hooks/useSharedPoll.test.tsx > useSharedPoll > reads immediately when the interval shrinks and the data is already older than the new interval"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M9 useLivePoints: bỏ lùi nhịp khi kênh sống tươi",
+      "tests": [
+        "src/shared/hooks/useLivePoints.test.tsx",
+        "src/features/dashboard/DashboardPage.polling.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "2 failed | 6 passed (8)",
+      "failed": [
+        "backs off to the 10 s backstop while the live channel is fresh, and shows the live value 26ms",
+        "does not poll /points every 2 s while the live channel is fresh 181ms",
+        "src/features/dashboard/DashboardPage.polling.test.tsx > Landing GET budget (T63-108) > does not poll /points every 2 s while the live channel is fresh",
+        "src/shared/hooks/useLivePoints.test.tsx > useLivePoints > backs off to the 10 s backstop while the live channel is fresh, and shows the live value"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M10 useLivePoints: bỏ hẹn giờ hết hạn kênh sống",
+      "tests": [
+        "src/shared/hooks/useLivePoints.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 5 passed (6)",
+      "failed": [
+        "falls back to polling AT ONCE when the live channel goes silent, without waiting for another render 8ms",
+        "src/shared/hooks/useLivePoints.test.tsx > useLivePoints > falls back to polling AT ONCE when the live channel goes silent, without waiting for another render"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M11 useLivePoints: bỏ điều kiện socket connected",
+      "tests": [
+        "src/shared/hooks/useLivePoints.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 5 passed (6)",
+      "failed": [
+        "does not treat a reconnecting socket as live even if its last frame is recent 8ms",
+        "src/shared/hooks/useLivePoints.test.tsx > useLivePoints > does not treat a reconnecting socket as live even if its last frame is recent"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M12 useShellAlarms: tin overview cả khi degraded alarms",
+      "tests": [
+        "src/shared/alarms/useShellAlarms.test.tsx",
+        "src/shared/components/AppShell.polling.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "4 failed | 6 passed (10)",
+      "failed": [
+        "falls back to polling /alarms every second when the backend says alarms are degraded 11ms",
+        "keeps the last trusted count while the first fallback read is pending, never dropping to 0 13ms",
+        "stops the fallback poll once the overview is trusted again 3ms",
+        "falls back to /alarms when the backend marks alarms degraded 34ms",
+        "src/shared/alarms/useShellAlarms.test.tsx > useShellAlarms > falls back to polling /alarms every second when the backend says alarms are degraded",
+        "src/shared/alarms/useShellAlarms.test.tsx > useShellAlarms > keeps the last trusted count while the first fallback read is pending, never dropping to 0"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M13 useShellAlarms: rơi về 0 khi chờ /alarms",
+      "tests": [
+        "src/shared/alarms/useShellAlarms.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 6 passed (7)",
+      "failed": [
+        "keeps the last trusted count while the first fallback read is pending, never dropping to 0 14ms",
+        "src/shared/alarms/useShellAlarms.test.tsx > useShellAlarms > keeps the last trusted count while the first fallback read is pending, never dropping to 0"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M14 AppShell: bản HEAD (poll /alarms 1 s, /system/status 5 s)",
+      "tests": [
+        "src/shared/components/AppShell.polling.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "2 failed | 1 passed (3)",
+      "failed": [
+        "takes the bell count from the overview snapshot and does not poll /alarms 181ms",
+        "reads /system/status once per 30 s, not every 5 s 150ms",
+        "src/shared/components/AppShell.polling.test.tsx > AppShell polling budget (T63-108) > takes the bell count from the overview snapshot and does not poll /alarms",
+        "src/shared/components/AppShell.polling.test.tsx > AppShell polling budget (T63-108) > reads /system/status once per 30 s, not every 5 s"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M15 DashboardPage: bản HEAD (3 vòng /points, 2 vòng /activity)",
+      "tests": [
+        "src/features/dashboard/DashboardPage.polling.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "2 failed (2)",
+      "failed": [
+        "reads /points ONCE per 2 s for all panels and /activity once per 10 s without a live channel 88ms",
+        "does not poll /points every 2 s while the live channel is fresh 34ms",
+        "src/features/dashboard/DashboardPage.polling.test.tsx > Landing GET budget (T63-108) > reads /points ONCE per 2 s for all panels and /activity once per 10 s without a live channel",
+        "src/features/dashboard/DashboardPage.polling.test.tsx > Landing GET budget (T63-108) > does not poll /points every 2 s while the live channel is fresh"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M16 visibleInterval: bỏ dừng-khi-ẩn",
+      "tests": [
+        "src/shared/hooks/visibleInterval.test.ts"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 2 passed (3)",
+      "failed": [
+        "ticks on the interval while visible, not at all while hidden, and catches up once on return 11ms",
+        "src/shared/hooks/visibleInterval.test.ts > startVisibleInterval > ticks on the interval while visible, not at all while hidden, and catches up once on return"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M17 queries.ts: bản HEAD (setInterval trần)",
+      "tests": [
+        "src/features/programming/api/queries.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "2 failed | 25 passed (27)",
+      "failed": [
+        "useProgrammingResource (capabilities, 5 s) does not poll while hidden 12ms",
+        "runtime monitor (1 s) does not poll while hidden 5ms",
+        "src/features/programming/api/queries.test.tsx > Programming polling pauses while the tab is hidden (T63-108) > useProgrammingResource (capabilities, 5 s) does not poll while hidden",
+        "src/features/programming/api/queries.test.tsx > Programming polling pauses while the tab is hidden (T63-108) > runtime monitor (1 s) does not poll while hidden"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M18 FrameMonitor: bản HEAD",
+      "tests": [
+        "src/features/modbus-rtu/components/FrameMonitor.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 7 passed (8)",
+      "failed": [
+        "theo dõi liên tục dừng khi tab ẩn và đọc bù ngay khi hiện lại 69ms",
+        "src/features/modbus-rtu/components/FrameMonitor.test.tsx > FrameMonitor > theo dõi liên tục dừng khi tab ẩn và đọc bù ngay khi hiện lại"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M19 WatchTab: bản HEAD",
+      "tests": [
+        "src/features/programming/runtime/WatchTab.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 15 passed (16)",
+      "failed": [
+        "trace RUNNING không poll khi tab ẩn và đọc bù ngay khi hiện lại 57ms",
+        "src/features/programming/runtime/WatchTab.test.tsx > WatchTab — T59-504 > trace RUNNING không poll khi tab ẩn và đọc bù ngay khi hiện lại"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "G1 alarms.go: bản HEAD (writeJSON, không ETag)",
+      "tests": "TestAlarmsAnswer304OnlyWhileTheBodyIsUnchanged|TestAlarmsETagChangesWhenCoreBecomesUnreadable",
+      "exit": 1,
+      "summary": "FAIL",
+      "failed": [
+        "TestAlarmsAnswer304OnlyWhileTheBodyIsUnchanged"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "G2 users.go: bản HEAD (writeJSON, không ETag)",
+      "tests": "TestMeAnswers304PerUserAndNeverAcrossUsers",
+      "exit": 1,
+      "summary": "FAIL",
+      "failed": [
+        "TestMeAnswers304PerUserAndNeverAcrossUsers"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "G3 alarmhistory.go: bản HEAD (quét lịch sử mọi lượt /alarms)",
+      "tests": "TestAlarmsDoNotReadHistoryWhileCoreIsReadable",
+      "exit": 1,
+      "summary": "FAIL",
+      "failed": [
+        "TestAlarmsDoNotReadHistoryWhileCoreIsReadable"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "M20 useSharedPoll: khoá mượn fetcher qua ref của component tạo ra nó",
+      "tests": [
+        "src/shared/hooks/useSharedPoll.test.tsx"
+      ],
+      "exit": 1,
+      "summary": "1 failed | 8 passed (9)",
+      "failed": [
+        "a component switching to another key does not change what the old key fetches for the others"
+      ],
+      "red": true
+    }
+  ],
+  "red": 23,
+  "total": 23
+}

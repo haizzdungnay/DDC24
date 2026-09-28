@@ -1,0 +1,17 @@
+{
+  "note": "T63-108 HOST x86 4 lõi; kho lịch sử cảnh báo 20 000 sự kiện (4 105 334 B); 1 kết nối keep-alive; CPU = utime+stime tiến trình mkddc-web từ /proc",
+  "core_readable_GET_alarms": {
+    "before_HEAD_265f1a8b": {"n": 100, "p50_ms": 187.71, "p95_ms": 213.94, "cpu_ms_per_req": 197.9},
+    "after_final": {"n": 100, "p50_ms": 0.77, "p95_ms": 1.1, "cpu_ms_per_req": 0.5}
+  },
+  "core_down_GET_alarms_history_rebuild": {
+    "before_HEAD_265f1a8b": {"n": 30, "p50_ms": 192.43, "p95_ms": 212.99, "cpu_ms_per_req": 203.0, "body_sha256": "03c6fc409b729b8f16bb86e2d4b55935175dfee74a90001f79c57ebcbc9f5fca"},
+    "after_final": {"n": 30, "p50_ms": 81.55, "p95_ms": 106.48, "cpu_ms_per_req": 91.0, "body_sha256": "03c6fc409b729b8f16bb86e2d4b55935175dfee74a90001f79c57ebcbc9f5fca"}
+  },
+  "GET_overview": {"before": {"p50_ms": 1.13, "cpu_ms_per_req": 0.9}, "after": {"p50_ms": 1.08, "cpu_ms_per_req": 0.9}},
+  "go_benchmark_ListFiltered_20000_lines_limit_1000": {"HEAD_ns_per_op": 178731846, "ring_ns_per_op": 74990998},
+  "server_cpu_30min_ws_dashboard_window_1260s": {
+    "note": "/points và WS do Playwright giả nên KHÔNG tới server; chỉ overview/alarms/status/activity/me tới server",
+    "before_cpu_s": 11.38, "after_cpu_s": 11.14
+  }
+}

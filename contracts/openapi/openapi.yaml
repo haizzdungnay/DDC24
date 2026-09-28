@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.51.0"
+  version: "1.52.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -19,7 +19,7 @@ info:
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
   date: "2026-09-28"
-  note: "v1.50.0 (Plan 63 T63-003, PERF-SYS-04/PERF-API-04) thêm `ModbusBusRuntime.telemetry` (latency ĐỌC/GHI riêng kèm `sample_count`/`window_size`/`total` và epoch counter) với schema `ModbusBusTelemetry`/`ModbusLatencyWindow`/`ModbusCounterEpoch`, và `SystemStatus.iop.counters` (counter IOP 64 bit kèm epoch, schema `IopCounters`); cả hai null khi iobus không trả lời hoặc là bản cũ; trường cũ giữ nghĩa; không thêm operation; ADDITIVE. v1.49.0 (Plan 63 T63-103, PERF-API-02) thêm schema `OsMetricsFreshness` và trường `osMetrics` ở `SystemStatus` và `Overview`: độ mới của số đo hệ điều hành do collector nền 1 s lấy mẫu; `state` unknown/stale ⇒ mọi trường số đo hệ điều hành vắng mặt, không bao giờ là 0; không bắt buộc, không thêm operation; ADDITIVE. v1.48.0 (Plan 63 T63-101, PERF-API-01) thêm `SystemStatus.shm_reader` và schema `ShmSegmentReaderMetrics`: bộ đếm tích luỹ reads/retries/failures/max_wait_us của reader seqlock SHM trong tiến trình web (deadline 1 ms), không bắt buộc, vắng khi web không có core client thật; không thêm operation; ADDITIVE. v1.47.0 (Issue #798, U-04) `ProgrammingTraceValue` thêm `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` deprecated; ADDITIVE. v1.46.0 (REC-DDC-FIELD-USE-20260927) thêm `ModbusRTUDevice.coil_write_batch_max` (U-07: gom coil liền kề thành FC15 theo thiết bị, 0..16, mặc định tắt) và `ModbusFrameRecord.values` (U-18: giá trị trên dây của khung ghi); cả hai không bắt buộc, không thêm operation; ADDITIVE. v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  note: "v1.52.0 (Plan 63 T63-108, PERF-API-03) `GET /alarms` và `GET /me` trả `ETag` mạnh theo nội dung (`\"c-\"` + 24 hex = 96 bit đầu SHA-256 của thân) kèm `Cache-Control: private, no-cache`, và 304 không thân khi `If-None-Match` khớp; thêm `Overview.alarms.activeOrUnacked` (số trên chuông shell, đúng quy tắc đếm cũ trên thân `/alarms`) để chuông đọc snapshot overview thay cho vòng poll `/alarms`; không bắt buộc, không thêm operation; ADDITIVE. v1.51.0 (Issue #827) thêm `waitingReason` cho Program WAITING. v1.50.0 (Plan 63 T63-003, PERF-SYS-04/PERF-API-04) thêm `ModbusBusRuntime.telemetry` (latency ĐỌC/GHI riêng kèm `sample_count`/`window_size`/`total` và epoch counter) với schema `ModbusBusTelemetry`/`ModbusLatencyWindow`/`ModbusCounterEpoch`, và `SystemStatus.iop.counters` (counter IOP 64 bit kèm epoch, schema `IopCounters`); cả hai null khi iobus không trả lời hoặc là bản cũ; trường cũ giữ nghĩa; không thêm operation; ADDITIVE. v1.49.0 (Plan 63 T63-103, PERF-API-02) thêm schema `OsMetricsFreshness` và trường `osMetrics` ở `SystemStatus` và `Overview`: độ mới của số đo hệ điều hành do collector nền 1 s lấy mẫu; `state` unknown/stale ⇒ mọi trường số đo hệ điều hành vắng mặt, không bao giờ là 0; không bắt buộc, không thêm operation; ADDITIVE. v1.48.0 (Plan 63 T63-101, PERF-API-01) thêm `SystemStatus.shm_reader` và schema `ShmSegmentReaderMetrics`: bộ đếm tích luỹ reads/retries/failures/max_wait_us của reader seqlock SHM trong tiến trình web (deadline 1 ms), không bắt buộc, vắng khi web không có core client thật; không thêm operation; ADDITIVE. v1.47.0 (Issue #798, U-04) `ProgrammingTraceValue` thêm `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` deprecated; ADDITIVE. v1.46.0 (REC-DDC-FIELD-USE-20260927) thêm `ModbusRTUDevice.coil_write_batch_max` (U-07: gom coil liền kề thành FC15 theo thiết bị, 0..16, mặc định tắt) và `ModbusFrameRecord.values` (U-18: giá trị trên dây của khung ghi); cả hai không bắt buộc, không thêm operation; ADDITIVE. v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1278,12 +1278,17 @@ paths:
     get:
       summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
       x-rbac: [viewer, operator, engineer, admin]
+      parameters: [ { $ref: "#/components/parameters/IfNoneMatchContent" } ]
       responses:
         "200":
           description: OK
+          headers:
+            ETag: { $ref: "#/components/headers/ContentETag" }
+            Cache-Control: { $ref: "#/components/headers/RevalidateCacheControl" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "304": { $ref: "#/components/responses/NotModifiedContent" }
   /me/change-password:
     post:
       summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
@@ -1827,14 +1832,21 @@ paths:
         Runtime alarm rows derived from ADR-013 alarm entities and ADR-014 ack lifecycle.
         This is the visible current list, not full history: active unacked alarms,
         active acked alarms, cleared-but-unacknowledged latched alarms, and future shelved alarms.
+        T63-108: phản hồi mang ETag theo nội dung; server vẫn đọc Core trước khi so
+        If-None-Match, nên 304 phản ánh danh sách HIỆN TẠI.
+      parameters: [ { $ref: "#/components/parameters/IfNoneMatchContent" } ]
       responses:
         "200":
           description: OK
+          headers:
+            ETag: { $ref: "#/components/headers/ContentETag" }
+            Cache-Control: { $ref: "#/components/headers/RevalidateCacheControl" }
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AlarmEvent" }
+        "304": { $ref: "#/components/responses/NotModifiedContent" }
   /alarms/{id}/ack:
     post:
       summary: Acknowledge alarm
@@ -3237,6 +3249,16 @@ components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   parameters:
+    IfNoneMatchContent:
+      name: If-None-Match
+      in: header
+      required: false
+      description: >
+        T63-108 — ETag theo nội dung nhận từ lần GET trước. Trình duyệt tự gửi khi
+        phản hồi trước có `ETag` + `Cache-Control: private, no-cache`. Khớp ⇒ 304
+        không thân; thân khác dù một byte ⇒ 200 với ETag mới. Hỗ trợ `*`, danh
+        sách nhiều tag và so sánh yếu (RFC 9110 §13.1.2).
+      schema: { type: string }
     IfMatchVirtualPoint:
       name: If-Match
       in: header
@@ -3319,7 +3341,24 @@ components:
     ProgrammingETag:
       description: ETag mạnh của resource vừa trả về.
       schema: { type: string, minLength: 3, maxLength: 128 }
+    ContentETag:
+      description: >
+        T63-108 — ETag MẠNH theo nội dung: `"c-"` + 24 hex (96 bit đầu SHA-256 của
+        thân JSON). Hai phản hồi cùng ETag là cùng từng byte. Không dùng cho If-Match.
+      schema: { type: string, pattern: '^"c-[0-9a-f]{24}"$', example: '"c-497707b382979a60a31a9124"' }
+    RevalidateCacheControl:
+      description: >
+        `private, no-cache` — trình duyệt được giữ bản sao nhưng PHẢI hỏi lại server
+        trước mỗi lần dùng; không bao giờ tự phục vụ dữ liệu này từ cache.
+      schema: { type: string, enum: ["private, no-cache"] }
   responses:
+    NotModifiedContent:
+      description: >
+        304 — thân hiện tại y hệt bản client đang giữ (ETag khớp). Không có thân.
+        Server vẫn đọc authority trước khi so, nên 304 phản ánh trạng thái HIỆN TẠI.
+      headers:
+        ETag: { $ref: "#/components/headers/ContentETag" }
+        Cache-Control: { $ref: "#/components/headers/RevalidateCacheControl" }
     ProgrammingError:
       description: Lỗi Programming có code ổn định; FE không parse nội dung hiển thị.
       headers:
@@ -5219,6 +5258,15 @@ components:
             info: { type: integer }
             unacked: { type: integer }
             total: { type: integer }
+            activeOrUnacked:
+              type: integer
+              minimum: 0
+              description: >
+                T63-108 — số trên chuông shell, chép đúng quy tắc FE trên thân `GET /alarms`:
+                `(active ?? status∈{active,acked}) || status=unack`. `active=false` vắng
+                trên dây (`omitempty`), nên hàng `acked` đã hết điều kiện VẪN được đếm. Khác
+                `total` ở hàng `shelved` hết điều kiện, hàng không có ID và ID trùng
+                (`/alarms` bỏ/gộp). Vắng ở server đời cũ.
         points:
           type: object
           required: [total, good, uncertain, bad, stale, offline, forced, groups]
