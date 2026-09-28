@@ -6,7 +6,7 @@ import { ApiError, type Point, type VirtualPoint } from '../../shared/types'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import { MemoryRouter } from 'react-router-dom'
-import { VirtualPointsPage, normalizeVirtualPoint } from './VirtualIoPage'
+import { VirtualPointsPage, normalizeVirtualPoint, virtualPointWireLabel } from './VirtualIoPage'
 
 const api = vi.hoisted(() => ({
   getPoints: vi.fn(),
@@ -211,10 +211,26 @@ describe('normalizeVirtualPoint', () => {
     expect(normalized.name).toBe('Room Setpoint')
   })
 
-  it('falls blank legacy labels back to the canonical id', () => {
+  // Issue #789: VP không nhãn hiển thị bằng Tag, cùng luật với backend.
+  it('falls blank labels back to the tag, not the internal id', () => {
     const normalized = normalizeVirtualPoint(virtualPoint({ name: undefined, label: '  ' }))
-    expect(normalized.name).toBe('VP1')
+    expect(normalized.name).toBe('TECH_VP_1')
+    expect(normalized.label).toBe('TECH_VP_1')
+  })
+
+  it('falls back to the canonical id only when both label and tag are blank', () => {
+    const normalized = normalizeVirtualPoint(virtualPoint({ name: undefined, label: '', tag: '' }))
     expect(normalized.label).toBe('VP1')
+  })
+})
+
+describe('virtualPointWireLabel', () => {
+  it('sends an explicit label as-is (normalized)', () => {
+    expect(virtualPointWireLabel({ tag: 'TECH_VP_1', label: '  Phòng   A ' })).toBe('Phòng A')
+  })
+
+  it('sends an empty label when the label only mirrors the tag', () => {
+    expect(virtualPointWireLabel({ tag: 'TECH_VP_1', label: 'tech_vp_1' })).toBe('')
   })
 })
 

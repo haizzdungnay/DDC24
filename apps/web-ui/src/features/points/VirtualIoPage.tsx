@@ -61,11 +61,11 @@ export function VirtualPointsPage() {
   const [errorFocusPath, setErrorFocusPath] = useState<string>()
   const persistedNameConflicts = useMemo(() => pointNameConflicts([
     ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
-    ...serverItems.map((item) => ({ id: item.id, name: item.label, kind: 'virtual' }))
+    ...serverItems.map((item) => ({ id: item.id, name: virtualPointWireLabel(item), kind: 'virtual' }))
   ]), [pointsState.data, serverItems])
   const nameConflicts = useMemo(() => pointNameConflicts([
     ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
-    ...items.map((item) => ({ id: item.id, name: item.label, kind: 'virtual' }))
+    ...items.map((item) => ({ id: item.id, name: virtualPointWireLabel(item), kind: 'virtual' }))
   ]), [items, pointsState.data])
 
   useEffect(() => {
@@ -144,7 +144,7 @@ export function VirtualPointsPage() {
         setServerItems((current) => current.map(applyName))
         void pointsState.refetch()
       } else {
-        const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...selected, tag: normalizePointTag(selected.tag), label: displayPointName(normalizePointName(selected.label), selected.id) })))
+        const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...selected, tag: normalizePointTag(selected.tag), label: virtualPointWireLabel(selected) })))
         setItems((current) => current.map((item) => item.id === saved.id ? saved : item))
         setServerItems((current) => current.map((item) => item.id === saved.id ? saved : item))
       }
@@ -198,7 +198,7 @@ export function VirtualPointsPage() {
           setItems((current) => current.map(applyName))
           setServerItems((current) => current.map(applyName))
         } else {
-          const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...item, tag: normalizePointTag(item.tag), label: displayPointName(normalizePointName(item.label), item.id) })))
+          const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...item, tag: normalizePointTag(item.tag), label: virtualPointWireLabel(item) })))
           setItems((current) => current.map((entry) => entry.id === saved.id ? saved : entry))
           setServerItems((current) => current.map((entry) => entry.id === saved.id ? saved : entry))
         }
@@ -1111,6 +1111,16 @@ function quotaUsage(items: VirtualPoint[]): Record<(typeof logOptions)[number]['
   }
 }
 
+/* Issue #789 — nhãn gửi lên / đưa vào kiểm trùng tên. Ô Label hiện Tag khi VP
+ * chưa có nhãn riêng; nếu người dùng để nguyên (nhãn trùng Tag) thì gửi chuỗi
+ * rỗng, nghĩa là "hiển thị bằng Tag", để đổi Tag về sau không để lại một nhãn
+ * cũ đóng băng. Backend cũng loại VP không nhãn khỏi không gian tên, nên kiểm
+ * trùng phía FE phải theo cùng luật đó. */
+export function virtualPointWireLabel(item: Pick<VirtualPoint, 'label' | 'tag'>): string {
+  const label = normalizePointName(item.label ?? '')
+  return label.toLowerCase() === normalizePointTag(item.tag ?? '').toLowerCase() ? '' : label
+}
+
 export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   const signalType = signalTypes.includes(item.signalType) ? item.signalType : 'float'
   const logEnabled = canLog(signalType) && item.logEnabled
@@ -1118,7 +1128,9 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   const unit = unitToString(unitFromString(item.unit))
   const [displayLow, displayHigh] = displayRangeLimits(unit)
   const id = canonicalVirtualPointId(item.id)
-  const name = displayPointName(item.label ?? item.name, id || item.tag || 'VP')
+  /* Issue #789: VP không nhãn hiển thị bằng Tag — đúng như backend
+   * (`virtualPointDisplayName`), không phải bằng mã nội bộ `VPn`. */
+  const name = displayPointName(item.label ?? item.name, normalizePointTag(item.tag ?? '') || id || 'VP')
   return {
     ...item,
     id,
