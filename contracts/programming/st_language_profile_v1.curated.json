@@ -13,7 +13,7 @@
     "`F-STED-005`, khi `DDD-LANG-PROG-001` §4.1 tuyên bố parser reject `CASE`",
     "trong lúc `parse_case()` chấp nhận đầy đủ."
   ],
-  "profileVersion": "1.0.0",
+  "profileVersion": "1.1.0",
   "iecBaseline": "IEC 61131-3:2013 (Ed. 3.0) — Structured Text",
   "conformanceClaim": "IEC 61131-3-aligned subset. KHÔNG tuyên bố certified/compliant (ADR-020).",
   "deliberateExclusions": [
@@ -235,32 +235,18 @@
       "authority": "ADR-054 phán quyết (4)"
     },
     {
-      "construct": "SHL",
-      "kind": "function",
-      "inIec": true,
-      "reason": "Thao tác dịch bit chỉ có nghĩa trên kiểu chuỗi bit (`BYTE`/`WORD`/`DWORD`), vốn hoãn sang đợt sau. Không có kiểu để dịch thì hàm dịch không có miền xác định.",
-      "authority": "ADR-054 phán quyết (4)"
-    },
-    {
-      "construct": "SHR",
-      "kind": "function",
-      "inIec": true,
-      "reason": "Cùng lý do với `SHL`.",
-      "authority": "ADR-054 phán quyết (4)"
-    },
-    {
       "construct": "ROL",
       "kind": "function",
       "inIec": true,
-      "reason": "Cùng lý do với `SHL`.",
-      "authority": "ADR-054 phán quyết (4)"
+      "reason": "Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau.",
+      "authority": "ADR-054 phán quyết (4); Issue #800"
     },
     {
       "construct": "ROR",
       "kind": "function",
       "inIec": true,
-      "reason": "Cùng lý do với `SHL`.",
-      "authority": "ADR-054 phán quyết (4)"
+      "reason": "Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau.",
+      "authority": "ADR-054 phán quyết (4); Issue #800"
     },
     {
       "construct": "LEN",
@@ -424,10 +410,11 @@
       "program        = 'PROGRAM' identifier { var_block } stmt_list 'END_PROGRAM' ;",
       "function       = 'FUNCTION' identifier ':' scalar_type { var_block } stmt_list 'END_FUNCTION' ;",
       "function_block = 'FUNCTION_BLOCK' identifier { var_block } stmt_list 'END_FUNCTION_BLOCK' ;",
-      "var_block      = ( 'VAR' [ 'RETAIN' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
-      "var_decl       = identifier ':' type_name ';' ;",
+      "var_block      = ( 'VAR' [ 'RETAIN' | 'CONSTANT' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
+      "var_decl       = identifier ':' type_name [ ':=' constant_expr ] ';' ;",
       "type_name      = scalar_type | fb_type_name | user_fb_name ;",
       "scalar_type    = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME' ;",
+      "constant_expr  = expression ;  (* chỉ literal, VAR CONSTANT khai trước và toán tử; bắt buộc trong VAR CONSTANT, cấm trong VAR_INPUT *)",
       "stmt_list      = { statement } ;",
       "statement      = assignment | if_stmt | case_stmt | fb_call | signal_publish ;",
       "assignment     = variable ':=' expression ';' ;",

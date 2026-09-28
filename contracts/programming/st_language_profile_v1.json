@@ -220,32 +220,18 @@
       "reason": "Chọn theo chỉ số cần kiểu hợp thành hoặc số tham số thay đổi; `SEL` phủ ca chọn hai nhánh, và `IF`/`CASE` phủ phần còn lại một cách đọc được hơn."
     },
     {
-      "authority": "ADR-054 phán quyết (4)",
-      "construct": "SHL",
-      "inIec": true,
-      "kind": "function",
-      "reason": "Thao tác dịch bit chỉ có nghĩa trên kiểu chuỗi bit (`BYTE`/`WORD`/`DWORD`), vốn hoãn sang đợt sau. Không có kiểu để dịch thì hàm dịch không có miền xác định."
-    },
-    {
-      "authority": "ADR-054 phán quyết (4)",
-      "construct": "SHR",
-      "inIec": true,
-      "kind": "function",
-      "reason": "Cùng lý do với `SHL`."
-    },
-    {
-      "authority": "ADR-054 phán quyết (4)",
+      "authority": "ADR-054 phán quyết (4); Issue #800",
       "construct": "ROL",
       "inIec": true,
       "kind": "function",
-      "reason": "Cùng lý do với `SHL`."
+      "reason": "Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau."
     },
     {
-      "authority": "ADR-054 phán quyết (4)",
+      "authority": "ADR-054 phán quyết (4); Issue #800",
       "construct": "ROR",
       "inIec": true,
       "kind": "function",
-      "reason": "Cùng lý do với `SHL`."
+      "reason": "Xoay bit chưa có nhu cầu hiện trường; `SHL`/`SHR` trên `UINT` đã mở theo Issue #800 (U-10). Xoay vòng sẽ xét cùng kiểu `WORD`/`BYTE`/`DWORD` ở đợt sau."
     },
     {
       "authority": "ADR-054 phán quyết (4)",
@@ -424,10 +410,11 @@
       "program        = 'PROGRAM' identifier { var_block } stmt_list 'END_PROGRAM' ;",
       "function       = 'FUNCTION' identifier ':' scalar_type { var_block } stmt_list 'END_FUNCTION' ;",
       "function_block = 'FUNCTION_BLOCK' identifier { var_block } stmt_list 'END_FUNCTION_BLOCK' ;",
-      "var_block      = ( 'VAR' [ 'RETAIN' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
-      "var_decl       = identifier ':' type_name ';' ;",
+      "var_block      = ( 'VAR' [ 'RETAIN' | 'CONSTANT' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
+      "var_decl       = identifier ':' type_name [ ':=' constant_expr ] ';' ;",
       "type_name      = scalar_type | fb_type_name | user_fb_name ;",
       "scalar_type    = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME' ;",
+      "constant_expr  = expression ;  (* chỉ literal, VAR CONSTANT khai trước và toán tử; bắt buộc trong VAR CONSTANT, cấm trong VAR_INPUT *)",
       "stmt_list      = { statement } ;",
       "statement      = assignment | if_stmt | case_stmt | fb_call | signal_publish ;",
       "assignment     = variable ':=' expression ';' ;",
@@ -581,7 +568,7 @@
       "wireCode": 2
     }
   ],
-  "profileVersion": "1.0.0",
+  "profileVersion": "1.1.0",
   "reservedWords": [
     "PROGRAM",
     "END_PROGRAM",
@@ -594,6 +581,7 @@
     "FUNCTION_BLOCK",
     "END_FUNCTION_BLOCK",
     "RETAIN",
+    "CONSTANT",
     "IF",
     "THEN",
     "ELSIF",
@@ -690,7 +678,7 @@
     }
   ],
   "schemaVersion": 1,
-  "sha256": "31bf5f0b5776956270a3145586bb867dbc1af89865e618fda67a2c17f19ae36d",
+  "sha256": "907da8100db2c6683a371a0001f17182d8ebd2a239a3b57f2d60f26535b5b41e",
   "standardFunctionBlocks": [
     {
       "inputs": [
@@ -1043,6 +1031,16 @@
     {
       "arity": 1,
       "name": "REAL_TO_UINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 2,
+      "name": "SHL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 2,
+      "name": "SHR",
       "vendorExtension": false
     }
   ],

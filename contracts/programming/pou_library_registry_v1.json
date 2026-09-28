@@ -2,7 +2,7 @@
   "$schema": "./pou_library_registry_v1.schema.json",
   "registryId": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1",
   "schemaVersion": 1,
-  "libraryVersion": "rev-a.4",
+  "libraryVersion": "rev-a.5",
   "scope": "SYSTEM",
   "categoryOrder": [
     {
@@ -198,6 +198,80 @@
       "tags": [
         "logic",
         "đảo"
+      ]
+    },
+    {
+      "id": "SHL",
+      "kind": "FUNCTION",
+      "dispatch": "FUNC_TABLE",
+      "category": "logic",
+      "labelVi": "Dịch trái bit (SHL)",
+      "labelEn": "Shift left (SHL)",
+      "polymorphic": false,
+      "allowedTypes": [
+        "UINT"
+      ],
+      "defaultType": "UINT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "UINT"
+        },
+        {
+          "name": "N",
+          "direction": "INPUT",
+          "dataType": "UINT"
+        },
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "UINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Dịch các bit của một số không dấu 16 bit sang trái N vị trí; N từ 16 trở lên cho 0. Dùng để dựng mặt nạ kênh, ví dụ bật đúng bit của DO thứ N.",
+      "tags": [
+        "bit",
+        "mặt nạ"
+      ]
+    },
+    {
+      "id": "SHR",
+      "kind": "FUNCTION",
+      "dispatch": "FUNC_TABLE",
+      "category": "logic",
+      "labelVi": "Dịch phải bit (SHR)",
+      "labelEn": "Shift right (SHR)",
+      "polymorphic": false,
+      "allowedTypes": [
+        "UINT"
+      ],
+      "defaultType": "UINT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "UINT"
+        },
+        {
+          "name": "N",
+          "direction": "INPUT",
+          "dataType": "UINT"
+        },
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "UINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Dịch các bit của một số không dấu 16 bit sang phải N vị trí; N từ 16 trở lên cho 0. Dùng để tách từng bit trạng thái từ một thanh ghi Modbus.",
+      "tags": [
+        "bit",
+        "mặt nạ"
       ]
     },
     {

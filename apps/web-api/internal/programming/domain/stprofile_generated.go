@@ -6,9 +6,9 @@ package domain
 // Đi kèm TỪNG diagnostic (ISS-STED-18): một kết quả Check sinh ra dưới hồ sơ cũ
 // có thể nói về một ngôn ngữ khác với ngôn ngữ người dùng đang gõ, và người đọc
 // không có cách nào tự biết điều đó.
-const STLanguageProfileVersion = "1.0.0"
+const STLanguageProfileVersion = "1.1.0"
 
 // STLanguageProfileSHA256 nhận diện chính xác nội dung hồ sơ. Phiên bản có thể
 // giữ nguyên qua một lần sinh lại (ví dụ compiler đổi mà profileVersion chưa
 // nâng); hash thì không.
-const STLanguageProfileSHA256 = "31bf5f0b5776956270a3145586bb867dbc1af89865e618fda67a2c17f19ae36d"
+const STLanguageProfileSHA256 = "907da8100db2c6683a371a0001f17182d8ebd2a239a3b57f2d60f26535b5b41e"
