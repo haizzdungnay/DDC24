@@ -5,7 +5,7 @@
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
 | Phiên bản | 1.5 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
-| Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Revision Active `a0f107fa…`, Program `RUNNING` ở chế độ **AUTO**. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
+| Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
 | Phạm vi | 1 `PROGRAM` + 5 `FUNCTION` + 5 `FUNCTION_BLOCK`; 16 DO relay trên CK508-04 và CK508-05 (RS-485 `rs485-1`) |
 | Nền đối chiếu | `main@0f5d46f3` (host); trên bo lúc nghiệm thu: RC `f86150e3` + web của PR #795 (`86aa4ede`), từ 2026-09-28 là `main@e3072983`; compiler `fwsom-st-1.2.0`; profile `revA-1t-1-5-30` bản 2.2 (`1cb61fec…`); thư viện hệ thống `rev-a.4` |
@@ -1136,4 +1136,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.2 | 2026-09-27 | Kiểm từng chu kỳ trên bo (2 120 chu kỳ); sửa STAGING giảm bậc có "lỗ" và nhả dồn (lỗi 8, `FB_STAGER`); thêm S15, §9.6; khoảng nghỉ đổi chế độ ghi đúng ≈ 2,1 s |
 | 1.3 | 2026-09-27 | Thêm chế độ AUTO (`CmdMode = 10`) tự chạy lần lượt mọi chế độ; sửa lỗi bỏ qua bước OFF khi khởi động (lỗi 9); thêm S16, T13; kiểm AUTO trên bo 1 665 chu kỳ |
 | 1.4 | 2026-09-28 | Ràng buộc 16 và §8: tuỳ chọn FC15 theo thiết bị (PR #804, U-07), mặc định tắt, kèm số đo trên bo (`EV-MB-FC15-20260927`); §7.2 nhắc cột "Giá trị ghi" (U-18). Ràng buộc 8, §9.2 và §10: dải `CASE` rộng hợp lệ từ compiler có U-11 (PR #803), tool ST RC trên bo vẫn từ chối tới khi deploy lại. Mã chương trình không đổi |
-| 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu và ràng buộc 8 |
+| 1.5 | 2026-09-28 | Bo lab lên `main@e3072983`: tool ST có U-11 (dải `CASE` rộng hợp lệ) và FC15 bật cho CK508-04/05 chạy trên bản phát hành từ `main`; cập nhật nền đối chiếu, ràng buộc 8 và dòng Trạng thái (Active hiện là `0c29f4f1…`) |

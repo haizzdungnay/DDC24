@@ -14,11 +14,11 @@
 - Trước deploy, bo chạy bản dev của PR #804 gộp tạm #795 (`dev-u07-u18-with-pr795`) cùng tool ST bản RC. Nay bo chạy đúng bản đã merge: đóng phần "bo lệch bản phát hành" của U-21, U-01 và U-11 có hiệu lực trên bo.
 - Kiểm chứng trên bo:
   - Cả ba unit `mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper` có `/proc/<MainPID>/exe` = `/opt/mkddc-web/mkddc-web`, sha `7c58fab0…`; `mkddc-iobus` sha `dc8cad5b…`.
-  - Health `ok` mọi check; login `admin`; Programming `targetState=READY`; log `INFO programming.toolchain ok … profile_sha256=1cb61fec…`; runtime `RUNNING`; 48/48 điểm `GOOD`.
+  - Health `ok` mọi check; login `admin`; Programming `targetState=READY`; log `INFO programming.toolchain ok … profile_sha256=1cb61fec…`; runtime `RUNNING`; 48/48 điểm Modbus `GOOD` (12 kênh UI cục bộ UI-01..04, UI-09..16 báo `bad`, trạng thái có sẵn, không do lượt deploy này).
   - `CK508-04/05` giữ `coil_write_batch_max=8`; profile có `max_coils_per_write: 8`. Frame Monitor ở pha BLINK: mỗi giây 2 khung FC15 × 8 (mỗi module một khung, cách nhau 30 ms), `values` đảo lẻ/chẵn, 0 khung lỗi.
   - `mkddc-st-compile --check-only` trên bo nhận `CASE m OF 0..15: …; 16..32767: …`.
 - Sao lưu: `/data/mkddc/deploy-backups/20260928T032937Z-main-e3072983/` (web, `dist`, iobus, hai tool ST, kèm `SHA256SUMS`). Rollback: chép lại các file đó, rồi khởi động lại `mkddc-iobus` và bộ ba unit web.
-- Cập nhật `REC-DDC-FIELD-USE-20260927` 1.4 và `GUIDE-PROG-ST-DO16-001` 1.5 theo trạng thái bo mới.
+- Cập nhật `REC-DDC-FIELD-USE-20260927` 1.4 (gồm trạng thái #804 đã merge ở dòng Kết luận, U-07, U-18, §5) và `GUIDE-PROG-ST-DO16-001` 1.5 theo trạng thái bo mới.
 
 ### Changed — Đồng bộ tài liệu sau khi #795, #796, #797, #803 merge (PR #804, 2026-09-28)
 
