@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
 import { I18nProvider, useI18n } from '../../../shared/i18n'
+import { ST_LANGUAGE_PROFILE_VERSION } from '../api/generated/stLanguageProfile'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
 import { FbdNodeInspector } from './FbdNodeInspector'
 import { buildFbdNetworkGeometry, fbdNodeAutoWidth, fbdNodeHeight } from './geometry'
@@ -659,7 +660,9 @@ describe('StructuredFbdEditor — TC-FBD-HEADER-003: Chẩn đoán stale trên C
         revisionId: 'rev-1',
         nodeId: targetNode.id,
         sourceSha256: 'matching-sha256',
-        stLanguageProfileVersion: '1.0.0',
+        // Hằng sinh, không chép số: chép số làm ca FRESH thành STALE ở lần bump
+        // hồ sơ ngôn ngữ kế tiếp (Issue #800 đưa 1.0.0 → 1.1.0).
+        stLanguageProfileVersion: ST_LANGUAGE_PROFILE_VERSION,
       },
     }
 

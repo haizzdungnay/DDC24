@@ -17,6 +17,7 @@ export const ST_CORE_RESERVED_WORDS: readonly string[] = [
   'FUNCTION_BLOCK',
   'END_FUNCTION_BLOCK',
   'RETAIN',
+  'CONSTANT',
   'IF',
   'THEN',
   'ELSIF',
