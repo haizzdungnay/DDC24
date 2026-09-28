@@ -891,8 +891,8 @@ Toàn bộ finding còn mở (trừ `F-PRG-PERF-003` giữ nguyên có chủ ý 
 xuất. Việc thi hành được theo dõi bằng **một Issue**
 [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) và một PR.
 Phiếu D01–D07 của [báo cáo PM](FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md)
-được ánh xạ thành các cổng của Plan; chưa có quyết định PM nào được coi là đã
-phê duyệt.
+được ánh xạ thành các cổng của Plan. Chủ sở hữu dự án duyệt cổng G0 ngày
+2026-09-28 và cho bắt đầu implement; các cổng G-D1…G-D4 còn chờ.
 
 ### 14.6 Kiểm chứng của lần đối chiếu
 
@@ -910,4 +910,4 @@ phê duyệt.
 | 1.0 | 2026-09-04 | Tạo record từ review source, benchmark HOST, phân tích cycle/multi-program, finding hiệu năng và đối chiếu cạnh tranh; giữ TARGET/HIL/release đúng `NO-GO` |
 | 1.1 | 2026-09-04 | Đo trực tiếp Forlinx: hai lượt runtime ARM64, compiler load, service/API read-back; thêm `F-PRG-PERF-005/006/007`, hạ provenance live xuống PARTIAL và giữ HIL/release `NO-GO` |
 | 1.2 | 2026-09-28 | Bổ sung audit OS/Core, API/Modbus và browser trên Forlinx bằng một agent quản lý, hai sub-agent; giữ riêng snapshot 04/09 và giới hạn chứng cứ |
-| 1.3 | 2026-09-28 | Thêm §14 đối chiếu 21 finding với mã tại `main@cb690dfb` (2 finding mới `PERF-SYS-06/07`, `F-PRG-PERF-007` đóng, `F-PRG-PERF-005/006` chờ read-back); cập nhật header theo hiện trạng; sửa bảng lịch sử bị vỡ; liên kết Plan 63 và Issue #809 |
+| 1.3 | 2026-09-28 | Thêm §14 đối chiếu 21 finding với mã tại `main@cb690dfb` (2 finding mới `PERF-SYS-06/07`, `F-PRG-PERF-007` đóng, `F-PRG-PERF-005/006` chờ read-back); cập nhật header theo hiện trạng; sửa bảng lịch sử bị vỡ; liên kết Plan 63 và Issue #809; ghi nhận G0 duyệt 2026-09-28 |

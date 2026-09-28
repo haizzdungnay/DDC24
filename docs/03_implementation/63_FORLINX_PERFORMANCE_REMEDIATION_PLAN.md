@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PERF-FORLINX-063` |
-| Phiên bản | 1.0 |
-| Trạng thái | **In Review — chờ team review trên Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809); chưa implement** |
+| Phiên bản | 1.1 |
+| Trạng thái | **Approved — cổng G0 duyệt 2026-09-28 (chủ sở hữu dự án); READY để implement qua Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809). Cổng G-D1…G-D4 còn chờ** |
 | Ngày | 2026-09-28 |
 | Chủ quản | Tech Lead (điều phối) — owner từng task ghi ở §4 là vai trò đề xuất |
 | Người review | PM, Tech Lead, System Architect, QA, FW-SOM, Web/FE |
-| Người phê duyệt | PM + Tech Lead (cổng G0); các cổng thiết kế G-D1…G-D4 theo §5 |
+| Người phê duyệt | Chủ sở hữu dự án — cổng G0, 2026-09-28; các cổng thiết kế G-D1…G-D4 theo §5 |
 | Baseline As-Built | `main@cb690dfb` — đã đối chiếu từng finding với mã nguồn tại mốc này |
 | Nguồn finding | [Record hiệu năng §6, §13, §14](../07_records/reviews/PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md#14-đối-chiếu-mã-nguồn-tại-maincb690dfb--2026-09-28) · [Báo cáo PM D01–D07](../07_records/reviews/FORLINX_PERFORMANCE_PM_REVIEW_2026-09-28.md) · [JSON số đo](../07_records/test-evidence/fw-som/forlinx-performance-20260928/audit-summary.json) |
 | Theo dõi | **Một Issue duy nhất** [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) · **một nhánh** · **một PR** `Closes #809`; trạng thái từng task ở §7 |
@@ -26,6 +26,7 @@
 | Việc nào rủi ro nhất? | Đổi nhịp IOBus (T63-201) và thi hành budget từng Program (T63-303). Cả hai có **cổng thiết kế** bắt buộc duyệt trên Issue trước khi viết code. |
 | Làm theo thứ tự nào? | W0 đo và khoá baseline → W1 Web/FE (không chạm luồng RT) → W2 luồng RT → W3 budget Program → W4 deploy, đo lại, đóng hồ sơ. |
 | Ước lượng? | ≈ **33 người-ngày** (§4.6). Đây là ước lượng Engineering để PM xếp nguồn lực, **chưa chốt**. |
+| Bắt đầu ngay được việc gì? | Tách nhánh từ `main`. Làm song song W0 (T63-001…005) và các task W1 không cần cổng (T63-101, 102, 103, 104, 108, 109, 110), cùng T63-202, T63-203, T63-301, T63-302, T63-304. Task có cổng (T63-105/106/107 → G-D3, T63-201 → G-D1, T63-204 → G-D4, T63-303 → G-D2) giữ `BLOCKED` tới khi cổng được duyệt. |
 | Khi nào gọi là xong? | Khi đủ Definition of Done ở §10: mọi task `DONE` hoặc `N/A` có lý do, mọi cổng có biên bản, bảng Verification có số đo thật trước và sau trên bo. |
 
 ### 0.1 Kết luận quản lý
@@ -383,6 +384,10 @@ phụ thuộc giữ `BLOCKED(<cổng>)`.
 | **G-D3** — chính sách log/audit | T63-105/106/107 | Owner audit/Product + QA | Danh sách sự kiện giữ 100% và sự kiện được gộp | D05 |
 | **G-D4** — chỉnh IRQ/BSP | T63-204 | FW-SOM/BSP + Architect | Histogram T63-005 đo sạch còn vi phạm | D04 |
 
+**Trạng thái cổng (2026-09-28):** G0 **APPROVED** — chủ sở hữu dự án duyệt Plan 63
+và cho bắt đầu implement, ghi trên Issue #809. G-D1, G-D2, G-D3, G-D4 **CHỜ**: đầu
+vào bắt buộc của từng cổng chưa có.
+
 Phương án cho D02 là **A — retry có deadline** (T63-101/102). Phương án B
 (sampler dùng chung) chỉ mở Issue mới nếu T63-101 không đạt tiêu chí.
 
@@ -448,15 +453,14 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
 | `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | TODO | |
 | `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
-| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 | TODO | |
+| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | TODO | |
 
 ---
 
 ## 8. Cách thi hành trong một Issue và một PR
 
-1. Sau G0, Implementer tạo nhánh `perf/forlinx-remediation-<số Issue>` **từ nhánh
-   chứa Plan này** (`docs/forlinx-perf-remediation-plan-20260928`), để commit tài
-   liệu và code đi chung một PR.
+1. Implementer tạo nhánh `perf/forlinx-remediation-809` **từ `main`** (Plan này đã
+   ở `main` từ 2026-09-28).
 2. Mở PR ở chế độ draft ngay commit đầu, thân có `Closes #<số Issue>`,
    `Implementer-Run` và bảng Verification. PR chỉ chuyển ready khi đủ §10.
 3. Commit tách theo task: `feat(iobus): T63-201 ...`, `fix(web-api): T63-101 ...`.
@@ -521,3 +525,4 @@ read-back sha256 và `/api/v1/points`.
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-28 | Tạo plan từ record hiệu năng §6/§13/§14 và báo cáo PM D01–D07: đối chiếu 21 finding (19 gốc + 2 mới) với mã tại `main@cb690dfb`, 25 task/5 wave, 5 cổng quyết định, giao thức đo, ma trận truy xuất; thi hành bằng một Issue #809 và một PR |
+| 1.1 | 2026-09-28 | Chủ sở hữu dự án duyệt cổng G0 và cho bắt đầu implement; Plan đưa thẳng lên `main` theo yêu cầu, nhánh thi hành tách từ `main`; thêm mục "bắt đầu ngay được việc gì"; G-D1…G-D4 vẫn chờ |
