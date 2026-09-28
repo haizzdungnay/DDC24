@@ -1,0 +1,85 @@
+{
+ "tag": "coarse100",
+ "state": "COMPLETED",
+ "stopReason": "QUOTA_REACHED",
+ "source": "CORE",
+ "samplePeriodMs": 100,
+ "effectiveSamplePeriodMs": 100,
+ "droppedSamples": 0,
+ "samples": 450,
+ "startedAt": "2026-09-28T09:36:37.28748923Z",
+ "updatedAt": "2026-09-28T09:37:22.326799414Z",
+ "samplesWithMixedReleaseSeq": 0,
+ "notReleasedCells": 0,
+ "unresolvedCells": 0,
+ "releaseSeqFirstLast": [
+  10092,
+  14582
+ ],
+ "releaseSeqDeltaHistogram": {
+  "10": 449
+ },
+ "releaseSeqUnexpectedGaps": [],
+ "releaseSeqUnexpectedGapCount": 0,
+ "invariantViolations": {},
+ "invariantExamples": [],
+ "actualValueNotEqualReadback": 0,
+ "readbackCells": 7200,
+ "readbackNotEqualCommanded": 0,
+ "readbackAgeMs": [
+  0,
+  0
+ ],
+ "readbackAgeIncreases": 0,
+ "readbackAgeResets": 0,
+ "commandChangesCaughtUp": 16,
+ "readbackLagMs_min_median_max": [
+  0,
+  0,
+  0
+ ],
+ "lagExamples": [
+  [
+   "DO01",
+   355,
+   355,
+   "2026-09-28T09:37:12.700907356Z",
+   "2026-09-28T09:37:12.700907356Z"
+  ],
+  [
+   "DO02",
+   355,
+   355,
+   "2026-09-28T09:37:12.700907356Z",
+   "2026-09-28T09:37:12.700907356Z"
+  ],
+  [
+   "DO03",
+   5,
+   5,
+   "2026-09-28T09:36:37.700905521Z",
+   "2026-09-28T09:36:37.700905521Z"
+  ],
+  [
+   "DO03",
+   355,
+   355,
+   "2026-09-28T09:37:12.700907356Z",
+   "2026-09-28T09:37:12.700907356Z"
+  ],
+  [
+   "DO04",
+   15,
+   15,
+   "2026-09-28T09:36:38.700916191Z",
+   "2026-09-28T09:36:38.700916191Z"
+  ],
+  [
+   "DO04",
+   218,
+   218,
+   "2026-09-28T09:36:59.00090749Z",
+   "2026-09-28T09:36:59.00090749Z"
+  ]
+ ]
+}

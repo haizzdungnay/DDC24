@@ -55,11 +55,19 @@ void PointTable::update_ext(const kx_ext_point_t* points, uint16_t count)
                             ? points[i].sample_mono_ns
                             : fallback_ts;
         ext_[i].source = PointSource::MODBUS_RTU;
+        ext_reported_[i] = ext_[i];
     }
     for (uint16_t i = valid_count; i < KX_N_EXT; i++) {
         ext_[i].quality = KX_Q_BAD;
         ext_[i].source = PointSource::MODBUS_RTU;
+        ext_reported_[i].quality = KX_Q_BAD;
+        ext_reported_[i].source = PointSource::MODBUS_RTU;
     }
+}
+
+Point PointTable::ext_reported(int idx) const
+{
+    return idx >= 0 && idx < KX_N_EXT ? ext_reported_[idx] : Point{};
 }
 
 const Point* PointTable::slot(PointId id) const

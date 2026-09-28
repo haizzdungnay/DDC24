@@ -1,10 +1,11 @@
 # Thiết kế đề xuất: Trace nhất quán theo lần chạy Program và tách giá trị lệnh / đọc lại
 
 > **Document ID:** SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI
-> **Phiên bản:** 0.2
-> **Trạng thái:** **Accepted + Implemented (HOST) 2026-09-28** — chủ dự án chấp
-> thuận Q1–Q4 theo đề xuất khi giao triển khai. Kết quả ở §9; kiểm trên bo (phần
-> trên bo của T-798-4) còn chờ deploy lên bo lab
+> **Phiên bản:** 0.3
+> **Trạng thái:** **Accepted + Implemented, kiểm trên bo PASS 2026-09-28** — chủ
+> dự án chấp thuận Q1–Q4 theo đề xuất khi giao triển khai. Kết quả ở §9; phần
+> trên bo của T-798-4 lộ một lỗi đọc lại (đã sửa, §9) và PASS sau sửa
+> ([`EV-PROG-TRACE-798-TARGET`](../../07_records/test-evidence/programming/2026-09-28-trace-release-readback-target.md))
 > **Issue:** [#798](https://github.com/Mekong-HCM/MK-DDC-24/issues/798) (finding **U-04** của
 > [`REC-DDC-FIELD-USE-20260927`](../../07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md))
 > **Mốc mã nguồn đối chiếu:** `main@9910b88` (2026-09-28)
@@ -145,7 +146,7 @@ khai Issue #798; hiện thực theo đúng các đề xuất đó (§9).
 | OpenAPI | 1.46.0 → **1.47.0**: `ProgrammingTraceValue` + `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` `deprecated`. Re-pin G1 và `pgm02` |
 | FE | Bảng Trace: cột "Đọc lại (tuổi)" thay cột "Actual", "lần chạy N" dưới mốc, ô NOT_RELEASED ghi "không chạy" |
 | T-798-1..3 | `test_st_value_trace.cpp`: `T798_1_…` (Program 100 ms trong Task 10 ms, 300 boundary, 30 mẫu, 0 cặp lệch), `T798_2_…` (phiên trộn 10/100 ms: 100 mẫu, 10 ô chậm hợp lệ, 90 ô NOT_RELEASED), `T798_3_…` (release 1, 2, 4, 5 khi boundary 200 ms bị chặn; biến lạ UNRESOLVED), `StoppedProgramDoesNotFreezeTheSession` |
-| T-798-4 | Core: `T798_4_…` (lệnh đóng, đọc lại mở, tuổi 5 → 25 ms, đuổi kịp ở 40 ms, không bảng điểm ⇒ UNAVAILABLE). Go: `TestTraceReadbackIsSeparateFromCommand`. **Trên bo: chưa chạy** |
+| T-798-4 | Core: `T798_4_…` (lệnh đóng, đọc lại mở, tuổi 5 → 25 ms, đuổi kịp ở 40 ms, không bảng điểm ⇒ UNAVAILABLE). Go: `TestTraceReadbackIsSeparateFromCommand`. **Trên bo (2026-09-28):** lần đầu FAIL — mọi ô DO Modbus đọc lại = lệnh, tuổi 0, vì `PointWriter::write` ghi lệnh vào chính ô EXT (`set_virtual`) trước khi Trace lấy mẫu. Sửa: PointTable giữ `ext_reported_[]` (chỉ `update_ext` ghi) cho đọc lại EXT; đầu ra AV/BV/MSV không có kênh đọc lại ⇒ UNAVAILABLE (null). Test `T798_4_ModbusReadbackIsThePolledCoilNotTheCommandJustWritten`, `T798_4_VirtualPointOutputHasNoReadback` (đỏ trên mã cũ). Kiểm lại trên bo PASS: Trace 100 ms 485/7 200 ô DO đọc lại ≠ lệnh, tuổi 28…1 097 ms reset theo poll FC01 ~1 s, lệnh → đọc lại khớp trung vị 500 ms; Trace 10 ms `releaseSeq` +1 ở 1 499/1 499 khoảng; `actualValue` = `readbackValue` 0 lệch |
 | T-798-5 | Go: `TestTraceActualValueNoLongerCopiesProgramValue`, `TestTraceFallsBackToLegacyCellsOnOldCore`, `TestTraceReadCellDecodesBothFormats` |
 | T-798-6 | IPC `TraceReadCellFormatTwoCarriesReleaseAndReadback`; G1 10/10 và PGM-02 PASS sau re-pin |
 
@@ -153,5 +154,6 @@ khai Issue #798; hiện thực theo đúng các đề xuất đó (§9).
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.3 | 2026-09-28 | §9 T-798-4 trên bo: lỗi đọc lại EXT bị lệnh ghi đè, cách sửa (`ext_reported_`, VP không có đọc lại) và số đo trên bo sau sửa (`EV-PROG-TRACE-798-TARGET`) |
 | 0.2 | 2026-09-28 | Chủ dự án chấp thuận Q1–Q4; hiện thực HOST (Core, IPC, BE, OpenAPI 1.47.0, FE); §9 kết quả |
 | 0.1 | 2026-09-28 | Bản đề xuất đầu tiên cho Issue #798 (U-04): hiện trạng đối chiếu `main@9910b88`, ba phương án lấy mẫu, tách `commandedValue`/`readbackValue`, ảnh hưởng hợp đồng, test đóng Issue và câu hỏi duyệt |

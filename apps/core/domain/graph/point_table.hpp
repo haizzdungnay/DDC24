@@ -48,6 +48,13 @@ public:
 
     Point get(PointId id) const;
 
+    /* Issue #798 — giá trị THIẾT BỊ báo về của điểm Modbus EXT: mẫu poll gần
+     * nhất cùng mốc sample của producer. KHÁC `get()`: với điểm EXT ghi được,
+     * `PointWriter::write` đặt lệnh vào ô qua `set_virtual` (ts = lúc ghi), nên
+     * `get()` sau bước xuất lệnh trả chính lệnh vừa ghi. Bản này chỉ
+     * `update_ext` ghi. idx ngoài dải trả Point{} (BAD). */
+    Point ext_reported(int idx) const;
+
     /* AV/BV/MSV (web/graph) — AO/BO bị từ chối (trả false). */
     bool set_virtual(PointId id, float v, PointSource src);
 
@@ -73,6 +80,7 @@ private:
     Point bv_[KX_N_BV];
     Point msv_[KX_N_MSV];
     Point ext_[KX_N_EXT];
+    Point ext_reported_[KX_N_EXT];   /* chỉ update_ext ghi — xem ext_reported() */
 
     Point*       slot(PointId id);
     const Point* slot(PointId id) const;

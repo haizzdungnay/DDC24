@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Fixed — Trace đọc lại DO Modbus là coil poll thật; kiểm #798 trên bo lab PASS (Issue #798, U-04, 2026-09-28)
+
+- **Phạm vi:** Core `apps/core/domain/graph/point_table.{hpp,cpp}`, `apps/core/application/st/st_process_image.cpp` + 2 test mới trong `test_st_value_trace.cpp`; `programming_sim_worker_main.cpp`, `schedule_sim_main.cpp` (`--provenance`) + `test_binary_provenance.cpp`; tài liệu `EV-PROG-TRACE-798-TARGET` (mới), `SW-TRACE-RELEASE-COHERENT` 0.3 §9, `REC-DDC-FIELD-USE` 2.1 (U-04, U-22), guide 16 DO 1.11 §9.6, `DEPLOY_FOXLINX.md` mục Lưu ý, skill `foxlinx-deploy`.
+- **Triệu chứng:** deploy `main@4c49e78b` lên bo lab. Trace 100 ms của `PRG_DO16_MODBUS` cho `releaseSeq` đúng, nhưng **0/7 200** ô DO Modbus có đọc lại khác lệnh và `readbackAgeMs` luôn 0. Đầu ra Virtual Point (`StsMode`, `StsOnCount`) cũng hiện "đọc lại" bằng lệnh.
+- **Nguyên nhân gốc:** `st_output_readback` đọc `PointTable::get()`. Trong ScanLoop, bước xuất lệnh (`PointWriter::write` → `set_virtual`) ghi lệnh vào chính ô EXT với `ts = lúc ghi`, rồi Trace mới lấy mẫu. Test host T798_4 dùng DO nội bộ nên không lộ.
+- **Cách sửa:** PointTable giữ `ext_reported_[]` (chỉ `update_ext` ghi) cho đọc lại EXT; AO/DO nội bộ đọc feedback IO như cũ; AV/BV/MSV không có kênh đọc lại nên `readbackValue` là null. Hai test mới đi đúng thứ tự ScanLoop, đỏ trên mã cũ.
+- **Sửa kèm (T63-002):** `artifact_manifest.py deploy-record` và `build-release.sh` từ chối `mkddc-programming-sim-worker`/`mkddc-schedule-sim` vì hai binary không mang `MKDDC_GIT_COMMIT` (không dòng nào dùng macro). Thêm cờ `--provenance`, giữ nguyên `--version` của worker (hợp đồng `workerVersion`); CTest `BinaryProvenance.*` 3/3.
+- **Kiểm trên bo sau sửa (Core `1602b2fd`, còn lại `main@4c49e78b`, read-back manifest 9/11 OK, 2 lệch `web-ui` do bên thứ ba thay FE lúc 09:40Z):**
+  - Trace 100 ms: 450 mẫu, `releaseSeq` +10 ở 449/449 khoảng (Program 10 ms), 0 mẫu trộn lần chạy, 0 vi phạm bất biến vào/ra với bộ chấm không nới luật.
+  - Đọc lại DO: 485/7 200 ô khác lệnh; `readbackAgeMs` 28…1 097 ms, reset 720 lần theo poll FC01 ~1 s; lệnh → đọc lại khớp min/trung vị/max 0/500/1 000 ms.
+  - Trace 10 ms: `releaseSeq` +1 ở 1 499/1 499 khoảng.
+  - `actualValue` = `readbackValue` 0 ô lệch.
+  - Health 6/6 ok, Programming READY, toolchain ok, Active `0c29f4f1…` không đổi.
+- **Phát hiện, chưa sửa:** mỗi lần Core khởi động, Program có đầu vào VP bị `FAULTED ST-RT-008` trước lần chạy đầu (hai lần tái hiện), lệch `DDD-CTRL-PROG-001` §5/§9 — Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) (U-22), chờ chốt ngưỡng. Hai lần đều đã khôi phục bằng Disable → Enable.
+- **Kiểm chứng host:** `cmake --fresh` (Modbus+BACnet+HMI ON) configure/build exit 0, `ctest` **1741/1741**; `verify-project.sh --component layout` exit 0; `docs_iso_harness --expect` PASS. Go/FE không đổi ở nhánh này.
+- **Refs:** Issue #798, #827, `EV-PROG-TRACE-798-TARGET`, `SW-TRACE-RELEASE-COHERENT-MK-DDC-24-VI` §9, Plan 63 T63-002.
+
 ### Changed — Duyệt Controls/Safety cho khối `PID`, PID dùng được trên mọi bề mặt (Issue #802, U-13, 2026-09-28)
 
 - **Phạm vi:** contract `contracts/programming/product_profile_v2.json` (`approvalEvidenceRef` + `approvalToken`) và hằng sinh C++/Go/TS; re-pin `g1_contract_join_v1.json` (sha profile, `approvedReviewGatedFeatures = ["PID"]`), golden build manifest ST/FBD (`profile.sha256`, `buildKeySha256`), `pgm02_workspace_v1.json`, `fbd/manifest.json`; Core `st_review_gate.*`, `st_compile.*`, `st_fbd_compile.*`, `st_exec.cpp` (chỉ chú thích); test mới `test_st_pid_closed_loop.cpp`; BE `internal/programming/application/library_review_gate.go` + `library.go`; FE `model/reviewGate.ts`, `fbd/palette.ts`; `scripts/generate_programming_profile.py`, `scripts/verify_programming_g1_contracts.py`.

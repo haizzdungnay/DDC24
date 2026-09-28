@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.1 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
@@ -60,6 +60,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | U-19 | P3 | Hiệu năng API | Một lệnh ghi VP mất ~4 s (các lệnh khác ~0,1 s) | Chưa tái hiện; **đã thêm log phân rã theo pha ở PR #803** (đã merge) để lần sau có dữ liệu |
 | U-20 | P2 | An toàn đầu ra | Program FAULTED thì DO Modbus giữ giá trị cuối tới 60 s | Theo mã; bằng chứng đã thêm vào #384, chờ quyết định ma trận chính sách đầu ra |
 | U-21 | P3 | Triển khai | Web dùng chung binary với 2 helper; restart thiếu thì helper chạy bản cũ; bo đang chạy bản chưa merge | **Phần kiểm binary cũ đã sửa ở PR #797, đã merge**; **Đóng**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi); kiểm `/proc/<MainPID>/exe` cả ba unit web cùng `7c58fab0…` |
+| U-22 | P1 | Runtime | Mỗi lần Core khởi động, Program có đầu vào VP bị FAULTED `ST-RT-008` trước lần chạy đầu, phải Disable → Enable | Phát hiện khi kiểm #798 trên bo (2026-09-28), hai lần tái hiện; chờ quyết định ngưỡng: [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) |
 
 ## 3. Chi tiết và đề xuất
 
@@ -188,6 +189,10 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 - `mkddc-reload-helper` và `mkddc-time-helper` dùng chung binary `/opt/mkddc-web/mkddc-web`. Chỉ restart `mkddc-web-pi` thì hai helper tiếp tục chạy bản cũ đã bị thay (`(deleted)`), đúng như phiên này gặp. Ngoài ra bo lab hiện chạy web của PR #795 chưa merge, khác bản RC `f86150e3` mà release record ghi nhận.
 - *Đề xuất:* `install.sh`/công cụ deploy kiểm `/proc/<MainPID>/exe` của cả ba unit và báo lỗi nếu còn `(deleted)`; merge #795 rồi cập nhật release record.
 
+**U-22 — Core khởi động làm Program có đầu vào VP bị FAULTED (P1, thêm 2026-09-28).**
+- Khi kiểm #798 trên bo, cả hai lần Core khởi động (lúc web đang dừng và lúc web vẫn chạy) đều để `PRG_DO16_MODBUS` ở `FAULTED ST-RT-008`, `lastRunAtUtc = null`. VP chưa có trong bảng điểm của Core ở lần dispatch đầu; bo không có `state.snap`. `st_scheduler.cpp` FAULT ngay ở mẫu đầu vào xấu đầu tiên, trong khi `DDD-CTRL-PROG-001` §5/§9 ghi "hold-last, tự phục hồi theo ngưỡng hoặc ack". Hệ quả ngoài hiện trường: sau mất điện, mọi Program dùng VP đứng ở FAULTED tới khi có người reset.
+- *Đề xuất:* chốt ngưỡng mất đầu vào liên tục hoặc trạng thái chờ đầu vào lúc khởi động, rồi sửa scheduler; cân nhắc lưu VP vào `state.snap`. Trong lúc chờ: Disable → Enable sau mỗi lần restart Core (`DEPLOY_FOXLINX.md`). Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827); bằng chứng [`EV-PROG-TRACE-798-TARGET`](../test-evidence/programming/2026-09-28-trace-release-readback-target.md) §5.1.
+
 ## 4. Lộ trình đề xuất
 
 | Đợt | Việc | Lý do |
@@ -211,7 +216,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
 | Thiết kế đã duyệt | U-10 toán tử bit, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số | #800 | **Đã làm**: SYSTEM `rev-a.5`, hồ sơ ngôn ngữ 1.1.0; `FB_MASK_SPLIT` viết lại bằng `AND`, mô phỏng 3001 chu kỳ giống hệt bản trên bo |
 | Thiết kế đã duyệt | U-12 khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS`/`BITS_TO_WORD`/`UPTIME` | #801 | **Đã làm**: SYSTEM `rev-a.6`, hồ sơ ngôn ngữ 1.2.0; `PRG_DO16_MODBUS` bản khối SYSTEM lệnh IR 1 525 → 792; mô phỏng 3001 chu kỳ chỉ khác nhịp STAGING (đúng `STAGE_DELAY`); 4 lỗi hiện trường có test tái hiện |
 | Quyết định sản phẩm | U-13 duyệt `PID` | #802 | **Đã làm**: phương án 1 của `REC-PID-DECISION-REQUEST-20260928`; harness PID 15/15 và vòng kín τ = 5 s 4/4 (hội tụ ±2 % sau 7,0 s, rời bão hoà ngay chu kỳ đầu, vọt lố 1,25 %, override giữ tích phân trôi ≤ 0,00001, OUT lúc nhả 70,90 so với 100 ở phản chứng); token ký cho `rev-a.6`; cơ chế cổng giữ nguyên, test bằng bảng giả. Lớp HOST; AO thật NOT RUN |
-| Thiết kế đã duyệt | U-04 Trace nhất quán theo lần chạy, tách lệnh / đọc lại | #798 | **Đã làm (HOST)**: mẫu Core lấy tại release kèm `releaseSeq`, ô `NOT_RELEASED`; `commandedValue`/`readbackValue`/`readbackAgeMs`, `actualValue` deprecated; OpenAPI 1.47.0. Test Core T-798-1..4 (lệnh đóng, đọc lại mở); kiểm trên bo chờ deploy |
+| Thiết kế đã duyệt | U-04 Trace nhất quán theo lần chạy, tách lệnh / đọc lại | #798 | **Đã làm, kiểm trên bo PASS** (2026-09-28): HOST ở PR #823; kiểm trên bo lộ lỗi đọc lại DO Modbus = lệnh vừa ghi (tuổi 0), sửa bằng `ext_reported_` (commit `1602b2fd`). Sau sửa: Trace 100 ms 450 mẫu, `releaseSeq` +10 ở 449/449 khoảng (Program 10 ms), 485/7 200 ô DO đọc lại ≠ lệnh, tuổi 28…1 097 ms reset theo poll FC01, lệnh → đọc lại khớp trung vị 500 ms; Trace 10 ms `releaseSeq` +1 ở 1 499/1 499 khoảng; 0 vi phạm bất biến vào/ra, `actualValue` = `readbackValue`. Bằng chứng `EV-PROG-TRACE-798-TARGET` |
 | Sau merge | U-01 (#795) và phần "bo lệch bản phát hành" của U-21 | #805 | **Xong**: bo lab chạy `main@e3072983` từ 2026-09-28 03:30Z (web `7c58fab0…`, iobus `dc8cad5b…`, tool ST mới; Core giữ `9621cb52…` vì runtime không đổi). Health `ok`, Programming `READY`, toolchain `ok` profile `1cb61fec…`, Active người dùng giữ nguyên, 48/48 điểm Modbus `GOOD` (12 kênh UI cục bộ UI-01..04, UI-09..16 báo `bad`, trạng thái có sẵn trước lượt deploy, ngoài phạm vi), FC15 × 8 ở pha BLINK, 0 khung lỗi |
 
 Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastProvider` không huỷ timer khi unmount, làm cả bộ vitest exit 1 dù mọi test PASS. Lỗi này đã sửa trong #797.
@@ -227,6 +232,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.1 | 2026-09-28 | §5: U-04 (#798) kiểm trên bo PASS sau khi sửa lỗi đọc lại EXT; §2, §3.4: thêm U-22 (#827) — Core khởi động làm Program có đầu vào VP bị FAULTED |
 | 2.0 | 2026-09-28 | §2, §3.3, §5: U-13 (#802) đã làm — `PID` được duyệt và dùng được |
 | 1.9 | 2026-09-28 | §5: U-04 (#798) đã làm ở mức HOST |
 | 1.8 | 2026-09-28 | §5: U-12 (#801) đã làm |

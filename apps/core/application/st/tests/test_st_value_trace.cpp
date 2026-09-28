@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "graph/point_table.hpp"
+#include "graph/point_writer.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_scheduler.hpp"
@@ -585,6 +586,90 @@ TEST(StValueTrace, T798_4_OutputBoundVariableCarriesReadbackDistinctFromCommand)
     /* Không có bảng điểm (đường không có phần cứng): gắn điểm nhưng KHÔNG có số. */
     scan(scheduler, trace, 50 * kMs, 1, nullptr);
     EXPECT_EQ(trace.sample(3).readback_state[0], StTraceReadback::UNAVAILABLE);
+}
+
+/* T-798-4 trên bo (EV-PROG-TRACE-798-TARGET): với DO Modbus, bước xuất lệnh
+ * của chính chu kỳ đó ghi lệnh vào ô EXT của PointTable qua
+ * `PointWriter::write` → `set_virtual` (ts = lúc ghi). Bản đầu của #798 đọc
+ * `get()` nên mọi ô báo "đọc lại" = lệnh, tuổi 0 ms. Test đi đúng thứ tự của
+ * ScanLoop: `update_ext` (mẫu poll) → Program chạy → ghi lệnh → lấy mẫu Trace. */
+TEST(StValueTrace, T798_4_ModbusReadbackIsThePolledCoilNotTheCommandJustWritten)
+{
+    StIrIoBinding output{};
+    output.slot = 0;   /* echo_program điền slot của `q` */
+    output.is_output = true;
+    output.point_kind = StPointKind::EXT;
+    output.point_index = 1;
+    output.type = StType::BOOL;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"relay", 0}}, echo_program({output}));
+
+    PointTable table;
+    kx_plc_shm_t shm{};
+    shm.ext_count = 1;
+    shm.ext[0].writable = 1;
+    shm.ext[0].quality = KX_EXTQ_GOOD;
+    shm.ext[0].value = 0.0;                    /* coil còn mở */
+    shm.ext[0].sample_mono_ns = 5 * kMs;       /* lần poll FC01 gần nhất */
+    const PointId coil{PointKind::EXT, 0};
+
+    const StTraceVariable variable = traced("relay", "q");
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 10, 60000, 0, &error)) << error;
+    (void)scheduler.find_program("relay")->runtime.set_variable("cmd", StValue::make_bool(true));
+
+    auto cycle = [&](uint64_t now_ns) {
+        table.update_ext(shm.ext, shm.ext_count);
+        scheduler.on_base_step(now_ns);
+        PointWriter writer(table, &shm);
+        ASSERT_TRUE(writer.write(coil, 1.0f, PointSource::PROGRAM));
+        trace.on_boundary(scheduler, now_ns, &table);
+    };
+    cycle(10 * kMs);
+    ASSERT_EQ(table.get(coil).value, 1.0f) << "tiền đề: lệnh đã ghi đè ô EXT như trên bo";
+    const StTraceSample first = trace.sample(0);
+    EXPECT_TRUE(first.values[0].b) << "lệnh: đóng";
+    ASSERT_EQ(first.readback_state[0], StTraceReadback::VALID);
+    EXPECT_FALSE(first.readback[0].b) << "đọc lại là coil poll (còn mở), không phải lệnh vừa ghi";
+    EXPECT_EQ(first.readback_age_ms[0], 5u) << "tuổi tính từ mốc poll, không phải lúc ghi lệnh";
+
+    cycle(30 * kMs);
+    EXPECT_FALSE(trace.sample(1).readback[0].b);
+    EXPECT_EQ(trace.sample(1).readback_age_ms[0], 25u) << "tuổi tăng giữa hai lần poll";
+
+    shm.ext[0].value = 1.0;                    /* poll kế thấy coil đã đóng */
+    shm.ext[0].sample_mono_ns = 40 * kMs;
+    cycle(40 * kMs);
+    EXPECT_TRUE(trace.sample(2).readback[0].b);
+    EXPECT_EQ(trace.sample(2).readback_age_ms[0], 0u) << "tuổi về 0 ở lần poll mới";
+}
+
+/* Đầu ra gắn điểm ảo (AV/BV/MSV) không có kênh đọc lại từ thiết bị: giá trị
+ * trong bảng là chính lệnh vừa ghi, nên ô phải là UNAVAILABLE (BE trả null), không
+ * phải "đọc lại" bằng lệnh (SW-TRACE-RELEASE-COHERENT §4). */
+TEST(StValueTrace, T798_4_VirtualPointOutputHasNoReadback)
+{
+    StIrIoBinding output{};
+    output.slot = 0;
+    output.is_output = true;
+    output.point_kind = StPointKind::BV;
+    output.point_index = 1;
+    output.type = StType::BOOL;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    build_rev_a(&scheduler, {{"status", 0}}, echo_program({output}));
+    PointTable table;
+    const StTraceVariable variable = traced("status", "q");
+    StValueTrace trace;
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 10, 60000, 0, &error)) << error;
+    (void)scheduler.find_program("status")->runtime.set_variable("cmd", StValue::make_bool(true));
+    scheduler.on_base_step(10 * kMs);
+    ASSERT_TRUE(table.set_virtual({PointKind::BV, 0}, 1.0f, PointSource::PROGRAM));
+    trace.on_boundary(scheduler, 10 * kMs, &table);
+    ASSERT_EQ(trace.sample_count(), 1u);
+    EXPECT_TRUE(trace.sample(0).values[0].b);
+    EXPECT_EQ(trace.sample(0).readback_state[0], StTraceReadback::UNAVAILABLE);
 }
 
 /* Program không còn được dispatch (STOPPED) thì không chờ release mãi: mẫu vẫn

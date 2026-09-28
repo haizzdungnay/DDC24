@@ -198,7 +198,26 @@ bool st_output_readback(const StIrIoBinding& binding, const PointTable& table, u
     if (!value || !age_ms || !binding.is_output) return false;
     PointId id{};
     if (!to_point_id(binding, &id)) return false;
-    const Point point = table.get(id);
+    Point point{};
+    switch (binding.point_kind) {
+    case StPointKind::AO:
+    case StPointKind::DO:
+        /* Feedback IO nội bộ: `update_inputs` ghi từ snapshot phần cứng, và
+         * `set_virtual` từ chối AO/BO nên lệnh không đè được ô này. */
+        point = table.get(id);
+        break;
+    case StPointKind::EXT:
+        /* Không đọc `get()`: bước xuất lệnh của CHÍNH chu kỳ này đã ghi lệnh
+         * vào ô EXT (ts = lúc ghi). Trên bo lab trước bản sửa, mọi ô DO Modbus
+         * báo đọc lại = lệnh, tuổi 0 ms (EV-PROG-TRACE-798-TARGET). */
+        point = table.ext_reported(id.idx);
+        break;
+    default:
+        /* Điểm ảo (AV/BV/MSV) không có kênh đọc lại từ thiết bị: giá trị trong
+         * bảng là chính lệnh vừa ghi. Báo "không có", không trình bày lệnh
+         * như số đọc lại (SW-TRACE-RELEASE-COHERENT §4). */
+        return false;
+    }
     if (point.quality != KX_Q_GOOD || !to_cell(binding, point.value, value)) return false;
     const uint64_t age_ns = now_ns > point.ts_ns ? now_ns - point.ts_ns : 0;
     const uint64_t age = age_ns / 1000000ull;

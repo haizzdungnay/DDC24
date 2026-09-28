@@ -95,6 +95,13 @@ int main(int argc, char** argv)
     Args args;
     for (int i = 1; i < argc; i++) {
         const char* a = argv[i];
+        if (!std::strcmp(a, "--provenance")) {
+            /* T63-002: xem `programming_sim_worker_main.cpp` — dòng này giữ
+             * `MKDDC_GIT_COMMIT` trong binary để manifest ghi được commit. */
+            std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n",
+                        MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN);
+            return 0;
+        }
         if (!std::strcmp(a, "--config") && i + 1 < argc) args.config = argv[++i];
         else if (!std::strcmp(a, "--schedule") && i + 1 < argc) args.schedule_id = argv[++i];
         else if (!std::strcmp(a, "--start") && i + 1 < argc) {
