@@ -1,0 +1,14 @@
+== DO01: lệnh đổi True -> False tại mẫu 1232
+  seq= 1230 t=09:48:21.278 release=13619 cmd=True readback=True age=720 actual=True
+  seq= 1231 t=09:48:21.288 release=13620 cmd=True readback=True age=730 actual=True
+  seq= 1232 t=09:48:21.298 release=13621 cmd=False readback=True age=740 actual=True
+  seq= 1233 t=09:48:21.308 release=13622 cmd=False readback=True age=750 actual=True
+  seq= 1268 t=09:48:21.658 release=13657 cmd=False readback=False age=100 actual=False
+  -> đọc lại bắt kịp sau 36 mẫu (~360 ms)
+== DO02: lệnh đổi True -> False tại mẫu 1232
+  seq= 1230 t=09:48:21.278 release=13619 cmd=True readback=True age=720 actual=True
+  seq= 1231 t=09:48:21.288 release=13620 cmd=True readback=True age=730 actual=True
+  seq= 1232 t=09:48:21.298 release=13621 cmd=False readback=True age=740 actual=True
+  seq= 1233 t=09:48:21.308 release=13622 cmd=False readback=True age=750 actual=True
+  seq= 1268 t=09:48:21.658 release=13657 cmd=False readback=False age=100 actual=False
+  -> đọc lại bắt kịp sau 36 mẫu (~360 ms)

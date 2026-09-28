@@ -312,7 +312,24 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
 
 ## Lưu ý
 
-- Board không có `curl`, `nc` — dùng `wget` hoặc `busybox wget` để test.
+- Board không có `curl`. `busybox wget` chỉ gửi được GET/POST; cần PUT (ví dụ
+  `…/runtime-intent`) thì dùng `perl` (`IO::Socket::INET`) chạy trên bo. sshd của
+  bo tắt port-forwarding (`AllowTcpForwarding no`, siết sau sự cố 2026-09-26), nên
+  không dựng được tunnel `-L` tới cổng web.
+- **Restart `mkddc-core` làm Program có đầu vào Virtual Point bị `FAULTED
+  ST-RT-008`** trước lần chạy đầu (Issue #827, gặp hai lần 2026-09-28, kể cả khi
+  web vẫn chạy). Sau mỗi lần deploy có restart Core: đọc
+  `GET /api/v1/programming/projects/{id}/programs`, Program nào `FAULTED` với
+  `ST-RT-008` và `lastRunAtUtc = null` thì `PUT …/programs/{programId}/runtime-intent`
+  `{"schemaVersion":"1.0","desiredEnabled":false}` rồi `true` (mỗi lệnh một
+  `X-Idempotency-Key` mới), kiểm lại `RUNNING` và Revision Active không đổi.
+- Binary Go dựng **trong git worktree** không có `vcs.revision` (Go chỉ nhận `.git`
+  là thư mục), nên `artifact_manifest.py deploy-record` exit 2. Dựng `mkddc-web` từ
+  một bản clone thường (`git clone --no-checkout <repo> && git checkout <commit>`),
+  kiểm bằng `go version -m <binary> | grep vcs`.
+- Bo lab có thể có người khác deploy song song (2026-09-28: một máy LAN thay
+  `dist` giữa hai bước đo). Chạy bước 7b ngay trước khi báo xong; mục lệch do người
+  khác thì báo lại, không ghi đè bản của họ.
 - Binary `mkddc-web` đang chạy thì `scp` sẽ thất bại — phải `pkill` trước.
 - `scp` dùng `-P` (uppercase) cho port, `ssh` dùng `-p` (lowercase).
 - Không sửa `JWT_SECRET` trên board trừ khi có yêu cầu rõ ràng.

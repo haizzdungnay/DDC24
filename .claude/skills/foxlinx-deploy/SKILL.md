@@ -200,6 +200,11 @@ Báo user kèm:
 - **Luôn backup** trước khi ghi đè binary/dist, kể cả `artifact-manifest.json`.
 - **Manifest chỉ ghi từ file build** (`deploy-record`); không điền sha256 đọc từ bo.
 - **Binary đang chạy** thì `scp` thất bại — phải `pkill` trước.
+- **Có restart core** thì Program có đầu vào Virtual Point bị `FAULTED ST-RT-008`
+  (Issue #827): Disable → Enable qua `runtime-intent` theo mục "Lưu ý" của
+  `DEPLOY_FOXLINX.md`, kiểm Active không đổi.
+- **Không dựng binary Go trong git worktree**: thiếu `vcs.revision` nên bước 6b
+  exit 2 — dựng từ bản clone thường.
 
 ## Rollback
 
