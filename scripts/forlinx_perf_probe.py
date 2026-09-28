@@ -1069,8 +1069,9 @@ MemAvailable:     690000 kB
 @END
 """
 
-FIXTURE_JOURNAL = """2026-09-28T02:54:11+0000 som mkddc-core[1]: INFO  core.jitter min_us=8.11 max_us=55.06 avg_us=14.13 overruns=0 count=6001 window_max_us=56 violations=9 missed_steps=0 base_step_us=10000
-2026-09-28T02:55:11+0000 som mkddc-core[1]: INFO  core.jitter min_us=8.28 max_us=141.19 avg_us=19.25 overruns=0 count=6000 window_max_us=142 violations=14 missed_steps=0 base_step_us=10000
+FIXTURE_JOURNAL = """2026-09-28T02:54:11+0000 som mkddc-core[1]: INFO  core.jitter min_us=8.11 max_us=55.06 avg_us=14.13 overruns=0 count=6001 window_max_us=56 violations=9 missed_steps=0 base_step_us=10000 seqlock_fail=0
+2026-09-28T02:55:11+0000 som mkddc-core[1]: INFO  core.jitter min_us=8.28 max_us=141.19 avg_us=19.25 overruns=0 count=6000 window_max_us=142 violations=14 missed_steps=0 base_step_us=10000 seqlock_fail=2
+2026-09-28T02:55:11+0000 som mkddc-core[1]: INFO  core.wake_hist le25=5000 le50=900 le100=86 le200=10 le500=3 gt500=1 base_step_us=10000
 2026-09-28T02:55:11+0000 som mkddc-core[1]: INFO  core.step_wcet io_us=233 ipc_us=6 sched_us=18 logic_us=15 alarm_us=4 ext_us=3 out_us=44 publish_us=100 total_us=315 base_step_us=10000 scans=6000
 2026-09-28T02:55:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=2.62 max_us=8629.30 avg_us=19.68 overruns=58 count=30001
 2026-09-28T02:56:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=6.41 max_us=11594.74 avg_us=28.74 overruns=26344 count=30000
@@ -1146,6 +1147,10 @@ def selftest() -> int:
     expect("log: jitter max 141.19", minute["core.jitter"]["max_us"]["max"] == 141.19)
     expect("log: iobus overruns delta", minute["iobus.jitter"]["overruns"]["delta"] == 26286.0)
     expect("log: step_wcet total", minute["core.step_wcet"]["total_us"]["max"] == 315.0)
+    # T63-005: seqlock_fail tích luỹ (delta), wake_hist theo phút (sum).
+    expect("log: core.jitter seqlock_fail delta", minute["core.jitter"]["seqlock_fail"]["delta"] == 2.0)
+    expect("log: core.wake_hist gt500 sum", minute["core.wake_hist"]["gt500"]["sum"] == 1.0)
+    expect("log: wake_hist không coi là tích luỹ", "delta" not in minute["core.wake_hist"]["le200"])
     # T63-004: khoá theo phút — cộng sum cho số đếm, max cho µs, không có delta.
     expect("log: iobus.loop_timing late_events sum", minute["iobus.loop_timing"]["late_events"]["sum"] == 1.0)
     expect("log: iobus.loop_timing work_max", minute["iobus.loop_timing"]["work_max_us"]["max"] == 16000.0)
@@ -1157,7 +1162,7 @@ def selftest() -> int:
     expect("access: một 503", points["statuses"].get("503") == 1)
     expect("access: tổng 3 dòng", access["access_lines"] == 3)
     vol = count_lines_per_hour(lines, 1800.0)
-    expect("volume: 9 dòng/30 phút = 18/giờ", vol["lines_per_hour"] == 18.0)
+    expect("volume: 10 dòng/30 phút = 20/giờ", vol["lines_per_hour"] == 20.0)
 
     declared = declared_periods(FIXTURE_REVISION)
     expect("period: khai báo P1=10", declared.get("P1") == 10)

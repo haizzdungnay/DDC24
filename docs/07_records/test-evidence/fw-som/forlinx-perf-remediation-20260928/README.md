@@ -185,7 +185,27 @@ python3 scripts/forlinx_perf_probe.py summarize-emmc \
 | Đối chiếu độ bền ghi theo datasheet, ước tuổi thọ trước/sau W1 | TARGET | **NOT_RUN** — cần định danh chip đọc từ bo; đo lại sau T63-105/106/107 để có số "sau W1" |
 | Đề xuất retention journald | — | Chờ số đo. Plan 63 không đổi journald khi chưa có bảng nguồn ghi |
 
-## 8. SHA-256
+## 8. T63-005 — histogram lệch đánh thức Core và `seqlock_fail`
+
+Hai dòng in trong cùng một lời gọi `fprintf` mỗi phút:
+
+```text
+INFO  core.jitter … missed_steps=.. base_step_us=10000 seqlock_fail=<tích luỹ>
+INFO  core.wake_hist le25=.. le50=.. le100=.. le200=.. le500=.. gt500=.. base_step_us=10000
+```
+
+- Các ô histogram **rời nhau** và tính **theo phút**. Biên trên được tính vào ô và so theo ns, cùng phép so với C4.
+- Tổng 6 ô bằng `count` của phút đó. `le200 + le500 + gt500` bằng số vi phạm C4 (> 100 µs) trong phút.
+- Probe cộng các ô bằng `sum`. Riêng `seqlock_fail` là bộ đếm tích luỹ, probe lấy `delta`.
+
+| Kiểm | Mức | Kết quả |
+|---|---|---|
+| 4 test `T63_005_*` | HOST | biên ô đúng từng ns; tổng = `count`, ba ô trên = `violations`; 0 cấp phát trong 20.000 base step; `ScanLoop::run` thật in `seqlock_fail=4` và `wake_hist` |
+| Stack thật `fake_mcu` + `mkddc-iobus` + `mkddc-core`, 80 s | HOST (`rt.degraded`: container không cho mlock) | `count=5995`, histogram `1054/2664/1508/550/159/60`, tổng = 5995; `550+159+60 = 769 = violations`. Số chỉ để kiểm công thức, không phải số đo nhịp |
+| Overhead | HOST | `on_wake+advance` thêm ≈ 2 ns mỗi base step; `step()` không đổi. `mkddc-core-scan-bench --offload` p50 total 25,6–28,2 → 26,9–28,3 µs, nằm trong nhiễu |
+| Đo sạch 2 × 30 phút trên bo: có còn vi phạm > 100 µs ⇒ T63-204 `N/A` hay mở G-D4; delta `seqlock_fail` ⇒ nhánh Core của T63-102 | TARGET | **NOT_RUN** — xem §3 |
+
+## 9. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

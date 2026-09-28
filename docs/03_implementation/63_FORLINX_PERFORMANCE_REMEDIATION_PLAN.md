@@ -411,8 +411,8 @@ Phương án cho D02 là **A — retry có deadline** (T63-101/102). Phương á
 
 | Metric | Nguồn |
 |---|---|
-| Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core |
-| Core `seqlock_fail` | Metric Core |
+| Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core; histogram là dòng `core.wake_hist le25…gt500` — ô rời, theo phút (cộng `sum`), `sum(le200+le500+gt500)` phải bằng delta `core.jitter violations` |
+| Core `seqlock_fail` | Log phút `core.jitter`, khoá `seqlock_fail` (tích luỹ theo tiến trình, lấy delta) — công bố từ T63-005 |
 | IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus `iobus.loop_timing` — khoá theo phút: cộng `sum` cho `late_events`/`catchup_iterations`, lấy `max` cho `*_max_us`; `period_us` xác nhận chu kỳ hiệu lực |
 | IOP timeout, seq error, CRC | Snapshot API, delta theo epoch |
 | `/points` 200/503, p95 server | Log Web tổng hợp (T63-105) sau cửa sổ |
@@ -442,7 +442,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `F-PRG-PERF-007` | — | — | Bo cài sạch 27/09 | — | N/A(CLOSED) | §2.1 |
 | `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | IN-PROGRESS — T63-004 HOST PASS: log phút `iobus.loop_timing`; kẹt 16 ms (đồng hồ giả) ⇒ `late_events=1`, `catchup_iterations=24` (luật `overruns` cũ đếm 21); 0 cấp phát trong vòng poll; đo 30 phút TARGET NOT_RUN; T63-201 BLOCKED(G-D1) | `apps/iobus/tests/test_poll_loop_timing.cpp` |
 | `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | IN-PROGRESS — T63-004 tách `work_max_us`/`io_resp_gap_max_us`/`period_us`; T63-202 khuyến nghị **giữ** hằng số IOP, điều kiện mở ADR ở Phụ lục A.4; phân bố `work` trên bo NOT_RUN; finding [#816](https://github.com/Mekong-HCM/MK-DDC-24/issues/816) | `apps/iobus/application/diagnostics/poll_loop_timing.hpp` · [Phụ lục A](#12-phụ-lục-a--biên-thời-gian-iop-t63-202-perf-sys-07) |
-| `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | TODO | |
+| `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | IN-PROGRESS — T63-005 HOST PASS: log phút `core.wake_hist le25…gt500` (ô rời, theo phút; tổng = `count`, ba ô trên 100 µs = vi phạm C4) và `seqlock_fail` tích luỹ ở cuối `core.jitter`; 0 cấp phát; overhead ≈ +2 ns/base step, `step()` không đổi; đo sạch 2 × 30 phút TARGET NOT_RUN ⇒ chưa quyết T63-204 N/A hay mở G-D4 | `apps/core/application/runtime/test_scan_loop.cpp` (`T63_005_*`) |
 | `PERF-API-01` | P1 | T63-101, T63-102 | 0 × 503 trong 30 phút; p95 ≤ 20 ms | — | T63-101 IN-PROGRESS — reader Web thử lại theo deadline 1 ms, nhường CPU (Gosched rồi `nanosleep` 50 µs), hết hạn vẫn 503; counter `shm_reader` ở `/api/v1/system/status` (OpenAPI 1.48.0); HOST: giữ lẻ 50/200 µs ⇒ đọc được (p95 180/323 µs), giữ lẻ vô hạn ⇒ lỗi ở p50 1,03 ms, reader cũ FAIL 3/3; đo 30 phút TARGET NOT_RUN. T63-102 TODO (Lane FW) | `apps/web-api/internal/app/shm_reader_deadline_test.go`, `shm_reader_metrics_test.go` |
 | `PERF-API-02` | P2 | T63-103 | p95 status < 20 ms, overview < 50 ms | — | TODO | |
 | `PERF-API-03` | P2 | T63-105, T63-108 | Log −80%; GET −50%; freshness ≤ 1 s | G-D3 | TODO | |
@@ -453,7 +453,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
 | `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | IN-PROGRESS — `artifact-manifest.json` từng artifact + `deploy-record` + `readback`; selftest HOST 64/64 (gồm e2e `/proc` thật), `test_release_packaging_guard` 14/14; read-back TARGET NOT_RUN (container implementer không có TCP ra bo) | `python3 scripts/artifact_manifest.py selftest`; DEPLOY_FOXLINX bước 6b/7b |
 | `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
-| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core chưa được công bố → giao T63-005 | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
+| Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core nay được công bố ở `core.jitter` (T63-005), số trên bo NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 
 ---
 
