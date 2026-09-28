@@ -563,6 +563,45 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
   return { ...state, refresh: restart, retry, restart }
 }
 
+/**
+ * Issue #790 — nạp trễ KHÔNG có nghĩa là nạp một phần (cùng bài học `T61-202`
+ * của catalog thư viện). Bản trước gọi `GET /point-catalog` một lần không
+ * `limit`/`cursor` rồi bỏ `nextCursor`: máy chủ cắt ở 500 mục, nên từ điểm thứ
+ * 501 trở đi canvas FBD và panel chèn nhanh không giải mã được nhãn dù điểm có
+ * thật. Hàm này rút cạn tuần tự mọi trang với đúng `limit` và các chốt chặn của
+ * `useProgrammingPointCatalog` (cursor lặp, trang không tiến, quá số trang, trang
+ * hỏng), ghép theo canonical identity để không nhân đôi mục.
+ */
+async function drainProgrammingPointCatalog(
+  client: ReturnType<typeof useProgrammingApiClient>,
+  pick: (vi: string, en: string) => string,
+): Promise<ProgrammingPointCatalogPage> {
+  const items = new Map<string, ProgrammingPointCatalogPage['items'][number]>()
+  const consumedCursors = new Set<string>()
+  let cursor: string | null = null
+  for (let pages = 0; pages < programmingPointCatalogMaxPages; pages += 1) {
+    const rawPage = await client.request<unknown>('getProgrammingPointCatalog', {
+      query: cursor === null
+        ? { limit: programmingPointCatalogPageLimit }
+        : { limit: programmingPointCatalogPageLimit, cursor },
+    })
+    const page = normalizeProgrammingPointCatalogPage(rawPage)
+    if (!page || page.items.length > programmingPointCatalogPageLimit) {
+      throw new Error(pick('Phản hồi Point Catalog không hợp lệ.', 'The Point Catalog response is invalid.'))
+    }
+    const sizeBefore = items.size
+    for (const item of page.items) items.set(programmingPointCatalogKey(item) as string, item)
+    const nextCursor = page.nextCursor ?? null
+    if (nextCursor === null) return { ...page, items: [...items.values()], nextCursor: null }
+    if (items.size === sizeBefore || nextCursor === cursor || consumedCursors.has(nextCursor)) {
+      throw new Error(pick('Point Catalog không tiến qua các trang; hãy thử lại.', 'The Point Catalog pages did not advance; try again.'))
+    }
+    consumedCursors.add(nextCursor)
+    cursor = nextCursor
+  }
+  throw new Error(pick('Point Catalog có quá nhiều trang.', 'The Point Catalog has too many pages.'))
+}
+
 export interface LazyPointCatalogState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   data: ProgrammingPointCatalogPage | null
@@ -592,7 +631,7 @@ export function useLazyProgrammingPointCatalog(): LazyPointCatalogState {
   const ensureLoaded = useCallback(() => {
     if (statusRef.current === 'loading' || statusRef.current === 'ready') return
     setStatus('loading')
-    client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog').then(
+    drainProgrammingPointCatalog(client, pick).then(
       (value) => {
         setData(value)
         setError(null)
