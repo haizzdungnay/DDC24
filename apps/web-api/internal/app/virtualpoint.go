@@ -744,7 +744,7 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	// không phải tự đoán nghĩa của chuỗi rỗng.
 	item.Source = normalizeVirtualPointSource(item.Source)
 	item.States = normalizeVirtualPointStates(item.States)
-	item.Label = ""
+	item.Label = normalizeVirtualPointLabel(item.Label)
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)
 	if item.SignalType == "" {
@@ -763,6 +763,32 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 		item.BoundPointID = canonicalBoundPointID(item.BoundPointID)
 	}
 	return item
+}
+
+/* normalizeVirtualPointLabel — Issue #789: nhãn (tên hiển thị) của VP được
+ * GIỮ, chuẩn hoá cùng luật với tên điểm vật lý (`normalizePointName`). Bản cũ
+ * xoá trắng trường này ở mọi đường ghi, nên nhãn người dùng nhập lúc tạo hay
+ * lúc đổi tên đều biến mất không một lời báo. Nhãn rỗng vẫn hợp lệ: khi đó tên
+ * hiển thị rơi về Tag như trước, và VP đó không tham gia không gian tên (xem
+ * `pointNamespaceEntries`) để cấu hình cũ không tự dưng thành "xung đột".
+ * Nhãn không chuẩn hoá được thì trả nguyên văn — `validateVirtualPointMetadata`
+ * chặn nó với lý do có cấu trúc, không phải hàm này. */
+func normalizeVirtualPointLabel(label string) string {
+	if strings.TrimSpace(label) == "" {
+		return ""
+	}
+	if display, _, err := normalizePointName(label); err == nil {
+		return display
+	}
+	return label
+}
+
+// virtualPointDisplayName là tên hiển thị của VP: nhãn nếu có, không thì Tag.
+func virtualPointDisplayName(item VirtualPoint, tag string) string {
+	if label := strings.TrimSpace(item.Label); label != "" {
+		return label
+	}
+	return tag
 }
 
 // canonicalBoundPointID chuẩn hoá "av1"/"AV-1"/"av-01" về đúng một dạng
@@ -1047,7 +1073,7 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		ID:         item.ID,
 		Channel:    item.Channel,
 		Tag:        tag,
-		Name:       tag,
+		Name:       virtualPointDisplayName(item, tag),
 		Kind:       "virtual",
 		Value:      value,
 		Unit:       item.Unit,
@@ -1073,7 +1099,7 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		Enabled:       item.Enabled,
 		PointID:       item.ID,
 		TagName:       tag,
-		DisplayName:   tag,
+		DisplayName:   virtualPointDisplayName(item, tag),
 		DataType:      dataType,
 		Timestamp:     item.UpdatedAt,
 		ReadWrite:     readWrite,

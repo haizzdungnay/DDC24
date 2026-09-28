@@ -275,11 +275,20 @@ func pointNamespaceEntries(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) ([]pointNa
 	entries, errs = appendConfigNamespaceEntries(entries, errs, "do", ioCfg.DO, "DO", capabilities.ABIDigitalOutputs)
 	for i, item := range vpCfg.Items {
 		id := canonicalVirtualPointID(item.ID)
-		entries = append(entries, pointNamespaceEntry{
+		entry := pointNamespaceEntry{
 			PointID: id,
 			TagPath: fmt.Sprintf("items[%d].tag", i),
 			Tag:     fallbackPointTag(item.Tag, id),
-		})
+		}
+		/* Issue #789: VP có nhãn thì nhãn đó dùng chung không gian tên với
+		 * UI/AO/DO (WEB-NAME-001). VP không nhãn hiển thị bằng Tag, mà Tag đã
+		 * được kiểm trùng ở không gian tag; đưa nó vào đây sẽ biến mọi cấu hình
+		 * cũ có tên vật lý trùng một Tag VP thành "xung đột" chỉ vì bản nâng cấp. */
+		if strings.TrimSpace(item.Label) != "" {
+			entry.NamePath = fmt.Sprintf("items[%d].label", i)
+			entry.Name = item.Label
+		}
+		entries = append(entries, entry)
 	}
 	return entries, errs
 }
@@ -390,6 +399,11 @@ func validateVirtualPointMetadata(cfg ConfigVirtualPoints) []configValidationErr
 		base := fmt.Sprintf("items[%d]", i)
 		if _, _, err := normalizePointTag(item.Tag); err != nil {
 			errs = append(errs, configValidationError{Path: base + ".tag", Message: err.Error(), Reason: "point_tag_invalid", PointID: canonicalVirtualPointID(item.ID), Tag: item.Tag})
+		}
+		if strings.TrimSpace(item.Label) != "" {
+			if _, _, err := normalizePointName(item.Label); err != nil {
+				errs = append(errs, configValidationError{Path: base + ".label", Message: err.Error(), Reason: "point_name_invalid", PointID: canonicalVirtualPointID(item.ID), Name: item.Label})
+			}
 		}
 	}
 	return errs
@@ -528,13 +542,23 @@ func migratePointMetadata(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) (ConfigIO, 
 		item.ID = canonicalVirtualPointID(item.ID)
 		source, value := migrationTagValue(item.Tag, item.Label, item.ID)
 		_, key, _ := normalizePointTag(value)
+		/* Issue #789: migration chạy MỖI lần khởi động. Bản cũ xoá nhãn VP ở
+		 * đây, nên dù đường ghi có giữ nhãn thì lần restart kế tiếp vẫn xoá
+		 * mất. Giữ nhãn đã chuẩn hoá; nhãn không hợp lệ mới bị bỏ. */
 		sourceName := item.Label
-		item.Label = ""
+		selectedName, nameReason := "", "removed"
+		if strings.TrimSpace(sourceName) != "" {
+			if display, _, err := normalizePointName(sourceName); err == nil {
+				selectedName, nameReason = display, "existing_name"
+			}
+		}
+		item.Label = selectedName
 		candidates = append(candidates, candidate{
 			pointID: item.ID, source: source, value: value, key: key,
 			setTag:     func(tag string) { item.Tag = tag },
-			sourceName: sourceName, nameReason: "removed",
-			setName: func(string) {},
+			sourceName: sourceName, selectedName: selectedName,
+			nameKey: migrationNameKey(selectedName), nameReason: nameReason,
+			setName: func(name string) { item.Label = name },
 		})
 	}
 	counts := make(map[string]int, len(candidates))
@@ -656,7 +680,7 @@ func normalizePointTags(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) (ConfigIO, Co
 		if display, _, err := normalizePointTag(item.Tag); err == nil {
 			item.Tag = display
 		}
-		item.Label = ""
+		item.Label = normalizeVirtualPointLabel(item.Label)
 		items[i] = item
 	}
 	vpCfg.Items = items

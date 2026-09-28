@@ -59,16 +59,25 @@ func TestVirtualPointTagRejectsLegacyIDAlias(t *testing.T) {
 	}
 }
 
-func TestVirtualPointDTOUsesTagAsDisplayName(t *testing.T) {
-	point := virtualPointDTO(VirtualPoint{ID: "VP1", Tag: "doraemon", Label: "legacy label", SignalType: "float", Enabled: true})
-	if point.ID != "VP1" || point.Tag != "doraemon" || point.Name != "doraemon" || point.Channel != 25 {
+// Issue #789: VP không nhãn hiển thị bằng Tag (hành vi cũ giữ nguyên).
+func TestVirtualPointDTOUsesTagAsDisplayNameWhenLabelBlank(t *testing.T) {
+	point := virtualPointDTO(VirtualPoint{ID: "VP1", Tag: "doraemon", Label: "  ", SignalType: "float", Enabled: true})
+	if point.ID != "VP1" || point.Tag != "doraemon" || point.Name != "doraemon" || point.DisplayName != "doraemon" || point.Channel != 25 {
 		t.Fatalf("virtualPointDTO() = %+v; want internal VP1 with doraemon display and channel 25", point)
 	}
 }
 
-func TestNormalizeVirtualPointDropsLegacyLabel(t *testing.T) {
-	point := normalizeVirtualPoint(VirtualPoint{ID: "VP1", Tag: "doraemon", Label: "legacy label", SignalType: "float"})
-	if point.Label != "" {
-		t.Fatalf("normalizeVirtualPoint() label = %q; want empty", point.Label)
+// Issue #789: VP có nhãn thì nhãn là tên hiển thị, Tag vẫn là danh tính kỹ thuật.
+func TestVirtualPointDTOUsesLabelAsDisplayName(t *testing.T) {
+	point := virtualPointDTO(VirtualPoint{ID: "VP1", Tag: "doraemon", Label: " Phòng   Áp Suất ", SignalType: "float", Enabled: true})
+	if point.Tag != "doraemon" || point.Name != "Phòng Áp Suất" || point.DisplayName != "Phòng Áp Suất" {
+		t.Fatalf("virtualPointDTO() = %+v; want tag doraemon, display Phòng Áp Suất", point)
+	}
+}
+
+func TestNormalizeVirtualPointKeepsCanonicalLabel(t *testing.T) {
+	point := normalizeVirtualPoint(VirtualPoint{ID: "VP1", Tag: "doraemon", Label: "  legacy   label ", SignalType: "float"})
+	if point.Label != "legacy label" {
+		t.Fatalf("normalizeVirtualPoint() label = %q; want %q", point.Label, "legacy label")
 	}
 }

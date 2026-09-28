@@ -51,7 +51,8 @@ func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if body := w.Body.String(); !containsAll(body, "VP1", `"tag":"room setpoint"`, `"name":"room setpoint"`, "22.5") || strings.Contains(body, "Room Setpoint") {
+	// Issue #789: nhãn VP là tên hiển thị; Tag giữ nguyên là danh tính kỹ thuật.
+	if body := w.Body.String(); !containsAll(body, "VP1", `"tag":"room setpoint"`, `"name":"Room Setpoint"`, `"display_name":"Room Setpoint"`, "22.5") {
 		t.Fatalf("body = %s", body)
 	}
 }
