@@ -849,6 +849,7 @@ FIXTURE_JOURNAL = """2026-09-28T02:54:11+0000 som mkddc-core[1]: INFO  core.jitt
 2026-09-28T02:55:11+0000 som mkddc-core[1]: INFO  core.step_wcet io_us=233 ipc_us=6 sched_us=18 logic_us=15 alarm_us=4 ext_us=3 out_us=44 publish_us=100 total_us=315 base_step_us=10000 scans=6000
 2026-09-28T02:55:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=2.62 max_us=8629.30 avg_us=19.68 overruns=58 count=30001
 2026-09-28T02:56:31+0000 som mkddc-iobus[2]: INFO  iobus.jitter min_us=6.41 max_us=11594.74 avg_us=28.74 overruns=26344 count=30000
+2026-09-28T02:56:31+0000 som mkddc-iobus[2]: INFO  iobus.loop_timing wake_late_max_us=51 work_max_us=16000 io_resp_gap_max_us=16600 late_events=1 catchup_iterations=24 iterations=30000 io_resp_count=29990 period_us=2000
 2026-09-28T02:56:32+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/points status=200 dur_ms=12 remote=10.0.0.2:5000
 2026-09-28T02:56:32+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/points status=503 dur_ms=3 remote=10.0.0.2:5000
 2026-09-28T02:56:33+0000 som mkddc-web[3]: INFO http method=GET path=/api/v1/system/status status=200 dur_ms=115 remote=10.0.0.2:5001
@@ -895,6 +896,10 @@ def selftest() -> int:
     expect("log: jitter max 141.19", minute["core.jitter"]["max_us"]["max"] == 141.19)
     expect("log: iobus overruns delta", minute["iobus.jitter"]["overruns"]["delta"] == 26286.0)
     expect("log: step_wcet total", minute["core.step_wcet"]["total_us"]["max"] == 315.0)
+    # T63-004: khoá theo phút — cộng sum cho số đếm, max cho µs, không có delta.
+    expect("log: iobus.loop_timing late_events sum", minute["iobus.loop_timing"]["late_events"]["sum"] == 1.0)
+    expect("log: iobus.loop_timing work_max", minute["iobus.loop_timing"]["work_max_us"]["max"] == 16000.0)
+    expect("log: loop_timing không coi là tích luỹ", "delta" not in minute["iobus.loop_timing"]["late_events"])
     expect("log: bỏ dòng http", "http" not in minute)
     access = summarize_access_log(lines)
     points = access["routes"]["GET /api/v1/points"]
@@ -902,7 +907,7 @@ def selftest() -> int:
     expect("access: một 503", points["statuses"].get("503") == 1)
     expect("access: tổng 3 dòng", access["access_lines"] == 3)
     vol = count_lines_per_hour(lines, 1800.0)
-    expect("volume: 8 dòng/30 phút = 16/giờ", vol["lines_per_hour"] == 16.0)
+    expect("volume: 9 dòng/30 phút = 18/giờ", vol["lines_per_hour"] == 18.0)
 
     declared = declared_periods(FIXTURE_REVISION)
     expect("period: khai báo P1=10", declared.get("P1") == 10)

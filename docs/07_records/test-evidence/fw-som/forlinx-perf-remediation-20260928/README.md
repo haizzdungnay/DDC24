@@ -74,7 +74,31 @@ chạy. Việc công bố bộ đếm được giao cho T63-005 (cùng file log 
 đọc khoá đó (`CUMULATIVE_KEYS`) và báo `NOT_EXPOSED` khi vắng. Quyết định nhánh
 Core của T63-102 lấy số từ lượt đo W0 có instrumentation.
 
-## 5. SHA-256
+## 5. T63-004 — log phút `iobus.loop_timing`
+
+Một dòng mỗi phút, in chung lời gọi `fprintf` với `iobus.jitter` (dòng cũ giữ
+nguyên khoá):
+
+```text
+INFO  iobus.loop_timing wake_late_max_us=.. work_max_us=.. io_resp_gap_max_us=.. late_events=.. catchup_iterations=.. iterations=.. io_resp_count=.. period_us=..
+```
+
+| Khoá | Nghĩa (cửa sổ một phút, µs làm tròn lên) | Probe gom |
+|---|---|---|
+| `wake_late_max_us` | độ trễ đánh thức, chỉ tính vòng thật sự đã ngủ | `max` |
+| `work_max_us` | từ lúc thức tới ngay trước khi ngủ (GET_IO, output, reconnect) | `max` |
+| `io_resp_gap_max_us` | khoảng giữa hai IO_RESP hợp lệ, tính cả khoảng đang mở | `max` |
+| `late_events` | số **sự kiện** trễ (vòng xong ≥ mốc lưới kế tiếp, kéo dài tới vòng đầu kịp mốc) | `sum` |
+| `catchup_iterations` | vòng bắt đầu không ngủ vì mốc đã qua | `sum` |
+| `iterations`, `io_resp_count`, `period_us` | ngữ cảnh; `period_us` xác nhận chu kỳ hiệu lực | `sum`/`max` |
+
+| Kiểm | Mức | Kết quả |
+|---|---|---|
+| 14 test đồng hồ giả `PollLoopTiming.*` | HOST | kẹt 16 ms trong phần làm việc ⇒ `late_events=1`, `catchup_iterations=24` (luật `overruns` cũ đếm 21); kẹt phía scheduler ⇒ `late_events=1`, `catchup_iterations=26`; 0 cấp phát trong 3 phút giả lập |
+| `mkddc-iobus` + `fake_mcu` qua PTY, 2 phút | HOST (container không RT) | `iterations = io_resp_count = 30000`/phút; nền nhiễu ≈ 90–116 sự kiện/phút nên không dùng làm số đo nhịp |
+| 30 phút trên bo, đầu vào G-D1 và T63-202 | TARGET | **NOT_RUN** — xem §3 |
+
+## 6. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

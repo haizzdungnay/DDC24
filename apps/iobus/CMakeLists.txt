@@ -225,6 +225,10 @@ if(IOBUS_BUILD_TESTS)
       tests/test_network_address.cpp
       tests/test_realtime_memlock.cpp
       tests/test_pid_file.cpp
+      tests/test_poll_loop_timing.cpp
+      # Ghi đè new/delete toàn cục cho CẢ binary test (đếm khi được bật) —
+      # đúng một translation unit, xem tests/allocation_probe.hpp.
+      tests/allocation_probe.cpp
       adapters/bacnet/tests/test_bacnet_priority.cpp
       adapters/bacnet/tests/test_bacnet_reliability.cpp
       adapters/bacnet/tests/test_bacnet_object_map.cpp

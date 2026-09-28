@@ -79,8 +79,8 @@ mã đã sửa, chờ read-back trên bo để đóng · **CLOSED** không còn 
 
 | Finding | Trạng thái | Bằng chứng trong mã | Task |
 |---|---|---|---|
-| `PERF-SYS-05` IOBus chạy bù | **OPEN, xác nhận** | `sleep_until` cộng một chu kỳ vào mốc cũ, không kiểm mốc đã qua ([iobus main.cpp:85-93](../../apps/iobus/bootstrap/main.cpp#L85-L93), gọi ở [dòng 1169](../../apps/iobus/bootstrap/main.cpp#L1169)). Core đã có chính sách đúng trong `BaseStepPacer`, IOBus không dùng | T63-004/201 |
-| `PERF-SYS-07` (mới) biên thời gian IOP | **OPEN** | Giao dịch IOP ≈1,4 ms trong chu kỳ 2 ms; `IOP_RESP_TIMEOUT_MS=3` dài hơn chu kỳ ([iop_protocol.h:49](../../contracts/iop/iop_protocol.h#L49)). Bộ đếm overrun tăng ở **mỗi vòng** chạy bù ([main.cpp:912-914](../../apps/iobus/bootstrap/main.cpp#L912-L914)), nên một lần kẹt 16 ms bị đếm khoảng 7 lần | T63-004/202 |
+| `PERF-SYS-05` IOBus chạy bù | **OPEN, xác nhận** | `sleep_until` cộng một chu kỳ vào mốc cũ, không kiểm mốc đã qua ([iobus main.cpp:86-94](../../apps/iobus/bootstrap/main.cpp#L86-L94), gọi ở [dòng 1191](../../apps/iobus/bootstrap/main.cpp#L1191); số dòng sau T63-004, tại `cb690dfb` là 85-93 và 1169). Core đã có chính sách đúng trong `BaseStepPacer`, IOBus không dùng | T63-004/201 |
+| `PERF-SYS-07` (mới) biên thời gian IOP | **OPEN** | Giao dịch IOP ≈1,4 ms trong chu kỳ 2 ms; `IOP_RESP_TIMEOUT_MS=3` dài hơn chu kỳ ([iop_protocol.h:49](../../contracts/iop/iop_protocol.h#L49)). Bộ đếm overrun tăng ở **mỗi vòng** chạy bù ([main.cpp:922-924](../../apps/iobus/bootstrap/main.cpp#L922-L924); tại `cb690dfb` là 912-914), nên một lần kẹt 16 ms bị đếm khoảng 7 lần | T63-004/202 |
 | `PERF-SYS-01` Core jitter C4 | **OPEN** | 9 lần >100 µs trước audit (không do audit). 5 lần thêm rơi đúng phút thu journal nên không dùng làm bằng chứng nguyên nhân | T63-005/204 |
 | `PERF-API-01` `/points` 503 | **OPEN, xác nhận** | Reader thử 5 vòng liền; gặp seq lẻ là thử lại ngay, không nhường CPU ([shm_reader.go:155-173](../../apps/web-api/internal/app/shm_reader.go#L155-L173)). Core ([iobus_reader.cpp:59](../../apps/core/adapters/ipc/iobus_reader.cpp#L59)) và HMI ([shm_reader.cpp:79](../../apps/hmi/data/shm_reader.cpp#L79)) dùng cùng con số 5 | T63-101/102 |
 | `PERF-API-02` chờ 100 ms lấy CPU | **OPEN, xác nhận** | [system.go:230-246](../../apps/web-api/internal/app/system.go#L230-L246) | T63-103 |
@@ -413,7 +413,7 @@ Phương án cho D02 là **A — retry có deadline** (T63-101/102). Phương á
 |---|---|
 | Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core |
 | Core `seqlock_fail` | Metric Core |
-| IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus |
+| IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus `iobus.loop_timing` — khoá theo phút: cộng `sum` cho `late_events`/`catchup_iterations`, lấy `max` cho `*_max_us`; `period_us` xác nhận chu kỳ hiệu lực |
 | IOP timeout, seq error, CRC | Snapshot API, delta theo epoch |
 | `/points` 200/503, p95 server | Log Web tổng hợp (T63-105) sau cửa sổ |
 | Program/Task missed release, overrun | `/api/v1/programming/runtime` |
@@ -440,8 +440,8 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `F-PRG-PERF-005` | P1 | T63-001 | Missed release +0 trong 2 × 30 phút | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
 | `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
 | `F-PRG-PERF-007` | — | — | Bo cài sạch 27/09 | — | N/A(CLOSED) | §2.1 |
-| `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | TODO | |
-| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | TODO | |
+| `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | IN-PROGRESS — T63-004 HOST PASS: log phút `iobus.loop_timing`; kẹt 16 ms (đồng hồ giả) ⇒ `late_events=1`, `catchup_iterations=24` (luật `overruns` cũ đếm 21); 0 cấp phát trong vòng poll; đo 30 phút TARGET NOT_RUN; T63-201 BLOCKED(G-D1) | `apps/iobus/tests/test_poll_loop_timing.cpp` |
+| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | IN-PROGRESS — T63-004 tách `work_max_us`/`io_resp_gap_max_us`/`period_us`; phân bố `work` trên bo NOT_RUN (đầu vào T63-202) | `apps/iobus/application/diagnostics/poll_loop_timing.hpp` |
 | `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | TODO | |
 | `PERF-API-01` | P1 | T63-101, T63-102 | 0 × 503 trong 30 phút; p95 ≤ 20 ms | — | TODO | |
 | `PERF-API-02` | P2 | T63-103 | p95 status < 20 ms, overview < 50 ms | — | TODO | |
