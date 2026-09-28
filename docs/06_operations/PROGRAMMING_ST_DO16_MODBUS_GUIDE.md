@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.8 |
+| Phiên bản | 1.9 |
 | Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Lúc nghiệm thu, Revision Active là `a0f107fa…` và Program `RUNNING` ở chế độ **AUTO**; từ 2026-09-28 Active trên bo là `0c29f4f1…` do người dùng tự Commission. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
@@ -1145,7 +1145,7 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming/2026-09-27-do16-modbus-target-deploy.md), mục "Kiểm theo từng chu kỳ".
 
 - **Cách đo:** mỗi chế độ một phiên Trace của Core, lấy mẫu 100 ms bằng đúng chu kỳ Program, ghi đủ 27 biến vào/ra (trần 10 000 ô, tức ≤ 37 s mỗi phiên). Mỗi chu kỳ được chấm theo đặc tả §1: bất biến chung, luật riêng từng chế độ, nhịp thời gian (dung sai ±1 chu kỳ tại mốc timer) và khoảng nghỉ.
-- **Lưu ý khi đọc Trace:** Core chốt đầu vào mỗi base step 10 ms, còn Program chạy mỗi 100 ms, nên trong một mẫu đầu vào có thể mới hơn đầu ra tối đa 90 ms. Bộ chấm cho phép đầu ra khớp đầu vào của mẫu trước, với điều kiện chu kỳ kế phải khớp ngay. Trên 2 120 chu kỳ, trường hợp này xảy ra 3 lần. Ngoài ra, cột `actualValue` của Trace là giá trị lệnh trong bảng điểm của Core, không phải coil đọc lại.
+- **Lưu ý khi đọc Trace:** Core chốt đầu vào mỗi base step 10 ms, còn Program chạy mỗi 100 ms, nên trong một mẫu đầu vào có thể mới hơn đầu ra tối đa 90 ms. Bộ chấm cho phép đầu ra khớp đầu vào của mẫu trước, với điều kiện chu kỳ kế phải khớp ngay. Trên 2 120 chu kỳ, trường hợp này xảy ra 3 lần. Ngoài ra, cột `actualValue` của Trace là giá trị lệnh trong bảng điểm của Core, không phải coil đọc lại. **Từ Issue #798** (firmware sau 2026-09-28) cả hai điều này đã sửa: mẫu Core chỉ lấy tại lần chạy Program nên cặp vào/ra luôn cùng một lần chạy, và Trace có cột `readbackValue` + `readbackAgeMs` (coil đọc về bằng FC01) tách khỏi lệnh `commandedValue`; bộ chấm không cần nới luật nữa. Bo đang chạy bản trước.
 
 | Chế độ | Chu kỳ ổn định | Kết quả theo từng chu kỳ |
 |---|---|---|
@@ -1233,3 +1233,4 @@ lại trôi 1,0 → 1,2 s, đóng dồn relay, STAGING nhả có "lỗ", relay b
 | 1.6 | 2026-09-28 | Ràng buộc 10: `PID` là trạng thái chờ quyết định (Issue #802), trỏ tới phiếu `REC-PID-DECISION-REQUEST-20260928`. Mã chương trình không đổi |
 | 1.7 | 2026-09-28 | Issue #800: `FB_MASK_SPLIT` viết lại bằng `AND` theo bit trên `UINT`; mặt nạ `MASK_ODD`/`MASK_EVEN`/`MASK_LOW_NIBBLES`/`MASK_HIGH_NIBBLES` bằng `VAR CONSTANT`; ràng buộc 2, 3, 7 và §10 theo ngôn ngữ mới; §9.1 số đo bản 1.7 và mô phỏng 3 001 chu kỳ giống hệt bản trên bo. Bo vẫn chạy bản trước |
 | 1.8 | 2026-09-28 | Issue #801: thêm §4.12 — Program dùng khối SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS` (`rev-a.6`) thay 5 FUNCTION_BLOCK tự viết, lệnh IR 1 525 → 792; §9.8 mô phỏng sai khác 3 001 chu kỳ: chỉ STAGING khác (bậc đúng `STAGE_DELAY`). Bo vẫn chạy bản khối tự viết |
+| 1.9 | 2026-09-28 | Lưu ý đọc Trace (§9.6): Issue #798 lấy mẫu tại lần chạy Program và tách `readbackValue` khỏi lệnh; bo vẫn chạy bản trước. Mã chương trình không đổi |
