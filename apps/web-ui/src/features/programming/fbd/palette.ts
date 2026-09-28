@@ -5,6 +5,8 @@ import {
   type LibraryEntry,
   type LibraryFeatureState,
 } from '../api/generated/library_registry'
+import { effectiveFeatureState, type ReviewGateRow } from '../model/reviewGate'
+import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../api/generated/profile'
 import { type FbdDataType, type FbdNodeKind, type FbdParameterValue } from './model'
 
 /* Palette sinh từ `contracts/programming/pou_library_registry_v1.json` — nguồn
@@ -47,8 +49,19 @@ export interface FbdPaletteEntry {
   buildPorts: (operandType: FbdDataType) => FbdPalettePortTemplate[]
 }
 
-function toPaletteEntry(entry: LibraryEntry): FbdPaletteEntry {
+/** Dựng một mục palette từ entry registry. `reviewTable` mặc định là bảng
+ *  review gate sinh từ product profile; test cơ chế truyền bảng giả. */
+export function fbdPaletteEntryFromRegistry(
+  entry: LibraryEntry,
+  reviewTable: readonly ReviewGateRow[] = PROGRAMMING_REVIEW_GATED_FEATURES,
+): FbdPaletteEntry {
   const typedPortNames = entry.typedPortNames
+  /* Issue #802: trạng thái HIỆU LỰC — registry giữ nhãn `REVIEW_REQUIRED` vĩnh
+     viễn, còn việc duyệt là token trong product profile. Cảnh báo registry của
+     khối chờ review nói "chưa review, không dùng cho sản xuất"; khi profile đã
+     ký token thì câu đó sai, nên bỏ nó đi cùng với nhãn. */
+  const featureState = effectiveFeatureState(entry.id, entry.featureState, reviewTable)
+  const reviewLifted = entry.featureState === 'REVIEW_REQUIRED' && featureState === 'AVAILABLE'
   return {
     id: entry.id,
     kind: entry.kind,
@@ -60,9 +73,9 @@ function toPaletteEntry(entry: LibraryEntry): FbdPaletteEntry {
     allowedTypes: entry.allowedTypes,
     defaultType: entry.defaultType,
     typedPortNames,
-    featureState: entry.featureState,
+    featureState,
     iecClassification: entry.iecClassification,
-    ...(entry.warning ? { warning: entry.warning } : {}),
+    ...(entry.warning && !reviewLifted ? { warning: entry.warning } : {}),
     // Port trong registry ghi kiểu ở `defaultType`; port nằm trong
     // `typedPortNames` đi theo T do người dùng chọn, port còn lại giữ kiểu cố định.
     buildPorts: (operandType: FbdDataType) =>
@@ -75,7 +88,7 @@ function toPaletteEntry(entry: LibraryEntry): FbdPaletteEntry {
 }
 
 export const FBD_PALETTE: readonly FbdPaletteEntry[] =
-  PROGRAMMING_LIBRARY_ENTRIES.map(toPaletteEntry)
+  PROGRAMMING_LIBRARY_ENTRIES.map((entry) => fbdPaletteEntryFromRegistry(entry))
 
 export const FBD_PALETTE_CATEGORY_ORDER: readonly {
   id: FbdPaletteCategory

@@ -8,6 +8,15 @@ import type { FbdEditorAction, FbdSelection } from './commands'
 import type { UserPouInterface } from './userPou'
 import { FbdCanvas, LIBRARY_DRAG_TYPE } from './FbdCanvas'
 
+/* Issue #802: profile production đã ký token cho `PID`. File này kiểm CƠ CHẾ
+   của khối REVIEW_REQUIRED (bị khoá/đánh dấu), nên dựng lại đúng bảng review
+   gate trước khi ký — PID chưa duyệt. Trạng thái production (PID dùng được)
+   được khoá riêng ở `model/reviewGate.test.ts`. */
+vi.mock('../api/generated/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/generated/profile')>()),
+  PROGRAMMING_REVIEW_GATED_FEATURES: [{ featureId: 'PID', approved: false, approvalToken: '' }],
+}))
+
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
 }

@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
 
 import { createFbdEditorState, fbdEditorReducer, translateFbdAnnouncement } from './commands'
 import type { FbdEditorState } from './commands'
 import { FBD_MAX_WIRES, type FbdDataType, type FbdDocument, type FbdNode, type FbdWire } from './model'
+
+/* Issue #802: profile production đã ký token cho `PID`. File này kiểm CƠ CHẾ
+   của khối REVIEW_REQUIRED (bị khoá/đánh dấu), nên dựng lại đúng bảng review
+   gate trước khi ký — PID chưa duyệt. Trạng thái production (PID dùng được)
+   được khoá riêng ở `model/reviewGate.test.ts`. */
+vi.mock('../api/generated/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/generated/profile')>()),
+  PROGRAMMING_REVIEW_GATED_FEATURES: [{ featureId: 'PID', approved: false, approvalToken: '' }],
+}))
 
 /* Task 6 — `ADD_NODE` kèm hình học và `ADD_WIRE` một nhịp.
  *
@@ -71,7 +80,7 @@ function stateWith(...nodes: readonly FbdNode[]): { state: FbdEditorState; netwo
   return { state: createFbdEditorState(document), networkId: target.id }
 }
 
-const vi = (key: string) => translateFbdAnnouncement((a: string) => a, { code: key } as never)
+const announcementText = (key: string) => translateFbdAnnouncement((a: string) => a, { code: key } as never)
 
 describe('ADD_NODE kèm position — một thao tác đặt khối là một undo', () => {
   it('ghi node và layout trong đúng một history entry', () => {
@@ -166,7 +175,7 @@ describe('ADD_NODE chặn khối REVIEW_REQUIRED', () => {
     expect(after.announcement.code).toBe('block-review-required')
     expect(after.past).toHaveLength(0)
     expect(after.document).toEqual(before.document)
-    expect(vi('block-review-required')).not.toBe('')
+    expect(announcementText('block-review-required')).not.toBe('')
   })
 
   it('không chặn node không thuộc registry (INPUT/OUTPUT/CONSTANT/POU người dùng)', () => {

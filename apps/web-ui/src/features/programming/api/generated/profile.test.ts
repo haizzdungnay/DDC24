@@ -77,7 +77,7 @@ describe("Product profile v2 sinh tự động", () => {
     );
   });
 
-  it("giữ PID ở trạng thái chưa phê duyệt Controls/Safety", () => {
+  it("PID đã được phê duyệt Controls/Safety bằng token của contract (#802)", () => {
     // FE chỉ HIỂN THỊ trạng thái này. Không có checkbox nào ở UI được coi là
     // phê duyệt — token suy ra từ contract profile và chỉ generator dựng được.
     expect(PROGRAMMING_REVIEW_GATED_FEATURES.map((item) => item.featureId)).toEqual(
@@ -85,10 +85,15 @@ describe("Product profile v2 sinh tự động", () => {
     );
     for (const [index, item] of PROGRAMMING_REVIEW_GATED_FEATURES.entries()) {
       expect(item.approved).toBe(contract.reviewGatedFeatures[index].approvalToken !== null);
-      expect(item.approved).toBe(item.approvalToken !== "");
+      expect(item.approved).toBe(item.approvalToken.length > 0);
+      expect(item.approvalToken).toBe(contract.reviewGatedFeatures[index].approvalToken ?? "");
     }
     const pid = PROGRAMMING_REVIEW_GATED_FEATURES.find((item) => item.featureId === "PID");
     expect(pid, "PID phải nằm trong bảng review-gate").toBeDefined();
-    expect(pid?.approved, "PID chưa có evidence VS-PROG-U12 nên phải là false").toBe(false);
+    expect(pid?.approved, "PID đã ký token EV-PROG-PID-APPROVAL-20260928").toBe(true);
+    const contractPid = contract.reviewGatedFeatures.find(
+      (item: { featureId: string }) => item.featureId === "PID",
+    );
+    expect(contractPid?.approvalEvidenceRef).toBe("EV-PROG-PID-APPROVAL-20260928");
   });
 });
