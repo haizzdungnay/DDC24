@@ -13,7 +13,7 @@
     "`F-STED-005`, khi `DDD-LANG-PROG-001` §4.1 tuyên bố parser reject `CASE`",
     "trong lúc `parse_case()` chấp nhận đầy đủ."
   ],
-  "profileVersion": "1.1.0",
+  "profileVersion": "1.2.0",
   "iecBaseline": "IEC 61131-3:2013 (Ed. 3.0) — Structured Text",
   "conformanceClaim": "IEC 61131-3-aligned subset. KHÔNG tuyên bố certified/compliant (ADR-020).",
   "deliberateExclusions": [
@@ -401,6 +401,42 @@
       "kind": "function",
       "reason": "Vùng chết quanh setpoint. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu.",
       "authority": "ADR-054 phán quyết (2)"
+    },
+    {
+      "name": "RELAY_GUARD",
+      "kind": "functionBlock",
+      "reason": "Bảo vệ relay (đóng/nghỉ tối thiểu). Không thuộc thư viện chuẩn IEC; khối DDC thường ngày, 4 lỗi hiện trường ở chương trình tự viết (U-12).",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
+    },
+    {
+      "name": "STAGER",
+      "kind": "functionBlock",
+      "reason": "Bậc tải có chờ đầu ra, nhả LIFO. Không thuộc thư viện chuẩn IEC.",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
+    },
+    {
+      "name": "PULSE_GEN",
+      "kind": "functionBlock",
+      "reason": "Bộ nhịp/xung vuông không trôi. Không thuộc thư viện chuẩn IEC.",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
+    },
+    {
+      "name": "WORD_TO_BITS",
+      "kind": "functionBlock",
+      "reason": "Tách 16 bit của UINT. Không thuộc thư viện chuẩn IEC.",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
+    },
+    {
+      "name": "BITS_TO_WORD",
+      "kind": "function",
+      "reason": "Gộp 16 BOOL thành UINT. Không thuộc thư viện chuẩn IEC.",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
+    },
+    {
+      "name": "UPTIME",
+      "kind": "function",
+      "reason": "Thời gian đơn điệu của Program. Không thuộc thư viện chuẩn IEC; chỉ gọi trong PROGRAM/FUNCTION_BLOCK.",
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI"
     }
   ],
   "grammar": {

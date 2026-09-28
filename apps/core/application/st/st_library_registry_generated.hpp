@@ -8,8 +8,8 @@
 
 namespace core::st_library_registry_generated {
 
-inline constexpr std::string_view kRegistrySha256 = "adb5357dd514f638463936e83401e43a0c519ceff0a63858e935bb4309186e20";
-inline constexpr std::string_view kLibraryVersion = "rev-a.5";
+inline constexpr std::string_view kRegistrySha256 = "7f3c9d17c37c3e950faf3e4bf16d9377c0316b0ec189eecfde7b98ec2ab87ee0";
+inline constexpr std::string_view kLibraryVersion = "rev-a.6";
 
 /* Entry compiler nhận diện qua binop/unop trong st_fbd_compile.cpp. */
 inline constexpr std::array<std::string_view, 15> kOperators = {
@@ -31,7 +31,7 @@ inline constexpr std::array<std::string_view, 15> kOperators = {
 };
 
 /* Entry compiler nhận diện qua kFuncs[] (st_func_from_name). */
-inline constexpr std::array<std::string_view, 22> kFuncTable = {
+inline constexpr std::array<std::string_view, 23> kFuncTable = {
     "SHL",
     "SHR",
     "SEL",
@@ -54,17 +54,19 @@ inline constexpr std::array<std::string_view, 22> kFuncTable = {
     "UINT_TO_REAL",
     "REAL_TO_DINT",
     "REAL_TO_UINT",
+    "UPTIME",
 };
 
 /* Entry compiler KHAI TRIỂN thành chuỗi lệnh đã có (không có opcode riêng);
  * `st_func_from_name` vẫn nhận diện chúng — xem `DDD-CTRL-PROG-001` §7A.6. */
-inline constexpr std::array<std::string_view, 2> kExpansionFunctions = {
+inline constexpr std::array<std::string_view, 3> kExpansionFunctions = {
+    "BITS_TO_WORD",
     "SCALE",
     "DEADBAND",
 };
 
 /* Entry compiler nhận diện qua st_fb_type_from_name. */
-inline constexpr std::array<std::string_view, 9> kFbTypes = {
+inline constexpr std::array<std::string_view, 13> kFbTypes = {
     "TON",
     "TOF",
     "TP",
@@ -74,16 +76,21 @@ inline constexpr std::array<std::string_view, 9> kFbTypes = {
     "CTD",
     "PID",
     "HYSTERESIS",
+    "RELAY_GUARD",
+    "STAGER",
+    "PULSE_GEN",
+    "WORD_TO_BITS",
 };
 
 /* Allowlist FBD theo node kind. */
-inline constexpr std::array<std::string_view, 25> kPureFunctions = {
+inline constexpr std::array<std::string_view, 27> kPureFunctions = {
     "AND",
     "OR",
     "XOR",
     "NOT",
     "SHL",
     "SHR",
+    "BITS_TO_WORD",
     "SEL",
     "EQ",
     "NE",
@@ -103,6 +110,7 @@ inline constexpr std::array<std::string_view, 25> kPureFunctions = {
     "SCALE",
     "DEADBAND",
     "SQRT",
+    "UPTIME",
 };
 inline constexpr std::array<std::string_view, 14> kExplicitConversions = {
     "INT_TO_REAL",

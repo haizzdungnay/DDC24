@@ -10,8 +10,8 @@
 
 | Trường | Giá trị |
 |---|---|
-| Phiên bản hồ sơ | `1.1.0` |
-| `sha256` | `907da8100db2c6683a371a0001f17182d8ebd2a239a3b57f2d60f26535b5b41e` |
+| Phiên bản hồ sơ | `1.2.0` |
+| `sha256` | `d92866947744cb63fb34b4cad520c460010e32affa85cba1f34d1388d4ba089f` |
 | Phiên bản compiler | `fwsom-st-1.2.0` |
 | Target profile | `revA-1t-1-5-30` (ABI `3841`) |
 | Chuẩn nền | IEC 61131-3:2013 (Ed. 3.0) — Structured Text |
@@ -98,6 +98,8 @@ biệt được *tài liệu nói gì* với *code làm gì* — đúng chỗ `D
 | `REAL_TO_UINT` | 1 | IEC |
 | `SHL` | 2 | IEC |
 | `SHR` | 2 | IEC |
+| `BITS_TO_WORD` | 16 | **mở rộng nhà sản xuất** |
+| `UPTIME` | 0 | **mở rộng nhà sản xuất** |
 
 ## 5. Function Block chuẩn
 
@@ -112,6 +114,10 @@ biệt được *tài liệu nói gì* với *code làm gì* — đúng chỗ `D
 | `CTU` | `CU`:BOOL, `RESET`:BOOL, `PV`:INT | `Q`:BOOL, `CV`:INT | IEC |
 | `CTD` | `CD`:BOOL, `LOAD`:BOOL, `PV`:INT | `Q`:BOOL, `CV`:INT | IEC |
 | `HYSTERESIS` | `IN`:REAL, `HIGH`:REAL, `LOW`:REAL | `Q`:BOOL | **mở rộng nhà sản xuất** |
+| `RELAY_GUARD` | `CMD`:BOOL, `ENABLE`:BOOL, `MIN_ON`:TIME, `MIN_OFF`:TIME | `Q`:BOOL, `WAITING`:BOOL, `STARTS`:DINT | **mở rộng nhà sản xuất** |
+| `STAGER` | `RUN`:BOOL, `DEMAND`:REAL, `MAX_STAGES`:INT, `STAGE_DELAY`:TIME, `HOLD`:BOOL | `STAGES`:INT, `TARGET`:INT, `MASK`:UINT | **mở rộng nhà sản xuất** |
+| `PULSE_GEN` | `RUN`:BOOL, `T_ON`:TIME, `T_OFF`:TIME | `Q`:BOOL, `TICK`:BOOL, `COUNT`:DINT | **mở rộng nhà sản xuất** |
+| `WORD_TO_BITS` | `IN`:UINT | `B00`:BOOL, `B01`:BOOL, `B02`:BOOL, `B03`:BOOL, `B04`:BOOL, `B05`:BOOL, `B06`:BOOL, `B07`:BOOL, `B08`:BOOL, `B09`:BOOL, `B10`:BOOL, `B11`:BOOL, `B12`:BOOL, `B13`:BOOL, `B14`:BOOL, `B15`:BOOL | **mở rộng nhà sản xuất** |
 
 ## 6. Giới hạn tài nguyên
 

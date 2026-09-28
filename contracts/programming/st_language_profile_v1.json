@@ -568,7 +568,7 @@
       "wireCode": 2
     }
   ],
-  "profileVersion": "1.1.0",
+  "profileVersion": "1.2.0",
   "reservedWords": [
     "PROGRAM",
     "END_PROGRAM",
@@ -678,7 +678,7 @@
     }
   ],
   "schemaVersion": 1,
-  "sha256": "907da8100db2c6683a371a0001f17182d8ebd2a239a3b57f2d60f26535b5b41e",
+  "sha256": "d92866947744cb63fb34b4cad520c460010e32affa85cba1f34d1388d4ba089f",
   "standardFunctionBlocks": [
     {
       "inputs": [
@@ -920,6 +920,194 @@
       ],
       "vendorExtension": true,
       "wireCode": 9
+    },
+    {
+      "inputs": [
+        {
+          "name": "CMD",
+          "type": "BOOL"
+        },
+        {
+          "name": "ENABLE",
+          "type": "BOOL"
+        },
+        {
+          "name": "MIN_ON",
+          "type": "TIME"
+        },
+        {
+          "name": "MIN_OFF",
+          "type": "TIME"
+        }
+      ],
+      "name": "RELAY_GUARD",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "WAITING",
+          "type": "BOOL"
+        },
+        {
+          "name": "STARTS",
+          "type": "DINT"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 10
+    },
+    {
+      "inputs": [
+        {
+          "name": "RUN",
+          "type": "BOOL"
+        },
+        {
+          "name": "DEMAND",
+          "type": "REAL"
+        },
+        {
+          "name": "MAX_STAGES",
+          "type": "INT"
+        },
+        {
+          "name": "STAGE_DELAY",
+          "type": "TIME"
+        },
+        {
+          "name": "HOLD",
+          "type": "BOOL"
+        }
+      ],
+      "name": "STAGER",
+      "outputs": [
+        {
+          "name": "STAGES",
+          "type": "INT"
+        },
+        {
+          "name": "TARGET",
+          "type": "INT"
+        },
+        {
+          "name": "MASK",
+          "type": "UINT"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 11
+    },
+    {
+      "inputs": [
+        {
+          "name": "RUN",
+          "type": "BOOL"
+        },
+        {
+          "name": "T_ON",
+          "type": "TIME"
+        },
+        {
+          "name": "T_OFF",
+          "type": "TIME"
+        }
+      ],
+      "name": "PULSE_GEN",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "TICK",
+          "type": "BOOL"
+        },
+        {
+          "name": "COUNT",
+          "type": "DINT"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 12
+    },
+    {
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "UINT"
+        }
+      ],
+      "name": "WORD_TO_BITS",
+      "outputs": [
+        {
+          "name": "B00",
+          "type": "BOOL"
+        },
+        {
+          "name": "B01",
+          "type": "BOOL"
+        },
+        {
+          "name": "B02",
+          "type": "BOOL"
+        },
+        {
+          "name": "B03",
+          "type": "BOOL"
+        },
+        {
+          "name": "B04",
+          "type": "BOOL"
+        },
+        {
+          "name": "B05",
+          "type": "BOOL"
+        },
+        {
+          "name": "B06",
+          "type": "BOOL"
+        },
+        {
+          "name": "B07",
+          "type": "BOOL"
+        },
+        {
+          "name": "B08",
+          "type": "BOOL"
+        },
+        {
+          "name": "B09",
+          "type": "BOOL"
+        },
+        {
+          "name": "B10",
+          "type": "BOOL"
+        },
+        {
+          "name": "B11",
+          "type": "BOOL"
+        },
+        {
+          "name": "B12",
+          "type": "BOOL"
+        },
+        {
+          "name": "B13",
+          "type": "BOOL"
+        },
+        {
+          "name": "B14",
+          "type": "BOOL"
+        },
+        {
+          "name": "B15",
+          "type": "BOOL"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 13
     }
   ],
   "standardFunctions": [
@@ -1042,6 +1230,16 @@
       "arity": 2,
       "name": "SHR",
       "vendorExtension": false
+    },
+    {
+      "arity": 16,
+      "name": "BITS_TO_WORD",
+      "vendorExtension": true
+    },
+    {
+      "arity": 0,
+      "name": "UPTIME",
+      "vendorExtension": true
     }
   ],
   "statements": [
@@ -1139,6 +1337,42 @@
       "kind": "function",
       "name": "DEADBAND",
       "reason": "Vùng chết quanh setpoint. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "functionBlock",
+      "name": "RELAY_GUARD",
+      "reason": "Bảo vệ relay (đóng/nghỉ tối thiểu). Không thuộc thư viện chuẩn IEC; khối DDC thường ngày, 4 lỗi hiện trường ở chương trình tự viết (U-12)."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "functionBlock",
+      "name": "STAGER",
+      "reason": "Bậc tải có chờ đầu ra, nhả LIFO. Không thuộc thư viện chuẩn IEC."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "functionBlock",
+      "name": "PULSE_GEN",
+      "reason": "Bộ nhịp/xung vuông không trôi. Không thuộc thư viện chuẩn IEC."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "functionBlock",
+      "name": "WORD_TO_BITS",
+      "reason": "Tách 16 bit của UINT. Không thuộc thư viện chuẩn IEC."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "function",
+      "name": "BITS_TO_WORD",
+      "reason": "Gộp 16 BOOL thành UINT. Không thuộc thư viện chuẩn IEC."
+    },
+    {
+      "authority": "Issue #801; SW-SYSTEM-DDC-BLOCKS-MK-DDC-24-VI",
+      "kind": "function",
+      "name": "UPTIME",
+      "reason": "Thời gian đơn điệu của Program. Không thuộc thư viện chuẩn IEC; chỉ gọi trong PROGRAM/FUNCTION_BLOCK."
     }
   ]
 }

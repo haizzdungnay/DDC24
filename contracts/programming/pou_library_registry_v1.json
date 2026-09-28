@@ -2,7 +2,7 @@
   "$schema": "./pou_library_registry_v1.schema.json",
   "registryId": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1",
   "schemaVersion": 1,
-  "libraryVersion": "rev-a.5",
+  "libraryVersion": "rev-a.6",
   "scope": "SYSTEM",
   "categoryOrder": [
     {
@@ -269,6 +269,111 @@
       ],
       "featureState": "AVAILABLE",
       "description": "Dịch các bit của một số không dấu 16 bit sang phải N vị trí; N từ 16 trở lên cho 0. Dùng để tách từng bit trạng thái từ một thanh ghi Modbus.",
+      "tags": [
+        "bit",
+        "mặt nạ"
+      ]
+    },
+    {
+      "id": "BITS_TO_WORD",
+      "kind": "FUNCTION",
+      "dispatch": "EXPANSION",
+      "category": "logic",
+      "labelVi": "Gộp bit (BITS_TO_WORD)",
+      "labelEn": "Bits to word",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "UINT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "B00",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B01",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B02",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B03",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B04",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B05",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B06",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B07",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B08",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B09",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B10",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B11",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B12",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B13",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B14",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B15",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "UINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Gộp 16 cờ BOOL thành một số không dấu 16 bit, B00 là bit thấp nhất. Dùng để ghi một mặt nạ kênh hoặc một thanh ghi trạng thái ra Modbus.",
       "tags": [
         "bit",
         "mặt nạ"
@@ -1923,6 +2028,301 @@
       "tags": [
         "ngưỡng",
         "ổn định"
+      ]
+    },
+    {
+      "id": "RELAY_GUARD",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "control",
+      "labelVi": "Bảo vệ relay (RELAY_GUARD)",
+      "labelEn": "Relay guard",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "BOOL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "CMD",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "ENABLE",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "MIN_ON",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "MIN_OFF",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "WAITING",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "STARTS",
+          "direction": "OUTPUT",
+          "dataType": "DINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Bảo vệ một relay: thời gian đóng và nghỉ tối thiểu, ENABLE = FALSE tắt ngay, đếm số lần đóng. Sau khởi động relay phải nghỉ đủ MIN_OFF mới đóng lần đầu, để nhiều relay không đóng dồn.",
+      "tags": [
+        "bảo vệ",
+        "relay"
+      ]
+    },
+    {
+      "id": "STAGER",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "control",
+      "labelVi": "Bậc tải (STAGER)",
+      "labelEn": "Stager",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "INT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "RUN",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "DEMAND",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "MAX_STAGES",
+          "direction": "INPUT",
+          "dataType": "INT"
+        },
+        {
+          "name": "STAGE_DELAY",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "HOLD",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "STAGES",
+          "direction": "OUTPUT",
+          "dataType": "INT"
+        },
+        {
+          "name": "TARGET",
+          "direction": "OUTPUT",
+          "dataType": "INT"
+        },
+        {
+          "name": "MASK",
+          "direction": "OUTPUT",
+          "dataType": "UINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Đổi nhu cầu 0 đến 100 phần trăm thành số bậc, thêm hoặc bớt từng bậc một sau STAGE_DELAY; HOLD giữ nguyên khi đầu ra chưa theo kịp. MASK bật bậc thấp trước và nhả bậc cao trước, không để lỗ.",
+      "tags": [
+        "bậc tải",
+        "máy nén"
+      ]
+    },
+    {
+      "id": "PULSE_GEN",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "timer",
+      "labelVi": "Tạo nhịp (PULSE_GEN)",
+      "labelEn": "Pulse generator",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "BOOL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "RUN",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "T_ON",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "T_OFF",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "TICK",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "COUNT",
+          "direction": "OUTPUT",
+          "dataType": "DINT"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Xung vuông T_ON/T_OFF không trôi theo chu kỳ quét; TICK bật đúng một chu kỳ mỗi khi hết một nhịp. Dùng cho đèn nháy, luân phiên theo nhịp hoặc bước chạy tuần tự.",
+      "tags": [
+        "nhịp",
+        "xung"
+      ]
+    },
+    {
+      "id": "WORD_TO_BITS",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "logic",
+      "labelVi": "Tách bit (WORD_TO_BITS)",
+      "labelEn": "Word to bits",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "BOOL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "UINT"
+        },
+        {
+          "name": "B00",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B01",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B02",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B03",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B04",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B05",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B06",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B07",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B08",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B09",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B10",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B11",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B12",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B13",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B14",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "B15",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Tách một số không dấu 16 bit thành 16 cờ BOOL, B00 là bit thấp nhất. Dùng để lấy từng trạng thái trong một thanh ghi Modbus hoặc một mặt nạ kênh.",
+      "tags": [
+        "bit",
+        "mặt nạ"
+      ]
+    },
+    {
+      "id": "UPTIME",
+      "kind": "FUNCTION",
+      "dispatch": "FUNC_TABLE",
+      "category": "timer",
+      "labelVi": "Thời gian chạy (UPTIME)",
+      "labelEn": "Uptime",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "TIME",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "TIME"
+        }
+      ],
+      "featureState": "AVAILABLE",
+      "description": "Thời gian đơn điệu kể từ lần chạy đầu của Program, thay cho TON chạy tự do làm đồng hồ. Chỉ gọi được trong PROGRAM hoặc FUNCTION_BLOCK vì nó phụ thuộc thời gian.",
+      "tags": [
+        "thời gian",
+        "đồng hồ"
       ]
     }
   ]

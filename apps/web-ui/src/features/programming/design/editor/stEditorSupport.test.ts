@@ -86,16 +86,18 @@ describe('tokenizeStSource (WP-10 P0, đối chiếu ST_SUBSET_SPEC §10)', () =
     expect(kindOf('Fan')).toBe('identifier')
   })
 
-  it('24 hàm chuẩn + 9 FB type khớp đúng số lượng kFuncs[]/st_fb_type', () => {
-    // `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS; Issue #800 thêm SHL/SHR
+  it('26 hàm chuẩn + 13 FB type khớp đúng số lượng kFuncs[]/st_fb_type', () => {
+    // `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS; Issue #800 thêm SHL/SHR;
+    // Issue #801 thêm BITS_TO_WORD/UPTIME và 4 FB SYSTEM
     // (`DDD-CTRL-PROG-001` §7A). Con số ghim ở đây là cố ý: tô màu cú pháp phải
     // đi cùng compiler, và một khối mới mà editor không tô sẽ trông như một
     // định danh người dùng tự đặt.
-    expect(ST_FUNCTION_NAMES).toHaveLength(24)
-    expect(ST_FUNCTION_NAMES).toEqual(expect.arrayContaining(['SHL', 'SHR']))
-    expect(ST_FB_TYPE_NAMES).toHaveLength(9)
+    expect(ST_FUNCTION_NAMES).toHaveLength(26)
+    expect(ST_FUNCTION_NAMES).toEqual(expect.arrayContaining(['SHL', 'SHR', 'BITS_TO_WORD', 'UPTIME']))
+    expect(ST_FB_TYPE_NAMES).toHaveLength(13)
     expect([...ST_FB_TYPE_NAMES].sort()).toEqual(
-      ['CTD', 'CTU', 'F_TRIG', 'HYSTERESIS', 'PID', 'R_TRIG', 'TOF', 'TON', 'TP'].sort()
+      ['CTD', 'CTU', 'F_TRIG', 'HYSTERESIS', 'PID', 'PULSE_GEN', 'RELAY_GUARD', 'R_TRIG',
+        'STAGER', 'TOF', 'TON', 'TP', 'WORD_TO_BITS'].sort()
     )
   })
 })
