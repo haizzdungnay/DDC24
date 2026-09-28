@@ -155,6 +155,50 @@ func TestVirtualBindingRejectsSignalTypeMismatch(t *testing.T) {
 	}
 }
 
+/* Kiểu biến ST do SLOT Core quyết định, không do `signalType` khai báo.
+ *
+ * Bộ cấp slot đặt VP `integer` lên `AV` (REAL) và VP `multistate` lên `MSV`
+ * (UINT); `st_io_map.cpp` khoá cứng `AV ⇒ REAL`, `BV ⇒ BOOL`, `MSV ⇒ UINT`. Luật
+ * cũ đòi REAL ↔ `float` và UINT ↔ `integer` nên hai kiểu VP này không bind được
+ * vào biến nào — đo được trên bo Foxlinx 2026-09-27 (`PIO-SRC-001`). */
+func TestVirtualBindingTypeFollowsCoreSlot(t *testing.T) {
+	cases := []struct {
+		name, signalType, slot, pointID, dataType string
+		pass                                      bool
+	}{
+		{"integer trên AV nhận REAL", "integer", "AV-2", "AV-2", "REAL", true},
+		{"integer trên AV từ chối DINT", "integer", "AV-2", "AV-2", "DINT", false},
+		{"multistate trên MSV nhận UINT", "multistate", "MSV-1", "MSV-1", "UINT", true},
+		{"multistate trên MSV từ chối INT", "multistate", "MSV-1", "MSV-1", "INT", false},
+		{"float trên AV nhận REAL", "float", "AV-4", "AV-4", "REAL", true},
+		{"boolean trên BV nhận BOOL", "boolean", "BV-1", "BV-1", "BOOL", true},
+		{"boolean trên BV từ chối REAL", "boolean", "BV-1", "BV-1", "REAL", false},
+		// Binding mang mã điểm ảo thay vì mã slot vẫn phải suy kiểu từ slot.
+		{"mã VP, slot MSV nhận UINT", "multistate", "MSV-2", "VP10", "UINT", true},
+		{"mã VP, slot AV từ chối UINT", "integer", "AV-3", "VP4", "UINT", false},
+		// Chưa có slot: suy theo pool mà allocator sẽ chọn.
+		{"chưa slot, integer nhận REAL", "integer", "", "VP4", "REAL", true},
+		{"chưa slot, multistate nhận UINT", "multistate", "", "VP2", "UINT", true},
+		{"chưa slot, integer từ chối DINT", "integer", "", "VP4", "DINT", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			facts := VirtualPointFacts{PointID: tc.pointID, Enabled: true, Writable: true,
+				SignalType: tc.signalType, Source: "WEB", BoundPointID: tc.slot}
+			reason := checkVirtualBinding(virtualSnapshot(facts), tc.pointID, "input", tc.dataType)
+			if tc.pass && reason != "" {
+				t.Fatalf("bị chặn nhầm: %s", reason)
+			}
+			if !tc.pass && reason == "" {
+				t.Fatal("lệch kiểu so với slot Core vẫn qua Check")
+			}
+			if !tc.pass && !strings.Contains(reason, "đổi kiểu biến thành") {
+				t.Fatalf("lý do không nói phải sửa thành kiểu gì: %s", reason)
+			}
+		})
+	}
+}
+
 // Kiểu ST không ràng buộc kiểu tín hiệu nào thì không có gì để đối chiếu — im
 // lặng ở đó là đúng, khác hẳn im lặng vì bỏ sót.
 func TestVirtualBindingSkipsTypeCheckForUnmappedSTTypes(t *testing.T) {

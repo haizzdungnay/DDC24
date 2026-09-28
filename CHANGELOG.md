@@ -57,6 +57,14 @@
 - Trong lúc kiểm đã tìm và sửa 6 lỗi của chính bản đề xuất trước khi đưa vào tài liệu: nhãn `CASE 16..32767` bị từ chối, tên `tOn` trùng từ khoá `TON`, nhịp bước trôi 1,0 → 1,2 s, STAGGER đóng dồn 7 relay cùng lúc khi chờ thời gian nghỉ, STAGING đóng dồn 3 bậc, và PULSE tự kích khi nút đã để sẵn TRUE.
 - Kiểm chứng (HOST): `mkddc-st-compile` (`fwsom-st-1.2.0`, profile `revA-1t-1-5-30` v2.2) biên dịch Program + 10 khối PASS, 0 diagnostic; IR 1463/4096 lệnh, 453/512 slot ghi, 42/64 instance FB. Harness mô phỏng liên kết `libst_compiler_lib`/`libcore_runtime` chạy 12 kịch bản ở chu kỳ 100 ms: 0 lỗi runtime, nhịp CHASE/BLINK đúng 1,0 s, STAGGER đóng đúng một relay mỗi bước. Trích ngược 11 khối mã từ chính file `.md`: trùng byte 11/11 và biên dịch lại PASS. Luật phụ thuộc thư viện kiểm bằng CLI: thiếu `requiresLibrary` → `ST-LIB-001`, khai đủ → PASS. **NOT RUN:** Check/Commission trên bo, FC05 thật, relay vật lý.
 
+### Fixed — Check từ chối mọi binding vào Virtual Point `integer` và `multistate` (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/point_binding_facts.go` (+ test), `apps/web-api/internal/app/programming_point_facts.go` (+ test).
+- Triệu chứng: khi triển khai `PRG_DO16_MODBUS` lên bo Foxlinx, Check FAILED với `PRG-ERR-MAP-003`/`PIO-SRC-001`. VP `multistate` `MSV-01` bị từ chối với biến UINT ("cần integer"), VP `integer` `AV-02`/`AV-03` bị từ chối với biến REAL ("cần float"). Trong khi đó tab Ánh xạ và Point Catalog gợi ý đúng UINT/REAL cho chính các điểm này.
+- Nguyên nhân gốc: `virtualSignalTypeForST` (ISS-PIO-28) suy kiểu từ `signalType` khai báo, với REAL ↔ `float` và UINT ↔ `integer`. Nhưng bộ cấp slot cố ý đặt VP `integer` lên `AV` và VP `multistate` lên `MSV` (ISS-PIO-17), còn `st_io_map.cpp` khoá cứng `AV ⇒ REAL`, `BV ⇒ BOOL`, `MSV ⇒ UINT`. Hai luật không có giao điểm, nên hai kiểu VP này không bind được vào biến nào. Đây là lần thứ tư cùng một lớp lỗi với ISS-PIO-33/34: để thuộc tính khai báo quyết định kiểu thay vì cách Core lưu điểm.
+- Cách sửa: Check suy kiểu biến ST từ **slot Core** (`BoundPointID` hoặc mã slot trong binding), dùng cùng bảng với Core và catalog. Chỉ khi VP chưa có slot mới rơi về `signalType`, và khi đó ánh xạ theo pool mà allocator sẽ chọn (`integer`/`float` → REAL, `multistate` → UINT, `boolean` → BOOL). Lý do chặn nay nói rõ kiểu cần đổi thành. Adapter facts chở thêm `BoundPointID`.
+- Kiểm chứng: test mới `TestVirtualBindingTypeFollowsCoreSlot` (12 ca) đỏ 10/12 trên mã cũ, xanh trên mã mới; `go vet ./...` sạch; `go test ./... -count=1` PASS toàn bộ package.
+
 ### Changed — Hợp nhất các bản rà tài liệu đang chờ ở checkout gốc vào `main@12af1082`; đối chiếu mã finding và trạng thái (2026-09-27)
 
 - **Phạm vi:** bốn entry ngay dưới (đề xuất tính năng, tăng cường bảo vệ bo lab, rà kiến trúc, rà Product Spec/kế hoạch đóng release) được viết trên mốc cũ `0f5d46f3`; nay đưa lên `main`. Không đổi mã nguồn.
