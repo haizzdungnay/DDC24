@@ -1,0 +1,11 @@
+[    9.394571] kernel: rk_gmac-dwmac 21c70000.ethernet eth0: Link is Up - 1Gbps/Full - flow control off
+[    7.944076] systemd[1]: Reached target Network is Online.
+[    7.993064] mkddc-iobus[644]: INFO  iobus.start version=0.1.0 git_commit=4c49e78b970cd878e79c66e3063735c44678f148 build_time=2026-09-28T09:15:21Z toolchain=GNU-13.3.0
+[    8.130526] systemd[1]: Started OpenSSH server daemon.
+[    8.813485] systemd[1]: Started MK-DDC-24 IO bus service (UART/IOP master to MCU).
+[   10.606394] mkddc-core[1510]: INFO  core.start version=0.1.0 git_commit=265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3 build_time=2026-09-28T12:01:04Z toolchain=GNU-13.3.0 p
+[   10.656838] mkddc-core[1510]: INFO  core.ready first scan done
+[   10.684755] systemd[1]: Started MK-DDC-24 Web/API.
+[   11.086101] mkddc-core[1510]: AUDIT web_cmd id=2669860827039146 user=virtual-point-sync point=AV1 op=write value=0 result=accepted active_source=manual
+[   15.848788] systemd[1]: Startup finished in 1.810s (kernel) + 14.038s (userspace) = 15.848s.
+[   19.953006] mkddc-web[1515]: mkddc-web 2026/09/28 12:35:22 INFO listen addr=:8082 core_sock=/run/mkddc/core.sock users_conf=/data/config/users.conf trend_db=/data/mkdd

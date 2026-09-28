@@ -1,0 +1,37 @@
+t0 (restart_cmd_ns) = 12:22:45.209Z
+  web_stop_cmd_ns    12:22:40.116Z  t0   -5093 ms
+  web_stop_ret_ns    12:22:40.198Z  t0   -5011 ms
+  restart_cmd_ns     12:22:45.209Z  t0      +0 ms
+  restart_ret_ns     12:22:46.882Z  t0   +1673 ms
+  web_start_cmd_ns   12:24:01.893Z  t0  +76684 ms
+  web_start_ret_ns   12:24:01.953Z  t0  +76744 ms
+  web_login_ok_ns    12:24:12.624Z  t0  +87415 ms
+mẫu trực tiếp: 630, 12:22:35.261Z … 12:25:12.816Z
+chuỗi (core, state, enabled, waitingReason, faultCount, lastFaultCode, [safeState, noCtrlOnly]):
+  t0   -9948 … t0    -181 ms  n=  40  ('ok', 'RUNNING', True, None, 0, None, (1, 1))
+  t0     +69 … t0   +1571 ms  n=   7  ('UNREACHABLE', None, None, None, None, None, ())
+  t0   +1821 … t0  +76958 ms  n= 301  ('ok', 'DISABLED', False, None, 0, None, (1, 1))
+  t0  +77209 … t0 +109533 ms  n= 130  ('ok', 'RUNNING', True, None, 0, None, (1, 1))
+  t0 +109783 … t0 +109783 ms  n=   1  ('result=rejected', None, None, None, None, None, ())
+  t0 +110034 … t0 +147607 ms  n= 151  ('ok', 'RUNNING', True, None, 0, None, (1, 1))
+lần chạy đầu sau t0 (lastRunMonoNs đổi): mẫu t0+77209 ms
+  tính từ web_start_cmd_ns: +525 ms
+  tính từ web_login_ok_ns: -10206 ms
+DO [web dừng, Core cũ còn chạy] t0-5011 … t0+0 ms: 80 mẫu coil, chất lượng≠GOOD 0; kênh đóng: ['CK50804-DO1', 'CK50804-DO2', 'CK50804-DO3', 'CK50804-DO4']; 0→1: [(-3228, 'CK50804-DO1'), (-2228, 'CK50804-DO2'), (-1228, 'CK50804-DO3'), (-228, 'CK50804-DO4')]
+DO [Core mới, web dừng] t0+1673 … t0+76684 ms: 1200 mẫu coil, chất lượng≠GOOD 0; kênh đóng: ['CK50804-DO1', 'CK50804-DO2', 'CK50804-DO3', 'CK50804-DO4']; 0→1: không
+DO [web đang khởi động → RUNNING] t0+76684 … t0+77209 ms: 16 mẫu coil, chất lượng≠GOOD 0; kênh đóng: ['CK50804-DO1', 'CK50804-DO2', 'CK50804-DO3', 'CK50804-DO4']; 0→1: không
+khung: 1239, t0-39125 … t0+147860 ms; lỗi: 0
+  FC01: 747 khung, khoảng hở lớn nhất 870 ms
+  ghi [web dừng, Core cũ còn chạy]: 4 khung; khung có bit 1: 4
+    t0-3547 ms slave=4 fc=5 addr=0 count=1 values=[1]
+    t0-2517 ms slave=4 fc=5 addr=1 count=1 values=[1]
+    t0-1487 ms slave=4 fc=5 addr=2 count=1 values=[1]
+    t0-457 ms slave=4 fc=5 addr=3 count=1 values=[1]
+  ghi [Core mới, web dừng]: 0 khung; khung có bit 1: 0
+  ghi [web đang khởi động → RUNNING]: 2 khung; khung có bit 1: 0
+    t0+77140 ms slave=4 fc=15 addr=0 count=8 values=[0, 0, 0, 0, 0, 0, 0, 0]
+    t0+77170 ms slave=5 fc=15 addr=0 count=8 values=[0, 0, 0, 0, 0, 0, 0, 0]
+  khung ghi đầu tiên quanh/sau lần chạy đầu: t0+77140 ms slave=4 fc=15 values=[0, 0, 0, 0, 0, 0, 0, 0]
+  khung ghi cuối trước restart Core: t0-457 ms
+mẫu Core không trả snapshot: 8 (t0+69 … t0+109783 ms)
+  phân loại: {'ok': 622, 'UNREACHABLE': 7, 'result=rejected': 1}

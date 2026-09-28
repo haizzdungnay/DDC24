@@ -1,0 +1,19 @@
+Kiểm nhãn trên UI thật (Chrome DevTools MCP, http://mekong-fac.ddns.net:8082/eng/programming, giao diện tiếng Việt)
+Restart Core: lệnh 12:45:17.461Z, systemctl trả về 12:45:19.080Z; core.ready 12:45:19.072843Z; VP đẩy xuống 12:45:22.123Z.
+
+Trích cây a11y lúc wait_for("Chờ đầu vào") trả về (bảng "Chương trình đang vận hành", "Cập nhật lần cuối 28/09/2026 · 12:45:19 UTC"):
+  button "PRG_DO16_MODBUS"
+  StaticText "ST"
+  StaticText "10 ms"
+  StaticText "Core đang chạy"
+  StaticText "Chờ đầu vào"
+  StaticText "tự chạy khi đầu vào GOOD; lỗi sau 60 s"
+  StaticText "Chưa đọc được từ Core"                        (cột CHẠY GẦN NHẤT)
+  StaticText "Máy chủ không gán nhãn cho trạng thái này"    (cột SỨC KHOẺ)
+Cùng trang, thẻ "Trạng thái an toàn":
+  "Đang tác động với AO/DO cục bộ"
+  "Core giữ AO/DO cục bộ ở safe-state vì chưa có nguồn điều khiển hợp lệ trên mức Default. Trạng thái này không xác nhận DO Modbus mở rộng đang tắt. ..."
+
+Lần đọc kế (12:45:31.154Z, bảng làm mới mỗi 5 s):
+  PRG_DO16_MODBUS ST 10 ms Core đang chạy Đang chạy 12:45:29 UTC 0 ms trước Bình thường
+REST sau đó: runtimeState RUNNING, faultCount 0, lastFaultCode ""; health 6/6 ok.

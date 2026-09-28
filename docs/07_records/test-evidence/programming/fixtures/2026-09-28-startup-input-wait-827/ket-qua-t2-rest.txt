@@ -1,0 +1,31 @@
+t0 (web_login_ok_ns) = 12:24:12.624Z; mẫu = 257
+  web_stop_cmd_ns: 12:22:40.116Z (t0-92508 ms)
+  web_stop_ret_ns: 12:22:40.198Z (t0-92426 ms)
+  restart_cmd_ns: 12:22:45.209Z (t0-87415 ms)
+  restart_ret_ns: 12:22:46.882Z (t0-85742 ms)
+  web_start_cmd_ns: 12:24:01.893Z (t0-10731 ms)
+  web_start_ret_ns: 12:24:01.953Z (t0-10671 ms)
+  web_login_ok_ns: 12:24:12.624Z (t0+0 ms)
+trước t0: 0 mẫu, faultCount=None, Active=None
+chuỗi trạng thái sau t0 (runtimeState, coreState, waitingReason, faultCount, lastFaultCode, desiredEnabled, http):
+     +174 …  +60153 ms  n=257  ('RUNNING', 'RUNNING', None, 0, '', True, '200')
+RUNNING đầu tiên sau t0: mẫu 12:24:12.798Z = t0+174 ms; lastRunAtUtc=2026-09-28T12:24:12.803Z (t0+179 ms)
+mẫu WAITING trước RUNNING: 0; waitingReason=[]
+cuối lượt: faultCount=0 (trước None), lastFaultCode=, state=RUNNING
+mẫu FAULTED sau t0: 0
+Active quan sát: ['0c29f4f1-377d-44ce-add0-2a0f5cad09db']; producerState: {'READY': 257}
+health 6/6 ok: 257/257 mẫu; mẫu có check không ok: 0; mẫu không đọc được health: 0
+khoảng chờ tính cho DO/khung ghi: Core mới sẵn sàng t0-85742 ms … mẫu cuối chưa RUNNING t0+0 ms
+DO đóng ở mẫu coil cuối trước t0: 0 kênh []
+mẫu coil trong khoảng chờ: 16 (16 kênh x số lần poll); kênh đóng trong khoảng chờ: không có
+DO chuyển 0→1 trong khoảng chờ (theo mốc mẫu coil): không có
+kênh đóng trong 3 s đầu sau RUNNING: không có
+frames: 651 khung, t0-32643 … t0+60445 ms
+  khoảng cách hai khung FC01 liên tiếp lớn nhất: 870 ms (liên tục nếu ≲ 1 000 ms)
+khung ghi t0 … Core mới sẵn sàng (đuôi lệnh của Core cũ): 0
+khung ghi trong khoảng chờ của Core mới: 2
+  t0-10275 ms slave=4 fc=15 addr=0 count=8 ok=1
+  t0-10245 ms slave=5 fc=15 addr=0 count=8 ok=1
+khung ghi đầu tiên sau khoảng chờ: t0+3749 ms slave=4 fc=5 addr=0 count=1
+khung ghi cuối trước t0: t0-10245 ms
+khung lỗi: 0

@@ -1,0 +1,29 @@
+t0 (restart_cmd_ns) = 12:13:56.461Z; mẫu = 177
+  restart_cmd_ns: 12:13:56.461Z (t0+0 ms)
+  restart_ret_ns: 12:13:58.298Z (t0+1837 ms)
+trước t0: 16 mẫu, faultCount=0, Active=0c29f4f1-377d-44ce-add0-2a0f5cad09db
+chuỗi trạng thái sau t0 (runtimeState, coreState, waitingReason, faultCount, lastFaultCode, desiredEnabled, http):
+      +75 …   +1638 ms  n=  8  ('UNKNOWN', None, None, None, None, True, '200')
+    +1967 …   +2768 ms  n=  5  ('DISABLED', 'DISABLED', None, 0, '', True, '200')
+    +3082 …   +3483 ms  n=  3  ('WAITING', 'WAITING', 'INPUT_NOT_READY', 0, '', True, '200')
+    +3683 …  +36887 ms  n=145  ('RUNNING', 'RUNNING', None, 0, '', True, '200')
+RUNNING đầu tiên sau t0: mẫu 12:14:00.144Z = t0+3683 ms; lastRunAtUtc=2026-09-28T12:14:00.144Z (t0+3683 ms)
+mẫu WAITING trước RUNNING: 3; waitingReason=['INPUT_NOT_READY']
+  WAITING đầu tiên t0+3082 ms, cuối cùng t0+3483 ms
+cuối lượt: faultCount=0 (trước 0), lastFaultCode=, state=RUNNING
+mẫu FAULTED sau t0: 0
+Active quan sát: ['0c29f4f1-377d-44ce-add0-2a0f5cad09db', 'None']; producerState: {'READY': 169, 'UNAVAILABLE': 8}
+health 6/6 ok: 169/177 mẫu; mẫu có check không ok: 8; mẫu không đọc được health: 0
+  check không ok: t0+75 … t0+1638 ms, ['core']
+khoảng chờ tính cho DO/khung ghi: Core mới sẵn sàng t0+1837 ms … mẫu cuối chưa RUNNING t0+3483 ms
+DO đóng ở mẫu coil cuối trước t0: 8 kênh ['CK50804-DO1', 'CK50804-DO3', 'CK50804-DO5', 'CK50804-DO7', 'CK50805-DO1', 'CK50805-DO3', 'CK50805-DO5', 'CK50805-DO7']
+mẫu coil trong khoảng chờ: 16 (16 kênh x số lần poll); kênh đóng trong khoảng chờ: ['CK50804-DO1', 'CK50804-DO3', 'CK50804-DO5', 'CK50804-DO7', 'CK50805-DO1', 'CK50805-DO3', 'CK50805-DO5', 'CK50805-DO7']
+DO chuyển 0→1 trong khoảng chờ (theo mốc mẫu coil): không có
+kênh đóng trong 3 s đầu sau RUNNING: không có
+frames: 476 khung, t0-31577 … t0+36631 ms
+  khoảng cách hai khung FC01 liên tiếp lớn nhất: 1057 ms (liên tục nếu ≲ 1 000 ms)
+khung ghi t0 … Core mới sẵn sàng (đuôi lệnh của Core cũ): 0
+khung ghi trong khoảng chờ của Core mới: 0
+khung ghi đầu tiên sau khoảng chờ: t0+3580 ms slave=4 fc=15 addr=0 count=8
+khung ghi cuối trước t0: t0-417 ms
+khung lỗi: 0
