@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PERF-FORLINX-063` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **Approved — cổng G0 duyệt 2026-09-28 (chủ sở hữu dự án); READY để implement qua Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809). Cổng G-D1…G-D4 còn chờ** |
 | Ngày | 2026-09-28 |
 | Chủ quản | Tech Lead (điều phối) — owner từng task ghi ở §4 là vai trò đề xuất |
@@ -441,7 +441,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `F-PRG-PERF-006` | P1 | T63-001 | Period hiệu lực khớp khai báo | — | IN-PROGRESS — probe HOST PASS; đo TARGET NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) §1 |
 | `F-PRG-PERF-007` | — | — | Bo cài sạch 27/09 | — | N/A(CLOSED) | §2.1 |
 | `PERF-SYS-05` | P1 | T63-004, T63-201 | `catchup_iterations=0`; test Fake MCU trễ | G-D1 | IN-PROGRESS — T63-004 HOST PASS: log phút `iobus.loop_timing`; kẹt 16 ms (đồng hồ giả) ⇒ `late_events=1`, `catchup_iterations=24` (luật `overruns` cũ đếm 21); 0 cấp phát trong vòng poll; đo 30 phút TARGET NOT_RUN; T63-201 BLOCKED(G-D1) | `apps/iobus/tests/test_poll_loop_timing.cpp` |
-| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | IN-PROGRESS — T63-004 tách `work_max_us`/`io_resp_gap_max_us`/`period_us`; phân bố `work` trên bo NOT_RUN (đầu vào T63-202) | `apps/iobus/application/diagnostics/poll_loop_timing.hpp` |
+| `PERF-SYS-07` | P2 | T63-004, T63-202 | Ghi chú biên thời gian IOP | — | IN-PROGRESS — T63-004 tách `work_max_us`/`io_resp_gap_max_us`/`period_us`; T63-202 khuyến nghị **giữ** hằng số IOP, điều kiện mở ADR ở Phụ lục A.4; phân bố `work` trên bo NOT_RUN; finding [#816](https://github.com/Mekong-HCM/MK-DDC-24/issues/816) | `apps/iobus/application/diagnostics/poll_loop_timing.hpp` · [Phụ lục A](#12-phụ-lục-a--biên-thời-gian-iop-t63-202-perf-sys-07) |
 | `PERF-SYS-01` | P1 | T63-005, T63-204 | Histogram đo sạch; C4 | G-D4 | TODO | |
 | `PERF-API-01` | P1 | T63-101, T63-102 | 0 × 503 trong 30 phút; p95 ≤ 20 ms | — | TODO | |
 | `PERF-API-02` | P2 | T63-103 | p95 status < 20 ms, overview < 50 ms | — | TODO | |
@@ -520,9 +520,84 @@ read-back sha256 và `/api/v1/points`.
 
 ---
 
-## 12. Lịch sử sửa đổi
+## 12. Phụ lục A — Biên thời gian IOP (T63-202, `PERF-SYS-07`)
+
+Chỉ phân tích và khuyến nghị. Plan này **không** đổi hằng số nào trong
+`contracts/iop/iop_protocol.h` (§11).
+
+### A.1 Ngân sách một giao dịch GET_IO theo thiết kế
+
+| Thành phần | Giá trị | Nguồn |
+|---|---:|---|
+| Tốc độ dây | 921.600 baud, 8N1 = 92.160 B/s | `iop_protocol.h:41-47` |
+| `GET_IO` 6 B | 65 µs | như trên |
+| `IO_RESP` 80 B (4 + 74 + 2) | 868 µs | như trên, `IOP_IO_RESP_LEN = 74` |
+| MCU xử lý (SPI DMA 2× ADS131M08 + dựng frame) | ≈ 500 µs, **ước lượng thiết kế** | như trên |
+| **Tổng một giao dịch** | **≈ 1.430 µs** | con số "≈ 1,4 ms" ở record §14 là ước lượng này, không phải số đo |
+| Chu kỳ poll `IOP_GET_IO_PERIOD_MS` | 2.000 µs, dư ≈ 570 µs (28,5%) | `iop_protocol.h:48` |
+| `IOP_RESP_TIMEOUT_MS` | 3.000 µs, **dài hơn chu kỳ** | `iop_protocol.h:49` |
+| Chặn tối đa một giao dịch lỗi | `(IOP_MAX_RETRY + 1) × timeout` = 4 × 3 = **12 ms** = 6 chu kỳ | `iop_client.cpp:168-197` |
+| `IOP_FAULT_TIMEOUT_MS` / `IOP_SAFE_TIMEOUT_MS` | 20 ms / 200 ms | `iop_protocol.h:51,54` |
+
+Lệnh output (`SET_DO`/`SET_AO`, mỗi lệnh chờ `ACK`) chạy trong cùng vòng poll nên
+cộng thêm thời gian dây và độ trễ ACK của MCU. Vòng có output có thể vượt 2 ms mà
+không cần lỗi nào.
+
+### A.2 Số đo hiện có
+
+| Nguồn | Mức | Số đo |
+|---|---|---|
+| Audit 28/09 (record §13.3) | TARGET, Fake MCU qua PTY | late-wake max 16,345 ms; p95/p99 max theo phút 14,007/15,972 ms; +510 overrun/150.004 wake; IOP timeout 161→163 (+2), **seq error 20.117→20.244 (+127)**, CRC 0; khoảng IO_RESP lớn nhất (lifetime) 22,17 ms |
+| T63-004 `iobus.loop_timing` với `fake_mcu` qua PTY, 2 phút | HOST, container không RT | `work_max_us` 6.819–8.445, `io_resp_gap_max_us` 9.586–10.250 theo phút; **không đại diện** cho bo |
+| T63-004 trên bo, 30 phút | TARGET | **NOT_RUN** — cần đường tới bo (evidence §3) |
+
+Giới hạn mức bằng chứng: bo lab chạy IOBus với Fake MCU qua PTY (drop-in
+`nomcu`), không qua dây UART 921.600 baud. Số TARGET vì vậy đo **đường phần mềm +
+PTY**, không đo thời gian dây và xử lý của MCU thật. Muốn đo hai thứ đó cần HIL
+(#624, ngoài phạm vi).
+
+### A.3 Phân tích
+
+1. Khi không có lỗi và không có output, dư 28,5% mỗi chu kỳ là đủ nhưng hẹp.
+2. Timeout 3 ms dài hơn chu kỳ 2 ms, nên **một** lần timeout chắc chắn làm lỡ ít nhất
+   một mốc. Có retry thì vòng poll bị chặn tới 12 ms (6 mốc). Với chính sách chạy bù
+   hiện hành (§2.2 `PERF-SYS-05`), sau đó là một loạt `GET_IO` liên tiếp không
+   nghỉ.
+3. Giả thuyết cho seq error (+127) lớn hơn nhiều timeout (+2): frame trả lời của lần
+   thử trước tới muộn, rơi vào lần thử sau hoặc vòng chạy bù kế tiếp, và bị đếm là
+   lệch `SEQ` (`iop_client.cpp:84-85`). Kiểm chứng giả thuyết: so seq error/giờ trước
+   và sau T63-201 (bỏ chạy bù) trên cùng bo, cùng tải §6.2.
+4. Ở hằng số hợp đồng, chặn tối đa 12 ms vẫn < `IOP_FAULT_TIMEOUT_MS` 20 ms, còn safe
+   200 ms của MCU cách xa. Nhưng gói release đóng `io_config.conf` với poll 10 ms và
+   timeout 10 ms, nên chặn tối đa là 40 ms > 20 ms (finding
+   [#816](https://github.com/Mekong-HCM/MK-DDC-24/issues/816), `state:triage`). Khoá
+   `period_us` của T63-004 cho biết bo đang chạy chu kỳ nào.
+
+### A.4 Khuyến nghị
+
+1. **Giữ nguyên** mọi hằng số IOP: chu kỳ 2 ms, timeout 3 ms, retry 3, fault 20 ms,
+   safe 200 ms. Chưa có số đo nào đòi đổi, và đổi là đổi hợp đồng.
+2. Sửa cơ chế chạy bù trước (T63-201 sau G-D1), rồi đo lại seq error và
+   `catchup_iterations` theo §6.
+3. Điều kiện mở **Issue + ADR riêng** để đổi hằng số IOP, xét sau khi có T63-004 và
+   T63-201 trên bo, đo sạch 2 × 30 phút:
+   - `work_max_us` > 2.000 µs ở hơn 1% số phút; **hoặc**
+   - seq error vẫn tăng sau T63-201; **hoặc**
+   - `io_resp_gap_max_us` ≥ 20.000 µs ở bất kỳ phút nào.
+
+   Phương án khi đó phải cân nhắc trong ADR: timeout ≤ chu kỳ, chu kỳ dài hơn, hoặc
+   tách lệnh output khỏi lượt `GET_IO`.
+4. Chốt giá trị gói release cho `io_config.conf` qua #816. Không làm trong Plan này.
+
+| AC T63-202 | Trạng thái |
+|---|---|
+| Phân bố `work` thực đo so với 2 ms và `IOP_RESP_TIMEOUT_MS=3` | Công cụ đo có (T63-004); số TARGET **NOT_RUN** |
+| Khuyến nghị giữ hay đổi; đổi thì mở Issue + ADR riêng | **Xong**: giữ, kèm điều kiện mở ADR ở A.4 |
+
+## 13. Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-28 | Tạo plan từ record hiệu năng §6/§13/§14 và báo cáo PM D01–D07: đối chiếu 21 finding (19 gốc + 2 mới) với mã tại `main@cb690dfb`, 25 task/5 wave, 5 cổng quyết định, giao thức đo, ma trận truy xuất; thi hành bằng một Issue #809 và một PR |
 | 1.1 | 2026-09-28 | Chủ sở hữu dự án duyệt cổng G0 và cho bắt đầu implement; Plan đưa thẳng lên `main` theo yêu cầu, nhánh thi hành tách từ `main`; thêm mục "bắt đầu ngay được việc gì"; G-D1…G-D4 vẫn chờ |
+| 1.2 | 2026-09-28 | Thi hành Issue #809 (PR #813): cập nhật tracker §7 theo từng commit task; thêm Phụ lục A §12 — biên thời gian IOP (T63-202); §6.3 ghi nguồn log `iobus.loop_timing` (T63-004) |
