@@ -36,11 +36,19 @@ PURE_FUNCTIONS = {
     "SEL", "SQRT", "SCALE", "DEADBAND",
     # Issue #800 — dịch bit trên UINT, registry `rev-a.5`.
     "SHL", "SHR",
+    # Issue #801 — khối SYSTEM, registry `rev-a.6`. `UPTIME` không có đầu vào
+    # và KHÔNG thuần theo nghĩa toán học (đọc đồng hồ chu kỳ); nó nằm ở đây vì
+    # FBD vẽ nó như node FUNCTION, còn semantic chặn nó trong POU FUNCTION.
+    "BITS_TO_WORD", "UPTIME",
 }
+# Entry hợp lệ với danh sách đầu vào rỗng trong corpus tương đương.
+ZERO_INPUT_FUNCTIONS = {"UPTIME"}
 # `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). `PI` giữ lại vì đây là
 # danh sách "kiểu nào ĐƯỢC PHÉP có state", không phải danh sách entry đang có.
 STATEFUL_FUNCTIONS = {"TON", "TOF", "TP", "R_TRIG", "F_TRIG", "CTU", "CTD",
-                      "HYSTERESIS", "PI", "PID"}
+                      "HYSTERESIS", "PI", "PID",
+                      # Issue #801 — khối SYSTEM có state.
+                      "RELAY_GUARD", "STAGER", "PULSE_GEN", "WORD_TO_BITS"}
 EXPLICIT_CONVERSIONS = {
     "INT_TO_REAL", "REAL_TO_INT", "TIME_TO_REAL", "REAL_TO_TIME",
     "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
@@ -263,7 +271,9 @@ def validate_equivalence(equivalence: dict[str, Any]) -> list[str]:
         # §7A.6) nên chúng phải nằm trong mẫu số phủ như mọi hàm thuần khác.
         if item["typeRef"] not in PURE_FUNCTIONS | EXPLICIT_CONVERSIONS:
             errors.append(f"equivalence typeRef không thuộc common IR: {item['typeRef']}")
-        if not isinstance(item["inputs"], list) or not item["inputs"]:
+        if not isinstance(item["inputs"], list) or (
+            not item["inputs"] and item["typeRef"] not in ZERO_INPUT_FUNCTIONS
+        ):
             errors.append(f"equivalence inputs rỗng: {item['id']}")
         if item["outputType"] not in SCALAR_TYPES:
             errors.append(f"equivalence output type sai: {item['id']}")
