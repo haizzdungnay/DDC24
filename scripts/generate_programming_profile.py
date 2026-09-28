@@ -473,15 +473,28 @@ def self_test() -> int:
         mutate(candidate)
         mutations.append((name, candidate, fragment))
 
+    # Mỗi mutation đặt CẢ HAI trường, không chỉ trường nó muốn làm hỏng: kết
+    # quả không được phụ thuộc việc profile gốc đang ký hay chưa. Trước #802
+    # mutation chỉ đặt một trường và ngầm dựa vào trường kia đang null — ký
+    # token là self-test từ chối "sai lý do" dù validator vẫn đúng.
     add("token-khong-co-evidence",
-        lambda c: c["reviewGatedFeatures"][0].update({"approvalToken": "a" * 64}),
+        lambda c: c["reviewGatedFeatures"][0].update(
+            {"approvalEvidenceRef": None, "approvalToken": "a" * 64}),
         "cùng có hoặc cùng rỗng")
     add("evidence-khong-co-token",
-        lambda c: c["reviewGatedFeatures"][0].update({"approvalEvidenceRef": "EV-PROG-U12-0001"}),
+        lambda c: c["reviewGatedFeatures"][0].update(
+            {"approvalEvidenceRef": "EV-PROG-U12-0001", "approvalToken": None}),
         "cùng có hoặc cùng rỗng")
     add("token-bia-dat",
         lambda c: c["reviewGatedFeatures"][0].update(
             {"approvalEvidenceRef": "EV-PROG-U12-0001", "approvalToken": "b" * 64}),
+        "không suy ra từ contract")
+    # Token suy ra ĐÚNG công thức nhưng cho libraryVersion khác: phê duyệt một
+    # bản thư viện không được tự áp cho bản sau.
+    add("token-cua-library-version-khac",
+        lambda c: c["reviewGatedFeatures"][0].update(
+            {"approvalEvidenceRef": "EV-PROG-U12-0001",
+             "approvalToken": approval_token("PID", "rev-a.0", "EV-PROG-U12-0001")}),
         "không suy ra từ contract")
     add("feature-khong-review-required",
         lambda c: c["reviewGatedFeatures"].append(

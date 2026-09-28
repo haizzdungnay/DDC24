@@ -1,8 +1,8 @@
 # Phiếu xin quyết định: duyệt `PID` (REVIEW_REQUIRED) hoặc công bố lộ trình
 
 > **Document ID:** REC-PID-DECISION-REQUEST-20260928
-> **Phiên bản:** 0.1
-> **Trạng thái:** Chờ quyết định — Controls/Safety Lead + Product Owner
+> **Phiên bản:** 0.2
+> **Trạng thái:** **Đã quyết định 2026-09-28 — phương án 1 (duyệt và ký token)**
 > **Issue:** [#802](https://github.com/Mekong-HCM/MK-DDC-24/issues/802) (finding **U-13**, P1, của
 > [`REC-DDC-FIELD-USE-20260927`](DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md))
 > **Mốc mã nguồn đối chiếu:** `main@9910b88` (2026-09-28)
@@ -67,17 +67,25 @@ Cái giá: sản phẩm DDC thiếu vòng PID trong thời gian chờ.
 
 | Mục | Giá trị |
 |---|---|
-| Phương án chọn | ☐ 1 — duyệt và ký token ☐ 2 — công bố lộ trình |
-| Mốc (nếu phương án 2) | |
-| `approvalEvidenceRef` (nếu phương án 1) | |
-| Ngưỡng override-detect được duyệt | |
-| Phương án thay thế tạm cho người dùng (nếu phương án 2) | |
-| Controls/Safety Lead ký | |
-| Product Owner ký | |
-| Ngày | |
+| Phương án chọn | ☑ 1 — duyệt và ký token ☐ 2 — công bố lộ trình |
+| Mốc (nếu phương án 2) | — |
+| `approvalEvidenceRef` (nếu phương án 1) | `EV-PROG-PID-APPROVAL-20260928` — [hồ sơ bằng chứng](../test-evidence/programming/2026-09-28-pid-approval-evidence.md) |
+| Ngưỡng override-detect được duyệt | 1 % dải `OUT_MIN..OUT_MAX` (`kPidOverrideDetectFraction = 0.01f`); kèm duyệt `iMin/iMax` dùng chung biên output, fault khi `dt` sai/NaN/Inf/quality bad, freeze tích phân khi override như As-Built `TASK-PROG-303` |
+| Phương án thay thế tạm cho người dùng (nếu phương án 2) | — |
+| Controls/Safety Lead ký | Chủ dự án (vai Controls/Safety Lead của repo), chấp thuận trong phiên làm việc 2026-09-28 |
+| Product Owner ký | Chủ dự án (vai Product Owner của repo), cùng lần chấp thuận |
+| Ngày | 2026-09-28 |
+
+Token sinh bằng `approval_token("PID", "rev-a.6", "EV-PROG-PID-APPROVAL-20260928")`
+= `3c52721944a630d54d3111bc38aab4c0c63c7a8f29ea784d27f2c0cb2e6cc0d6`, ghi vào
+`contracts/programming/product_profile_v2.json` — token do agent sinh theo uỷ
+quyền trực tiếp của chủ dự án trong cùng phiên, không phải tự ký. Quyết định ghi ở
+`docs/00_governance/DECISIONS.md` (lịch sử 2026-09-28). Lớp bằng chứng HOST;
+vòng kín với AO thật trên bo NOT RUN.
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 0.2 | 2026-09-28 | Điền §4: chọn phương án 1, `approvalEvidenceRef = EV-PROG-PID-APPROVAL-20260928`, ngưỡng 1 % được duyệt, token `3c527219…` cho `rev-a.6` |
 | 0.1 | 2026-09-28 | Phiếu xin quyết định cho Issue #802 (U-13): hiện trạng cổng `REVIEW_REQUIRED` của `PID` đối chiếu `main@9910b88`, cơ chế token, điểm còn treo ở `DDD-CTRL-PROG-001` §7, hai phương án và ô quyết định |

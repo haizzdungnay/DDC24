@@ -9,7 +9,7 @@ const (
 	ProfileTargetABI      = 3841
 	ProfileMajor          = 2
 	ProfileMinor          = 2
-	ProfileSHA256         = "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2"
+	ProfileSHA256         = "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf"
 	ProfileLibraryVersion = "rev-a.6"
 	ProfileIntegrityMode  = "SIGNATURE_REQUIRED"
 )
@@ -70,7 +70,7 @@ type ReviewGatedFeature struct {
 }
 
 var ReviewGatedFeatures = [1]ReviewGatedFeature{
-	{FeatureID: "PID", Approved: false, ApprovalToken: ""},
+	{FeatureID: "PID", Approved: true, ApprovalToken: "3c52721944a630d54d3111bc38aab4c0c63c7a8f29ea784d27f2c0cb2e6cc0d6"},
 }
 
 // ReviewGateBlocks trả true khi feature bị chặn Check. Tên không có trong bảng

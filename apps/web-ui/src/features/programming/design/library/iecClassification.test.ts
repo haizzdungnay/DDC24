@@ -1,9 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { iecClassificationOf, isManufacturerExtension } from './iecClassification'
 import { PROGRAMMING_LIBRARY_ENTRIES } from '../../api/generated/library_registry'
 import { buildStCompletions } from '../editor/stEditorSupport'
 import { FBD_PALETTE } from '../../fbd/palette'
 import curated from '../../../../../../../contracts/programming/st_language_profile_v1.curated.json'
+
+/* Issue #802: profile production đã ký token cho `PID`. File này kiểm CƠ CHẾ
+   của khối REVIEW_REQUIRED (bị khoá/đánh dấu), nên dựng lại đúng bảng review
+   gate trước khi ký — PID chưa duyệt. Trạng thái production (PID dùng được)
+   được khoá riêng ở `model/reviewGate.test.ts`. */
+vi.mock('../../api/generated/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/generated/profile')>()),
+  PROGRAMMING_REVIEW_GATED_FEATURES: [{ featureId: 'PID', approved: false, approvalToken: '' }],
+}))
 
 /**
  * `ISS-STED-17` / `ADR-054` điểm 3 — IEC cho phép mở rộng nhà sản xuất **miễn

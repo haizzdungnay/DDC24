@@ -48,7 +48,8 @@ FbdCompileResult compile_fbd_source(std::string_view source);
 
 // T59-601 — cùng affordance `enforce_review_gate` mà đường ST đã có
 // (`StCompileOptions`). Vì sao cần: bộ conformance của một feature ĐANG bị review
-// gate chặn (hôm nay là PID) chính là thứ dựng evidence để mở gate đó. ST có
+// gate chặn chính là thứ dựng evidence để mở gate đó (PID đi đúng đường này và
+// được ký token ở Issue #802). ST có
 // đường vào; FBD thì không, nên nhánh lower PID sang FBD chưa từng được chạy bởi
 // một vector nào — feature vẫn hiện trên UI FBD với một đường mã chưa ai kiểm.
 //

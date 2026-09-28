@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.5 |
+| Phiên bản | 1.6 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
-| Ngày | 2026-08-21 |
+| Ngày | 2026-09-28 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -271,11 +271,27 @@ selected output) KHÔNG đọc thẳng `PriorityResolver` — chương trình wi
 dùng nguyên vẹn process image `REQUIRE_GOOD` từ `TASK-PROG-302`; đây là round
 trip qua hardware feedback (`ao_setpoint`), trễ đúng một cycle, đúng tinh
 thần "không đọc lại giữa chừng". Override được phát hiện bằng so `ACTUAL` với
-đề xuất cycle trước, lệch quá `1%` dải `OUT_MIN..OUT_MAX` — **ngưỡng cụ thể
-này CHƯA qua Controls/Safety review**, giữ nguyên là TARGET-PENDING đúng như
-đoạn trên đã nêu; đổi được bằng một hằng số (`kPidOverrideDetectFraction`)
-khi có quyết định field. Hold-last TTL-based withdraw khi Task FAULT kéo dài
-(`holdTtl`) CHƯA làm ở đây — thuộc phạm vi `TASK-PROG-304` (overrun/fault Task).
+đề xuất cycle trước, lệch quá `1%` dải `OUT_MIN..OUT_MAX`
+(`kPidOverrideDetectFraction`). Hold-last TTL-based withdraw khi Task FAULT kéo
+dài (`holdTtl`) CHƯA làm ở đây — thuộc phạm vi `TASK-PROG-304` (overrun/fault Task).
+
+**Đã duyệt Controls/Safety (2026-09-28, Issue #802).** Chủ dự án — vai
+Controls/Safety Lead + Product Owner — duyệt theo
+[`REC-PID-DECISION-REQUEST-20260928`](../../07_records/reviews/PID_REVIEW_DECISION_REQUEST_2026-09-28.md)
+phương án 1, bằng chứng
+[`EV-PROG-PID-APPROVAL-20260928`](../../07_records/test-evidence/programming/2026-09-28-pid-approval-evidence.md):
+
+| Điểm | Trạng thái |
+|---|---|
+| Ngưỡng override-detect 1 % dải `OUT_MIN..OUT_MAX` | **Đã duyệt** (không còn TARGET-PENDING). Đổi số là đổi semantics PID: bump `libraryVersion`, token cũ tự mất hiệu lực |
+| `iMin/iMax` dùng chung biên output | **Đã duyệt** |
+| Fault khi `dt` ngoài tolerance/không tăng, NaN/Inf, dải output vô nghĩa, quality bad: diagnostic/fault, không publish | **Đã duyệt** |
+| Freeze tích phân khi override, không chép `ACTUAL` ngoại lai, nhả override nối tiếp từ tích phân đã freeze | **Đã duyệt** (vòng kín HOST: OUT lúc nhả 70,90 so với 100 ở phản chứng) |
+| Gains, bộ lọc derivative, transition envelope/ramp khi nhả override của từng vòng | Vẫn là **quyết định hiện trường** theo Revision/Target |
+| Vòng kín với AO thật trên bo, HIL | **NOT RUN** |
+
+Token `approval_token("PID", "rev-a.6", "EV-PROG-PID-APPROVAL-20260928")` nằm
+trong `product_profile_v2.json`; Check nhận `PID` trên đường ST và FBD.
 
 ## 7A. Timer xung và counter — `TP`, `CTU`, `CTD`
 
@@ -600,7 +616,7 @@ thành sự kiện tương thích artifact).
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| ~~Hold TTL~~ (ĐÓNG 2026-08-21 bởi `ADR-051`: 60 s đồng hồ), PID set và capacity chưa ký | Product + Controls | DOC-G2 approval | decision package approved cho phần PID/capacity còn lại |
+| ~~Hold TTL~~ (ĐÓNG 2026-08-21 bởi `ADR-051`: 60 s đồng hồ), ~~PID set~~ (ĐÓNG 2026-09-28 bởi Issue #802, `EV-PROG-PID-APPROVAL-20260928`) và capacity chưa ký | Product + Controls | DOC-G2 approval | decision package approved cho phần capacity còn lại |
 | Safety interaction chưa có HIL evidence | Safety + QA | implementation/release | fault injection + 199/200/201 ms PASS |
 | Graph cutover target chưa kiểm chứng | Core + Controls + QA | P6/G6 | Forlinx/HIL timing, power/restart và exclusive-output Test Result |
 
@@ -615,6 +631,7 @@ thành sự kiện tương thích artifact).
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.6 | 2026-09-28 | §7: Controls/Safety duyệt `PID` (Issue #802) — ngưỡng override 1 %, `iMin/iMax` dùng chung biên output, hành vi fault và freeze khi override; bỏ TARGET-PENDING cho phần đã duyệt; §15 đóng phần "PID set". Bằng chứng HOST `EV-PROG-PID-APPROVAL-20260928`; AO thật trên bo NOT RUN | Core + Controls |
 | 1.5 | 2026-09-28 | §7B: khối DDC SYSTEM `RELAY_GUARD`/`STAGER`/`PULSE_GEN`/`WORD_TO_BITS` (wire 10–13), `BITS_TO_WORD`, `UPTIME` — ràng buộc wire/RETAIN/FAULT (Issue #801, registry `rev-a.6`). Host PASS | Core + Controls |
 | 1.4 | 2026-09-27 | §13 và `DD-11`/`DD-13`: ngưỡng `VS-PROG-009` theo `VVP-PROG-001` v2.4 — ≥ 10 chu kỳ mỗi lớp, C1–C4 PASS, missed release = 0 (chủ sở hữu chốt lại sau soak lần 3). Không đổi trạng thái kiểm chứng | Core + Controls |
 | 1.3 | 2026-09-27 | §6 thêm trường hợp đổi gói (F20): instance rời gói khi Commission/Restore/rollback chu kỳ đầu là instance bị rút. Điểm gói mới cũng nắm được bàn giao liên tục (không nhả, không glitch EXT, không tạo lại `no_ctrl`), điểm còn lại rút như Disable (AO/DO về tầng dưới, EXT về `safe_value`). Bỏ dòng "chưa thuộc phạm vi" của F06. Host PASS; target chưa đo | Core + Controls |

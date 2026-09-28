@@ -7,7 +7,7 @@
   "keyboardSha256": "9bce7f03c3d874790ecad18aa797ef20959090bccd8cc9d0c5f049904e69b64c",
   "goldenSha256": "133798a65bb9bb638d8e1a1103ac892415eb740d33e990715191ba0887f40f51",
   "equivalenceSha256": "9cb7aae433dcb62fe828fd93d95d6649f218d10eff71f09cee261333bf613725",
-  "profileSha256": "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2",
+  "profileSha256": "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf",
   "goldenNetworkCount": 1,
   "goldenNodeCount": 4,
   "goldenWireCount": 3,

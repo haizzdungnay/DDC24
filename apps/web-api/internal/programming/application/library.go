@@ -472,7 +472,9 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 	view := LibraryEntryView{
 		Scope: revision.Scope, LibraryRevisionID: entry.LibraryRevisionID, LibraryVersion: revision.Version,
 		LibraryState: revision.State, EntryID: entry.EntryID, Kind: entry.Kind, Name: entry.Name,
-		Language: entry.Language, FeatureState: entry.FeatureState,
+		Language: entry.Language,
+		FeatureState: effectiveLibraryFeatureState(revision.Scope, entry.EntryID, entry.FeatureState,
+			reviewGateApproved),
 		ContentSHA256: hex.EncodeToString(entry.ContentSHA256[:]), Dependencies: dependencies,
 		StateLayoutKnown: entry.StateLayout.Authoritative, StateSizeBytes: entry.StateLayout.StateSizeBytes,
 		Category: entry.Category, Description: entry.Description,

@@ -20,6 +20,7 @@
 #include "st/st_ir.hpp"
 #include "st/st_pou_registry.hpp"
 #include "st/st_program.hpp"
+#include "st/st_review_gate.hpp"
 
 namespace core {
 
@@ -31,6 +32,10 @@ bool compile_st_to_ir(const StProgram& prog, const std::string& source, StIrModu
 /* Chính sách compile ở biên Check. Mặc định BẬT review gate. */
 struct StCompileOptions {
     bool enforce_review_gate = true;
+    /* Bảng review gate. `nullptr` (mặc định, và là giá trị DUY NHẤT đường
+     * production dùng) = bảng sinh từ profile. Chỉ test cơ chế cổng đặt bảng
+     * giả để khẳng định pipeline compile ST/FBD thật sự hỏi cổng. */
+    StReviewGateBlocks review_gate_blocks = nullptr;
     /* ISS-STED-02 — chính sách của TARGET PROFILE, không phải của compiler.
      *
      * Compiler luôn phát warning với severity thật; profile khắt khe mới quyết

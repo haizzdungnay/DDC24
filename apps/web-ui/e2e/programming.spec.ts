@@ -2757,7 +2757,9 @@ interface MockLibraryEntry {
 }
 
 /* Bốn khối vì lane cần bốn vai khác nhau: một khối SYSTEM bình thường, khối
-   SYSTEM đang chờ review (`PID` — đúng mục `approved:false` của profile), một
+   SYSTEM đang chờ review (`PID` với `featureState: REVIEW_REQUIRED` — máy chủ
+   GIẢ dựng lại trạng thái trước #802 để kiểm cơ chế khoá; máy chủ thật từ #802
+   trả `AVAILABLE` cho PID vì profile đã ký token), một
    khối SYSTEM thuộc nhóm `timer` để phép lọc có cái để thu hẹp, và một khối
    PROJECT — nguồn DUY NHẤT mà `library_usages` đo được. `description` khác
    nhau từng khối để nói được "đang đọc đúng khối nào" mà không cần bám class.

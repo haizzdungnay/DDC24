@@ -25,7 +25,7 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2",
+      "sha256": "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
@@ -40,7 +40,9 @@
       "reviewGatedFeatures": [
         "PID"
       ],
-      "approvedReviewGatedFeatures": []
+      "approvedReviewGatedFeatures": [
+        "PID"
+      ]
     },
     {
       "name": "artifact",
@@ -194,5 +196,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms); error catalog 1.12.0->1.13.0 (+ST-WORKER-TOOLCHAIN: ST tool build does not match web profile) re-pinned 2026-09-26; openapi 1.42.0->1.43.0 (+/ws/simulation, route đã chạy từ PR #759 nhưng chưa khai) re-pinned 2026-09-27; openapi 1.43.0->1.44.0 (+ProgrammingTrace.source, freshness LIVE cho mẫu Core; U-02/U-03) re-pinned 2026-09-27; openapi 1.44.0->1.45.0 (+trace sampleMode/cycle; U-09) re-pinned 2026-09-27; openapi 1.45.0->1.46.0 (+ModbusRTUDevice.coil_write_batch_max U-07, +ModbusFrameRecord.values U-18; không thêm operation Programming) re-pinned 2026-09-28; openapi 1.46.0->1.47.0 (+ProgrammingTraceValue commandedValue/readbackValue/readbackAgeMs/releaseSeq/unavailableReason, actualValue deprecated; Issue #798) re-pinned 2026-09-28; openapi 1.47.0->1.48.0 (+SystemStatus.shm_reader, Plan 63 T63-101; không thêm operation) re-pinned 2026-09-28; openapi 1.48.0->1.49.0 (+OsMetricsFreshness, osMetrics ở SystemStatus/Overview, Plan 63 T63-103; không thêm operation) re-pinned 2026-09-28; openapi 1.49.0->1.50.0 (+ModbusBusRuntime.telemetry, +SystemStatus.iop.counters, Plan 63 T63-003; không thêm operation) re-pinned 2026-09-28"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms); error catalog 1.12.0->1.13.0 (+ST-WORKER-TOOLCHAIN: ST tool build does not match web profile) re-pinned 2026-09-26; openapi 1.42.0->1.43.0 (+/ws/simulation, route đã chạy từ PR #759 nhưng chưa khai) re-pinned 2026-09-27; openapi 1.43.0->1.44.0 (+ProgrammingTrace.source, freshness LIVE cho mẫu Core; U-02/U-03) re-pinned 2026-09-27; openapi 1.44.0->1.45.0 (+trace sampleMode/cycle; U-09) re-pinned 2026-09-27; openapi 1.45.0->1.46.0 (+ModbusRTUDevice.coil_write_batch_max U-07, +ModbusFrameRecord.values U-18; không thêm operation Programming) re-pinned 2026-09-28; openapi 1.46.0->1.47.0 (+ProgrammingTraceValue commandedValue/readbackValue/readbackAgeMs/releaseSeq/unavailableReason, actualValue deprecated; Issue #798) re-pinned 2026-09-28; openapi 1.47.0->1.48.0 (+SystemStatus.shm_reader, Plan 63 T63-101; không thêm operation) re-pinned 2026-09-28; openapi 1.48.0->1.49.0 (+OsMetricsFreshness, osMetrics ở SystemStatus/Overview, Plan 63 T63-103; không thêm operation) re-pinned 2026-09-28; openapi 1.49.0->1.50.0 (+ModbusBusRuntime.telemetry, +SystemStatus.iop.counters, Plan 63 T63-003; không thêm operation) re-pinned 2026-09-28; product profile ký token Controls/Safety cho PID (approvalEvidenceRef EV-PROG-PID-APPROVAL-20260928, approvedReviewGatedFeatures [PID]; Issue #802) re-pinned 2026-09-28"
 }

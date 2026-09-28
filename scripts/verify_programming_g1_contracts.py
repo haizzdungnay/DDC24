@@ -707,13 +707,18 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     def clear_review_required(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["reviewRequired"] = []
 
-    def approve_review_gated_feature(candidate: dict[str, Any]) -> None:
-        contract_by_name(candidate, "profile")["approvedReviewGatedFeatures"] = ["PID"]
+    def flip_review_gated_approval(candidate: dict[str, Any]) -> None:
+        # Lật pin về phía NGƯỢC trạng thái hiện tại, để mutation vẫn là độ lệch
+        # thật dù PID đang ký hay chưa (#802 ký token làm `["PID"]` trùng pin).
+        profile_pin = contract_by_name(candidate, "profile")
+        profile_pin["approvedReviewGatedFeatures"] = (
+            [] if profile_pin["approvedReviewGatedFeatures"] else ["PID"]
+        )
 
     def drop_review_gated_feature(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "profile")["reviewGatedFeatures"] = []
 
-    add("review-gate-approved-drift", "approvedReviewGatedFeatures lệch pin", approve_review_gated_feature)
+    add("review-gate-approved-drift", "approvedReviewGatedFeatures lệch pin", flip_review_gated_approval)
     add("review-gate-list-drift", "reviewGatedFeatures lệch pin", drop_review_gated_feature)
 
     def break_registry_schema_hash(candidate: dict[str, Any]) -> None:

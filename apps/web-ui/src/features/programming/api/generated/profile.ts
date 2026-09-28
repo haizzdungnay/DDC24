@@ -4,7 +4,7 @@ export const PROGRAMMING_PROFILE_CODE = 1 as const;
 export const PROGRAMMING_TARGET_ABI = 3841 as const;
 export const PROGRAMMING_PROFILE_MAJOR = 2 as const;
 export const PROGRAMMING_PROFILE_MINOR = 2 as const;
-export const PROGRAMMING_PROFILE_SHA256 = "25bc2a00ad3c541d796457a3554b802971e8320cdbb0f6ddc614c83fe9226ec2" as const;
+export const PROGRAMMING_PROFILE_SHA256 = "a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf" as const;
 export const PROGRAMMING_LIBRARY_VERSION = "rev-a.6" as const;
 
 /** Trần cấp package/Revision. */
@@ -61,5 +61,5 @@ export const PROGRAMMING_TYPES = [
 // `approved: false` nghĩa là Check chặn; FE chỉ HIỂN THỊ trạng thái này và
 // không được coi một checkbox nào là phê duyệt.
 export const PROGRAMMING_REVIEW_GATED_FEATURES = [
-  { featureId: "PID", approved: false, approvalToken: "" },
+  { featureId: "PID", approved: true, approvalToken: "3c52721944a630d54d3111bc38aab4c0c63c7a8f29ea784d27f2c0cb2e6cc0d6" },
 ] as const;

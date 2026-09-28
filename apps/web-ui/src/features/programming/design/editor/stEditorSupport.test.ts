@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   ST_FB_TYPE_NAMES,
@@ -16,6 +16,15 @@ import {
   tokenizeStSource,
   undoStEditorEdit,
 } from './stEditorSupport'
+
+/* Issue #802: profile production đã ký token cho `PID`. File này kiểm CƠ CHẾ
+   của khối REVIEW_REQUIRED (bị khoá/đánh dấu), nên dựng lại đúng bảng review
+   gate trước khi ký — PID chưa duyệt. Trạng thái production (PID dùng được)
+   được khoá riêng ở `model/reviewGate.test.ts`. */
+vi.mock('../../api/generated/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/generated/profile')>()),
+  PROGRAMMING_REVIEW_GATED_FEATURES: [{ featureId: 'PID', approved: false, approvalToken: '' }],
+}))
 
 describe('tokenizeStSource (WP-10 P0, đối chiếu ST_SUBSET_SPEC §10)', () => {
   it('nhận diện keyword/type/number/comment/operator đúng grammar', () => {

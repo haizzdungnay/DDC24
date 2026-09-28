@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   stSignatureHelp,
   stSignatureLabel,
   stSignatureParameterLabel,
 } from './stSignatureHelp'
 import { PROGRAMMING_LIBRARY_ENTRIES } from '../../api/generated/library_registry'
+
+/* Issue #802: profile production đã ký token cho `PID`. File này kiểm CƠ CHẾ
+   của khối REVIEW_REQUIRED (bị khoá/đánh dấu), nên dựng lại đúng bảng review
+   gate trước khi ký — PID chưa duyệt. Trạng thái production (PID dùng được)
+   được khoá riêng ở `model/reviewGate.test.ts`. */
+vi.mock('../../api/generated/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/generated/profile')>()),
+  PROGRAMMING_REVIEW_GATED_FEATURES: [{ featureId: 'PID', approved: false, approvalToken: '' }],
+}))
 
 const NO_SYMBOLS: { name: string; type: string }[] = []
 const TON_1 = [{ name: 'TON_1', type: 'TON' }]

@@ -1,7 +1,7 @@
 # ST Subset Specification — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-09-28 (Issue #800: toán tử bit `UINT`, `SHL`/`SHR`, `VAR CONSTANT`, giá trị khởi tạo, `TIME` × số — xem §14)
+> **Phiên bản:** 1.5 | 2026-09-28 (Issue #802: `PID` đã được Controls/Safety duyệt — xem §6.2 và §14)
 > **Workstream:** Supporting As-Built của compiler ST; plan C0.4 lịch sử đã bị
 > [Plan 53](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) thay
 > thế và phục hồi được tại commit `b69fdf1`.
@@ -383,6 +383,14 @@ Không có: hàm lượng giác, `LN`/`LOG`/`EXP`, `EXPT`, `TRUNC`, `ROUND`, xoa
 > user, dù code đã chạy được. Không dùng `PID` cho logic điều khiển sản xuất
 > cho tới khi review này đóng — xem
 > `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md` WP-04.
+>
+> **Cập nhật 2026-09-28 (Issue #802): review đã đóng.** Controls/Safety duyệt
+> ngữ nghĩa `PID` (ngưỡng override 1 % dải `OUT_MIN..OUT_MAX`, `iMin/iMax` dùng
+> chung biên output, fault khi `dt` sai/NaN/Inf/quality bad, freeze tích phân
+> khi override) — `DDD-CTRL-PROG-001` §7, bằng chứng HOST
+> `EV-PROG-PID-APPROVAL-20260928`. Profile mang token cho thư viện `rev-a.6`;
+> `PID` qua Check và **dùng được cho logic điều khiển**. Gains/lọc của từng vòng
+> là quyết định hiện trường; vòng kín với AO thật trên bo chưa chạy.
 
 Ngữ nghĩa thời gian của `TON`/`TOF`:
 
@@ -728,3 +736,4 @@ Hành vi mong đợi (chu kỳ Task 1 s):
 | 1.2 | 2026-09-01 | **`ISS-STED-06` / `F-STED-007`.** Gỡ hẳn EBNF chép tay ở §10 và bảng đối chiếu grammar↔parser ở §11. Cả hai đã trôi khỏi compiler: EBNF thiếu luật `CASE` và POU người dùng, còn bảng §11 ghim ở commit `7ccf992` kết luận *"phủ ~40%"* trong khi sai gần như từng dòng. Thay bằng hồ sơ **sinh máy** `contracts/programming/st_language_profile_v1.json` + `ST_LANGUAGE_PROFILE.generated.md`, đo bằng cách cho parser nuốt thật một mẫu tối thiểu cho từng câu lệnh/toán tử. Một tài liệu văn phạm sai là công cụ sinh lỗi cho người viết chương trình; một bảng đối chiếu sai 100% còn nguy hiểm hơn không có bảng, vì nó trông như bằng chứng. |
 | 1.3 | 2026-09-02 | **`ISS-STED-08` / `F-STED-006`, `F-STED-009`.** Bốn đính chính, mỗi cái là một chỗ tài liệu nói sai về chính compiler đang chạy. **§3.1** — `TIME` có **hai** miền chứ không một: literal bị chặn ở **24 giờ** (`st_limits.hpp:57`, thi hành ở `st_parser.cpp:195`, mã `ST-LEX-002`), còn giá trị runtime chỉ bị chặn bởi tràn int64 (`ST-RT-001`) và kết quả âm (`ST-RT-005`). Bản 1.0/1.1 chỉ ghi *"0 … ~292 năm"* nên người đọc thiết kế test sẽ viết ca `T#48h` và không hiểu vì sao bị từ chối; nhưng rút gọn thành *"0..24 h"* cũng sai theo chiều ngược lại, vì nó hứa một bất biến runtime mà compiler không thi hành. **§5.5** — bỏ `CASE`, user `FUNCTION` và user `FUNCTION_BLOCK` khỏi danh sách "không có": cả ba **đã có** (kết luận `ISS-STED-07`, nay đo lại mỗi lần build). Nói "không có" về một thứ đã có khiến người viết chương trình đi vòng qua cấu trúc họ được phép dùng, và người lập kế hoạch xếp lịch làm lại thứ đã giao. **§9** — sửa D5 (`CASE`/POU người dùng đã có; chỉ vòng lặp là không) và D6 (sáu kiểu cơ sở, không phải chỉ `INT`/`REAL`); thêm D9 `RETURN`, D10 `**`/`EXPT`, D11 `VAR_IN_OUT` (chưa có nhưng **đã lên lịch**, #367); công bố **37 mục loại trừ mới** ở tầng kiểu/hàm/Function Block, mỗi mục **kèm lý do riêng**, đặt trong hồ sơ sinh máy thay vì chép tay — chép tay 49 mục là tạo một bản sao sẽ trôi khỏi compiler, đúng lỗi mà §10/§11 cũ đã mắc. **§12** — `ST-LEX-002` còn dùng cho literal `TIME` vượt trần 24 giờ, và `ST-RT-001` còn dùng cho tràn int64 khi cộng/trừ `TIME`; cả hai đều thiếu ở danh mục cũ. Kèm theo: cổng đối chiếu hai chiều được mở rộng sang **thư viện** và **hệ kiểu** (khai "không có `SIN`" trong khi đã có `SIN` sai y như khai "không có `CASE`" trong khi đã có `CASE`), và bổ sung `st_language_profile_gate` để kiểm **chính cổng** — một cổng luôn xanh có hai cách giải thích, và từ ngoài nhìn vào chúng giống hệt nhau. |
 | 1.4 | 2026-09-28 | **Issue #800 (U-10).** §2: `VAR CONSTANT` và giá trị khởi tạo khi khai báo (cấm ở `VAR_INPUT`, chỉ biểu thức hằng, áp lại mỗi lời gọi FUNCTION). §4.2: `AND`/`OR`/`XOR`/`NOT` trên `UINT` là phép theo bit; `TIME × số` và `TIME ÷ số`. §6.1: `SHL`/`SHR`. Hồ sơ ngôn ngữ sinh máy lên 1.1.0; thư viện SYSTEM `rev-a.5`. |
+| 1.5 | 2026-09-28 | **Issue #802 (U-13).** Ghi chú ở bảng FB chuẩn: review Controls/Safety của `PID` đã đóng, `PID` dùng được cho logic điều khiển (token cho `rev-a.6`, bằng chứng `EV-PROG-PID-APPROVAL-20260928`). |

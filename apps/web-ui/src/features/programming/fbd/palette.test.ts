@@ -10,6 +10,7 @@ import {
   FBD_PALETTE_CATEGORY_ORDER,
   defaultConstantLiteral,
   fbdPaletteEntry,
+  fbdPaletteEntryFromRegistry,
   isValidConstantLiteral,
   paletteEntriesCompatibleWith,
 } from './palette'
@@ -72,13 +73,29 @@ describe('Palette sinh từ registry POU/Control Library (T59-003)', () => {
     }
   })
 
-  it('PID giữ trạng thái REVIEW_REQUIRED kèm cảnh báo song ngữ', () => {
+  it('registry giữ nhãn REVIEW_REQUIRED cho PID kèm cảnh báo song ngữ', () => {
     const review = PROGRAMMING_LIBRARY_ENTRIES.filter(
       (entry) => entry.featureState === 'REVIEW_REQUIRED',
     )
     expect(review.map((entry) => entry.id)).toEqual(['PID'])
-    expect(fbdPaletteEntry('PID')?.warning?.vi).toBeTruthy()
-    expect(fbdPaletteEntry('PID')?.warning?.en).toBeTruthy()
+    expect(review[0].warning?.vi).toBeTruthy()
+    expect(review[0].warning?.en).toBeTruthy()
+  })
+
+  /* Cơ chế: bảng review gate mà PID CHƯA duyệt thì palette giữ nhãn chờ
+     review và cảnh báo — đúng hành vi trước #802. */
+  it('khối chưa được duyệt giữ REVIEW_REQUIRED và cảnh báo trong palette', () => {
+    const registryPid = PROGRAMMING_LIBRARY_ENTRIES.find((entry) => entry.id === 'PID')!
+    const pending = fbdPaletteEntryFromRegistry(registryPid, [{ featureId: 'PID', approved: false }])
+    expect(pending.featureState).toBe('REVIEW_REQUIRED')
+    expect(pending.warning?.vi).toBeTruthy()
+  })
+
+  /* Issue #802: profile production đã ký token cho PID. Palette phải cho dùng
+     và bỏ câu cảnh báo "chưa review" — câu đó nay là sai. */
+  it('PID đã duyệt trong profile thì AVAILABLE và không còn cảnh báo chưa review', () => {
+    expect(fbdPaletteEntry('PID')?.featureState).toBe('AVAILABLE')
+    expect(fbdPaletteEntry('PID')?.warning).toBeUndefined()
   })
 })
 
@@ -148,7 +165,6 @@ describe('FBD_PALETTE (FBD_EDITOR_DESIGN.md §1)', () => {
       { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
     ])
     const pid = fbdPaletteEntry('PID')!
-    expect(pid.warning).toBeDefined()
     expect(pid.buildPorts('REAL')).toHaveLength(10)
   })
 

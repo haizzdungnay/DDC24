@@ -12,10 +12,10 @@ namespace {
 
 /* Ngưỡng phát hiện override cho PID anti-windup: lệch giữa ACTUAL (đã áp)
  * và OUT (đề xuất cycle trước) vượt tỉ lệ này của dải out_min..out_max thì
- * coi là nguồn ưu tiên cao hơn đang thắng, freeze integrator. Giá trị cụ
- * thể là default kỹ thuật hợp lý — "transition envelope đã duyệt" theo
- * DDD-CTRL-PROG-001 §7 vẫn TARGET-PENDING, cần Controls+Safety review trước
- * khi khoá số cho field. */
+ * coi là nguồn ưu tiên cao hơn đang thắng, freeze integrator. 1 % ĐÃ DUYỆT
+ * Controls/Safety ngày 2026-09-28 (Issue #802, `EV-PROG-PID-APPROVAL-20260928`,
+ * DDD-CTRL-PROG-001 §7). Đổi số này là đổi semantics PID: phải bump
+ * libraryVersion, và token phê duyệt cũ tự mất hiệu lực. */
 constexpr float kPidOverrideDetectFraction = 0.01f;
 
 /* Tất cả integer được giữ trong int32 ở slot, nhưng miền hợp lệ phụ thuộc
