@@ -1,0 +1,32 @@
+package compiler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestT304ResultSizes(t *testing.T) {
+	if os.Getenv("MKDDC_T304_MEASURE") != "1" {
+		t.Skip("đo tay")
+	}
+	binary := officialCompilerBinary(t)
+	r := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "s"), Timeout: 30 * time.Second, SigningKeyPath: testSigningKeyPath(t), Cache: NewCompileCache(0, 0), Pool: NewWorkerPool(2)}
+	for _, n := range []int{1, 100, 801, 2047} {
+		res, err := r.Compile(context.Background(), t304RealProgram(1, n, ""))
+		if err != nil || !res.OK {
+			t.Fatalf("%d: %v %+v", n, err, res.Diagnostics)
+		}
+		d, _ := json.Marshal(res.Diagnostics)
+		s, _ := json.Marshal(res.Symbols)
+		l, _ := json.Marshal(res.LinkedPOUs)
+		g, _ := json.Marshal(res.SignalRefs)
+		_ = os.WriteFile(fmt.Sprintf("/tmp/manifest-%d.json", n), res.Manifest, 0o644)
+		fmt.Printf("T304-SIZE statements=%d instr=%d artifact=%d manifest=%d diag=%d symbols=%d linked=%d refs=%d footprint=%d\n",
+			n, 2*n+1, len(res.Artifact), len(res.Manifest), len(d), len(s), len(l), len(g), resultFootprint(res))
+	}
+}

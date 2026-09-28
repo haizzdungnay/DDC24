@@ -254,7 +254,57 @@ máy đo và bo phải cùng NTP.
 Trên bo **NOT_RUN** (§3): GET/s 1 tab 30 phút trước/sau, tuổi giá trị, CPU
 `mkddc-web`, 304 qua HTTPS thật, và phân rã khoảng 5,2 request/s theo route.
 
-## 11. SHA-256
+## 11. T63-304 — cache compile và pool ≤ 2 (`F-PRG-PERF-004`)
+
+Thư mục `t63-304-host/`. Mức **HOST** (x86_64, 4 lõi). Số thời gian Check dùng
+compiler giả (chính test binary) ngủ cố định mỗi Program, vì
+`mkddc-st-compile` trong `build/fw` lúc Lane WEB đo mang profile cũ và runner
+từ chối output. Mức ngủ 32 ms lấy từ phép đo compiler thật chạy trực tiếp
+(`real-compiler-direct.json`: Program 1.604 lệnh p50 32,4 ms; Program nhỏ
+3,62 ms; n = 30).
+
+| Kiểm (32 Program) | Compiler giả 1 ms | 32 ms | 100 ms |
+|---|---|---|---|
+| Tuần tự, không cache (hành vi cũ) | 258 ms | 1.275 ms | 3.453 ms |
+| Song song 2, lần đầu | 128 ms | 636 ms | 1.732 ms |
+| Lặp cùng đầu vào (0 process mới) | 288 µs | 227 µs | 325 µs |
+| Sửa 1/32 Program (1 process mới) | 8 ms | 39 ms | 108 ms |
+
+- 8 request song song trên cùng runner: tối đa **2** process đồng thời, đọc từ
+  nhật ký start/end của chính process.
+- Process compiler chạy **nice 10**, đọc `/proc/self/stat` bên trong process.
+- Kiểm đỏ 17/17 (`red-results-all.json`, `red_t304.py`).
+- `measure_t304_test.go.txt` là test đo, đổi đuôi để không lẫn vào mã Go của
+  repo. Chạy lại bằng cách chép vào `apps/web-api/internal/programming/compiler/`
+  rồi chạy `MKDDC_T304_MEASURE=1 MKDDC_T304_SLEEP_MS=32 go test -run TestMeasureT304 -v`.
+  Kết quả lưu ở `measure-t304.txt`.
+
+**Đo lại bằng compiler thật (leader, sau khi dựng lại `build/fw` đúng profile).**
+Chạy qua `ProcessRunner` với 32 Program × 1.603 instruction, median của 5 vòng
+(`measure_t304_real_test.go.txt`):
+
+| | Tuần tự, không cache | Song song 2, lần đầu | Lặp lại | Sửa 1 Program |
+|---|---|---|---|---|
+| Bản Lane WEB bàn giao (`real-compiler-before-fix.txt`) | 2.139 ms | 1.045 ms | **986 ms, 0 hit** | 976 ms |
+| Sau bản sửa nén manifest (`real-compiler-after-fix.txt`) | 2.108 ms | 1.099 ms | **24 ms** | 73,5 ms |
+
+Nguyên nhân 0 hit (`result-sizes.json`):
+- Manifest build chiếm phần lớn một kết quả, khoảng 180 B/instruction: 740 KB cho Program 4.095 instruction, trong khi artifact chỉ 99 KB.
+- Với manifest thô, trần 8 MiB chỉ giữ được khoảng 25 Program 1.603 instruction.
+- Check 32 Program duyệt tuần tự qua LRU nhỏ hơn tập làm việc, nên không trúng lần nào. Compiler giả trả kết quả nhỏ nên che mất lỗi này.
+
+Bản sửa:
+- Cache lưu manifest nén gzip (nén được khoảng 22 lần) kèm SHA-256 bản thô; lúc đọc thì giải nén và kiểm lại.
+- Dự án lớn nhất của profile (32 × 4.095 instruction) chiếm khoảng 4,3 MB, vừa trần.
+- Hai test khoá lỗi, đỏ khi tính dung lượng theo manifest thô: `TestCompileCacheHoldsLargestProfileProjectWithCompressedManifest` và `TestProcessRunnerWithOfficialCompilerCachesWholeProjectRepeat` (compiler thật).
+
+Trên bo **NOT_RUN** (§3):
+- thời gian Check 32 Program lần đầu, lần lặp và sau khi sửa 1 Program (`startedAt`/`completedAt` của Check);
+- jitter Core C4 và chu kỳ IOBus trong lúc Check, so với baseline T63-001;
+- `ps -o pid,ni,psr,comm -C mkddc-st-compile`: cần thấy `ni=10`, `psr` thuộc 0–2;
+- RSS của `mkddc-web` sau nhiều lượt Check.
+
+## 12. SHA-256
 
 Xem `SHA256SUMS` trong từng thư mục đo. Script tại commit T63-001: xem
 `git log -- scripts/forlinx_perf_probe.py`; `summary.json` ghi `probe_sha256`

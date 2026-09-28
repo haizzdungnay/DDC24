@@ -1,0 +1,7 @@
+    zz_measure_t304_real_test.go:90: vòng 0: seq=2.108261755s par2_first=1.067990097s repeat=23.88094ms one_changed=65.321638ms cache={Hits:63 Misses:33 Stores:33 Evictions:0 Entries:33 Bytes:1753346}
+    zz_measure_t304_real_test.go:90: vòng 1: seq=2.249828288s par2_first=1.122840681s repeat=20.876324ms one_changed=73.515249ms cache={Hits:63 Misses:33 Stores:33 Evictions:0 Entries:33 Bytes:1753349}
+    zz_measure_t304_real_test.go:90: vòng 2: seq=2.106516797s par2_first=1.141490194s repeat=24.508343ms one_changed=79.632453ms cache={Hits:63 Misses:33 Stores:33 Evictions:0 Entries:33 Bytes:1753348}
+    zz_measure_t304_real_test.go:90: vòng 3: seq=2.381974666s par2_first=1.099351975s repeat=26.808232ms one_changed=75.856602ms cache={Hits:63 Misses:33 Stores:33 Evictions:0 Entries:33 Bytes:1753342}
+    zz_measure_t304_real_test.go:90: vòng 4: seq=2.090989148s par2_first=1.096194595s repeat=24.033552ms one_changed=67.329842ms cache={Hits:63 Misses:33 Stores:33 Evictions:0 Entries:33 Bytes:1753342}
+T304-REAL programs=32 instructions_each≈1603 rounds=5 median: sequential_nocache=2.108261755s parallel2_first=1.099351975s repeat=24.033552ms one_changed=73.515249ms
+ok  	mkddc-web/internal/programming/compiler	16.963s

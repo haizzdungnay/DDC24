@@ -1,0 +1,95 @@
+package compiler
+
+// Đo T63-304 trên HOST bằng compiler THẬT (build/fw/core/mkddc-st-compile).
+// Chỉ chép tạm vào gói compiler để chạy, không commit vào mã nguồn; bản lưu ở
+// evidence t63-304-host/.
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+)
+
+func t304RealProgram(i, statements int, variant string) Input {
+	var b strings.Builder
+	fmt.Fprintf(&b, "PROGRAM P%02d\nVAR Acc : DINT; END_VAR\n", i)
+	for s := 0; s < statements; s++ {
+		b.WriteString("Acc := Acc + 1;\n")
+	}
+	b.WriteString(variant)
+	b.WriteString("END_PROGRAM\n")
+	return Input{SourceID: fmt.Sprintf("%08d-1111-4111-8111-111111111111", i), Language: "ST", Source: []byte(b.String())}
+}
+
+func TestMeasureT304RealCompiler(t *testing.T) {
+	if os.Getenv("MKDDC_T304_MEASURE") != "1" {
+		t.Skip("đo tay")
+	}
+	binary := officialCompilerBinary(t)
+	const programs, statements, rounds = 32, 801, 5
+	inputs := make([]Input, programs)
+	for i := range inputs {
+		inputs[i] = t304RealProgram(i, statements, "")
+	}
+	key := testSigningKeyPath(t)
+	newRunner := func(cache *CompileCache) ProcessRunner {
+		return ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 30 * time.Second,
+			SigningKeyPath: key, Cache: cache, Pool: NewWorkerPool(MaxConcurrentCompiles)}
+	}
+	check := func(outs []CompileOutcome) {
+		for i, o := range outs {
+			if o.Err != nil || !o.Result.OK {
+				t.Fatalf("program %d: err=%v ok=%v diag=%+v", i, o.Err, o.Result.OK, o.Result.Diagnostics)
+			}
+		}
+	}
+	median := func(d []time.Duration) time.Duration {
+		s := append([]time.Duration(nil), d...)
+		sort.Slice(s, func(a, b int) bool { return s[a] < s[b] })
+		return s[len(s)/2]
+	}
+	var seq, par, rep, one []time.Duration
+	var instructions int64
+	for r := 0; r < rounds; r++ {
+		// Hành vi cũ: tuần tự, không cache.
+		old := newRunner(NewCompileCache(0, 0))
+		start := time.Now()
+		for i, in := range inputs {
+			res, err := old.Compile(context.Background(), in)
+			if err != nil || !res.OK {
+				t.Fatalf("seq %d: %v %+v", i, err, res.Diagnostics)
+			}
+		}
+		seq = append(seq, time.Since(start))
+		// Mới: song song 2, cache riêng mỗi vòng.
+		cache := NewCompileCache(compileCacheMaxEntries, compileCacheMaxBytes)
+		runner := newRunner(cache)
+		start = time.Now()
+		outs := runner.CompileBatch(context.Background(), inputs)
+		par = append(par, time.Since(start))
+		check(outs)
+		start = time.Now()
+		outs2 := runner.CompileBatch(context.Background(), inputs)
+		rep = append(rep, time.Since(start))
+		check(outs2)
+		for i := range outs {
+			if string(outs[i].Result.Artifact) != string(outs2[i].Result.Artifact) {
+				t.Fatalf("program %d: artifact lần lặp khác byte", i)
+			}
+		}
+		changed := append([]Input(nil), inputs...)
+		changed[7] = t304RealProgram(7, statements, fmt.Sprintf("Acc := Acc + %d;\n", r+2))
+		start = time.Now()
+		check(runner.CompileBatch(context.Background(), changed))
+		one = append(one, time.Since(start))
+		st := cache.Stats()
+		t.Logf("vòng %d: seq=%v par2_first=%v repeat=%v one_changed=%v cache=%+v", r, seq[r], par[r], rep[r], one[r], st)
+		instructions = int64(2*statements + 1)
+	}
+	fmt.Printf("T304-REAL programs=%d instructions_each≈%d rounds=%d median: sequential_nocache=%v parallel2_first=%v repeat=%v one_changed=%v\n",
+		programs, instructions, rounds, median(seq), median(par), median(rep), median(one))
+}
