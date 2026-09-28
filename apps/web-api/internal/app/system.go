@@ -13,6 +13,7 @@ import (
 	"time"
 
 	webHealth "mkddc-web/internal/health"
+	webModbus "mkddc-web/internal/modbusrtu"
 	webSystem "mkddc-web/internal/system"
 )
 
@@ -57,13 +58,44 @@ type SystemStatus struct {
 	Location         string                   `json:"location,omitempty"`
 	SystemTime       string                   `json:"system_time,omitempty"`
 	Versions         VersionStatus            `json:"versions"`
-	IOP              IOPStatus                `json:"iop"`
+	IOP              SystemIOPStatus          `json:"iop"`
 	Scan             ScanStatus               `json:"scan"`
 	// OSMetrics nói số đo hệ điều hành ở trên cũ tới đâu (T63-103). Khi state là
 	// `unknown`/`stale`, mọi trường số đo ở trên VẮNG MẶT thay vì mang số 0.
 	OSMetrics OSMetricsFreshness `json:"osMetrics"`
 	// SHMReader chỉ có khi core client là CoreClient thật (T63-101).
 	SHMReader *SHMReaderMetrics `json:"shm_reader,omitempty"`
+}
+
+// SystemIOPStatus là `iop` của `GET /api/v1/system/status`. `IOPStatus` nhúng
+// nên các trường cũ (`status`, `crc_errors`, `timeouts`, `seq_errors`… — uint32
+// đọc từ SHM) vẫn ở đúng chỗ và giữ nguyên nghĩa.
+//
+// T63-003 (PERF-API-04) thêm `counters`: counter IOP 64 bit tích luỹ kèm
+// `since_epoch` (producer_boot_id của iobus), để consumer phân biệt counter
+// reset (iobus restart) với counter giảm/tràn — thứ mà ba trường uint32 cũ không
+// làm được (tràn sau ~99 ngày ở 500 Hz, cùng một boot). Lấy từ op `status` của
+// kênh điều khiển iobus; nil = iobus không trả lời hoặc bản trước T63-003.
+type SystemIOPStatus struct {
+	IOPStatus
+	Counters *webModbus.IOPCountersView `json:"counters"`
+}
+
+// iopCountersTimeout chặn phần hỏi iobus của `/system/status`: iobus treo (đang
+// áp cấu hình Modbus) không được giữ Dashboard lâu hơn mức này.
+const iopCountersTimeout = 300 * time.Millisecond
+
+func (a *App) iopCountersFromIobus() *webModbus.IOPCountersView {
+	control := webModbus.ControlClient{SocketPath: a.cfg.IobusControlSock, Timeout: iopCountersTimeout}
+	status, err := control.Status()
+	if err != nil || status.Result != "ok" {
+		return nil
+	}
+	view, ok := webModbus.IOPCountersFrom(status)
+	if !ok {
+		return nil
+	}
+	return &view
 }
 
 type ServiceHealth struct {
@@ -139,7 +171,7 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		Location:         strings.TrimSpace(device.Location),
 		SystemTime:       time.Now().Format(time.RFC3339),
 		Versions:         versions,
-		IOP:              core.IOP,
+		IOP:              SystemIOPStatus{IOPStatus: core.IOP, Counters: a.iopCountersFromIobus()},
 		Scan:             core.Scan,
 		OSMetrics:        freshness,
 	}

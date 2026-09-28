@@ -430,7 +430,7 @@ TEST(BusMetricsUtilization, AccumulatesAcrossPublishTicksInsteadOfResettingEachT
     /* Một giao dịch 300 ms mỗi giây, chốt ở nhịp 100 ms như publisher thật. */
     const uint64_t tick_us = 100000;
     for (int second = 0; second < 40; second++) {
-        metrics.record_bus_transaction(1, 300000, false);
+        metrics.record_bus_transaction(1, 300000, false, TransactionKind::Read);
         for (int tick = 0; tick < 10; tick++) metrics.roll_bus_window(1, tick_us);
     }
 
@@ -449,7 +449,7 @@ TEST(BusMetricsUtilization, KeepsPreviousValueUntilWindowIsLongEnough)
     bus.id = 1;
     metrics.init_buses({bus});
 
-    metrics.record_bus_transaction(1, 300000, true);
+    metrics.record_bus_transaction(1, 300000, true, TransactionKind::Read);
     metrics.roll_bus_window(1, 100000);   /* mới 0,1 s — chưa đủ 2 s */
     EXPECT_EQ(metrics.bus(0).utilization_pct_x100, 0u);
 
@@ -469,7 +469,7 @@ TEST(BusMetricsUtilization, LatencyPercentilesComeFromObservedSamples)
     metrics.init_buses({bus});
 
     for (int i = 1; i <= 10; i++)
-        metrics.record_bus_transaction(1, static_cast<uint32_t>(i * 1000), true);
+        metrics.record_bus_transaction(1, static_cast<uint32_t>(i * 1000), true, TransactionKind::Read);
     metrics.roll_bus_window(1, 2000000);
 
     EXPECT_EQ(metrics.bus(0).latency_p50_us, 6000u);
@@ -490,7 +490,7 @@ TEST(BusMetricsUtilization, SurvivesProbeIntervalLongerThanOneSlot)
 
     /* 600 ms bận mỗi 5 s (hai lần phát × timeout 300 ms ở nhịp probe). */
     for (int cycle = 0; cycle < 30; cycle++) {
-        metrics.record_bus_transaction(1, 600000, false);
+        metrics.record_bus_transaction(1, 600000, false, TransactionKind::Read);
         for (int tick = 0; tick < 50; tick++) metrics.roll_bus_window(1, 100000);
     }
     const uint16_t pct_x100 = metrics.bus(0).utilization_pct_x100;

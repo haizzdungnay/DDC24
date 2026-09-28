@@ -41,6 +41,7 @@
 #include "modbus_rtu/fieldbus_config.hpp"
 #include "modbus_rtu/fieldbus_metrics.hpp"
 #include "modbus_rtu/control_channel.hpp"
+#include "modbus_rtu/control_status.hpp"
 #include "modbus_rtu/bus_worker.hpp"
 #include "modbus_rtu/modbus_master.hpp"
 #include "modbus_rtu/modbus_tcp.hpp"
@@ -533,38 +534,26 @@ int main(int argc, char** argv)
             return fieldbus_metrics.frames().to_json(bus_filter, limit);
         };
         handlers.status_fields = [&]() {
-            char buf[512];
-            std::string buses;
-            for (size_t i = 0; i < fieldbus_metrics.bus_count(); i++) {
-                const auto& bus = fieldbus_metrics.bus(i);
-                char one[256];
-                std::snprintf(one, sizeof(one),
-                              "%s{\"id\":%u,\"name\":\"%s\",\"device\":\"%s\","
-                              "\"state\":\"%s\",\"latency_p50_us\":%u,\"latency_p95_us\":%u,"
-                              "\"utilization_pct_x100\":%u,\"timeout_errors\":%llu,"
-                              "\"crc_errors\":%llu,\"port_reopens\":%llu}",
-                              buses.empty() ? "" : ",", bus.id,
-                              fieldbus::json_escape(bus.name).c_str(),
-                              fieldbus::json_escape(bus.device).c_str(),
-                              fieldbus::json_escape(bus.state).c_str(),
-                              bus.latency_p50_us, bus.latency_p95_us,
-                              bus.utilization_pct_x100,
-                              static_cast<unsigned long long>(bus.timeout_errors),
-                              static_cast<unsigned long long>(bus.crc_errors),
-                              static_cast<unsigned long long>(bus.port_reopens));
-                buses += one;
-            }
-            std::snprintf(buf, sizeof(buf),
-                          "\"generation\":%llu,\"config_revision\":%llu,"
-                          "\"producer_boot_id\":%llu,\"counters_since_ms\":%llu,"
-                          "\"ext_count\":%u,\"sequence\":%llu",
-                          static_cast<unsigned long long>(modbus.provenance().generation),
-                          static_cast<unsigned long long>(modbus.provenance().config_revision),
-                          static_cast<unsigned long long>(fieldbus_metrics.producer_boot_id()),
-                          static_cast<unsigned long long>(fieldbus_metrics.counters_since_ms()),
-                          ext_cache.count(),
-                          static_cast<unsigned long long>(ext_cache.sequence()));
-            return std::string(buf) + ",\"buses\":[" + buses + "]";
+            /* T63-003: nội dung dựng ở `control_status.cpp` (test được từng byte);
+             * chạy trên luồng kênh điều khiển, không chạm luồng poll RT — counter
+             * IOP chỉ được ĐỌC (atomic relaxed). */
+            fieldbus::ControlStatusIdentity identity;
+            identity.generation        = modbus.provenance().generation;
+            identity.config_revision   = modbus.provenance().config_revision;
+            identity.producer_boot_id  = fieldbus_metrics.producer_boot_id();
+            identity.counters_since_ms = fieldbus_metrics.counters_since_ms();
+            identity.ext_count         = ext_cache.count();
+            identity.sequence          = ext_cache.sequence();
+            const IobusMetrics::Snapshot counters = metrics.snapshot();
+            fieldbus::IopCounterSnapshot iop;
+            iop.rx         = counters.rx;
+            iop.tx         = counters.tx;
+            iop.crc_errors = counters.crc_err;
+            iop.seq_errors = counters.seq_err;
+            iop.timeouts   = counters.timeout;
+            iop.retries    = counters.retry;
+            iop.nacks      = counters.nack;
+            return fieldbus::control_status_fields(identity, fieldbus_metrics.bus_snapshot(), iop);
         };
         handlers.apply_config = [&](uint64_t revision, const std::string& checksum,
                                     const std::string& path, std::string* reason,

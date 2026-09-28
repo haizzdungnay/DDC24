@@ -414,7 +414,7 @@ Phương án cho D02 là **A — retry có deadline** (T63-101/102). Phương á
 | Core `jitterViolationCount`, `jitterMaxUs`, `missedBaseStepCount`, WCET, histogram (T63-005) | `/api/v1/programming/runtime`, log phút Core; histogram là dòng `core.wake_hist le25…gt500` — ô rời, theo phút (cộng `sum`), `sum(le200+le500+gt500)` phải bằng delta `core.jitter violations` |
 | Core `seqlock_fail` | Log phút `core.jitter`, khoá `seqlock_fail` (tích luỹ theo tiến trình, lấy delta) — công bố từ T63-005 |
 | IOBus `late_events`, `catchup_iterations`, `wake_late_max`, `work_max`, `io_resp_gap_max` (T63-004) | Log phút IOBus `iobus.loop_timing` — khoá theo phút: cộng `sum` cho `late_events`/`catchup_iterations`, lấy `max` cho `*_max_us`; `period_us` xác nhận chu kỳ hiệu lực |
-| IOP timeout, seq error, CRC | Snapshot API, delta theo epoch |
+| IOP timeout, seq error, CRC | Snapshot API, delta theo epoch: `GET /system/status` → `iop.counters` (64 bit, `since_epoch.producer_boot_id`) từ op `status` kênh điều khiển iobus (T63-003); bus Modbus: `GET /modbus/buses` → `telemetry.since_epoch` (`bus_counters_epoch`) |
 | `/points` 200/503, p95 server | Log Web tổng hợp (T63-105) sau cửa sổ |
 | Program/Task missed release, overrun | `/api/v1/programming/runtime` |
 | CPU/RSS từng process, MemAvailable | `/proc` mỗi 5 s |
@@ -452,7 +452,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-FE-01` | P2 | T63-104 | Transfer cold load trước/sau; test header | — | TODO | |
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
 | `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | IN-PROGRESS — `artifact-manifest.json` từng artifact + `deploy-record` + `readback`; selftest HOST 64/64 (gồm e2e `/proc` thật), `test_release_packaging_guard` 14/14; read-back TARGET NOT_RUN (container implementer không có TCP ra bo) | `python3 scripts/artifact_manifest.py selftest`; DEPLOY_FOXLINX bước 6b/7b |
-| `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
+| `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | IN-PROGRESS — op `status` iobus: `latency_read`/`latency_write` {p50,p95,max,sample_count,window_size,total}, `bus_counters_epoch` (tăng cả khi apply_config), `iop` 64 bit; HTTP `GET /modbus/buses` thêm `telemetry`, `GET /system/status` thêm `iop.counters` (null khi iobus không trả lời, trần 300 ms); OpenAPI 1.50.0; không đổi SHM; HOST ctest 1682/1682, go test 21 package ok; đọc lại trên bo NOT_RUN; finding #819 | `apps/iobus/adapters/modbus_rtu/tests/test_control_status.cpp`, `apps/web-api/internal/modbusrtu/telemetry_window_test.go`, `apps/web-api/internal/app/{modbus_rtu_telemetry,system_iop_counters}_test.go` |
 | Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core nay được công bố ở `core.jitter` (T63-005), số trên bo NOT_RUN | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 
 ---

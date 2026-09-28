@@ -140,10 +140,11 @@ void IoCache::write_io(const IoSnapshot& s, const IobusMetrics& m)
     shm_->fault_flags  = s.fault_flags;
     shm_->iop_status   = s.iop_status;
     shm_->mcu_temp_x10 = s.mcu_temp_x10;
-    shm_->iop_rx       = m.rx_count.load(std::memory_order_relaxed);
-    shm_->iop_crc_err  = m.crc_error_count.load(std::memory_order_relaxed);
-    shm_->iop_timeout  = m.timeout_count.load(std::memory_order_relaxed);
-    shm_->iop_seq_err  = m.seq_error_count.load(std::memory_order_relaxed);
+    /* SHM giữ uint32 theo hợp đồng: cắt 32 bit thấp của counter 64 bit (T63-003). */
+    shm_->iop_rx       = static_cast<uint32_t>(m.rx_count.load(std::memory_order_relaxed));
+    shm_->iop_crc_err  = static_cast<uint32_t>(m.crc_error_count.load(std::memory_order_relaxed));
+    shm_->iop_timeout  = static_cast<uint32_t>(m.timeout_count.load(std::memory_order_relaxed));
+    shm_->iop_seq_err  = static_cast<uint32_t>(m.seq_error_count.load(std::memory_order_relaxed));
     shm_->max_iop_poll_gap_us = m.max_iop_poll_gap_us();
     KX_WRITE_END(shm_);
 }
@@ -183,10 +184,10 @@ void IoCache::write_status(uint8_t iop_status, const IobusMetrics& m)
             shm_->ui_reliability[i] = KX_REL_COMMUNICATION_FAILURE;
         }
     }
-    shm_->iop_rx      = m.rx_count.load(std::memory_order_relaxed);
-    shm_->iop_crc_err = m.crc_error_count.load(std::memory_order_relaxed);
-    shm_->iop_timeout = m.timeout_count.load(std::memory_order_relaxed);
-    shm_->iop_seq_err = m.seq_error_count.load(std::memory_order_relaxed);
+    shm_->iop_rx      = static_cast<uint32_t>(m.rx_count.load(std::memory_order_relaxed));
+    shm_->iop_crc_err = static_cast<uint32_t>(m.crc_error_count.load(std::memory_order_relaxed));
+    shm_->iop_timeout = static_cast<uint32_t>(m.timeout_count.load(std::memory_order_relaxed));
+    shm_->iop_seq_err = static_cast<uint32_t>(m.seq_error_count.load(std::memory_order_relaxed));
     KX_WRITE_END(shm_);
 }
 
