@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-FORLINX-PERF-PM-20260928` |
-| Phiên bản | 1.0 |
-| Trạng thái | **In Review — chờ PM quyết định phạm vi, nguồn lực và thứ tự triển khai** |
+| Phiên bản | 1.2 |
+| Trạng thái | **Quyết định một phần — chủ sở hữu duyệt cổng G0 của [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md) ngày 2026-09-28 (D01/D02/D06/D07); D03/D04/D05 chờ cổng G-D1/G-D4/G-D3 trên Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809)** |
 | Ngày lập | 2026-09-28 |
 | Người lập / chủ quản | Engineering; PM tiếp nhận quyết định, các owner trong báo cáo là vai trò đề xuất |
 | Mục đích | Cung cấp hiện trạng đã đo, finding có bằng chứng, lựa chọn giải pháp và phiếu quyết định để PM giao việc |
@@ -30,7 +30,20 @@ Engineering đề xuất PM chọn hướng triển khai theo ba nhóm:
    tách biểu đồ khỏi tải đăng nhập; quyết định kernel/IRQ chỉ sau khi có timeline
    và kết quả A/B.
 
-**Quyết định cần PM ghi ở §7.** Mọi dòng hiện là **CHỜ QUYẾT ĐỊNH**; chưa gán
+**Cập nhật 2026-09-28 (bản 1.1):** chủ sở hữu yêu cầu gộp toàn bộ phương án
+thành một kế hoạch thi hành và **một Issue duy nhất** để team review và làm một
+lần. Kế hoạch là [Plan 63](../../03_implementation/63_FORLINX_PERFORMANCE_REMEDIATION_PLAN.md),
+theo dõi bằng Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809).
+Plan 63 chọn phương án Engineering khuyến nghị ở §4 và biến D01–D07 thành các
+cổng G0, G-D1…G-D4 (Plan 63 §5). Plan còn gồm các finding runtime Programming
+của snapshot 04/09 (`F-PRG-PERF-001/002/004`) và hai finding mới từ lần đối chiếu
+mã (`PERF-SYS-06` ghi eMMC, `PERF-SYS-07` biên thời gian IOP), ngoài 9 nhóm ở §3.
+
+**Cập nhật 2026-09-28 (bản 1.2):** chủ sở hữu dự án duyệt cổng G0 của Plan 63
+và cho bắt đầu implement. D01, D02 (phương án A), D06 được duyệt; D07 được duyệt
+một phần; D03/D04/D05 chờ cổng tương ứng. Kết quả ghi ở §7.
+
+**Quyết định cần PM ghi ở §7.** Trước bản 1.2 mọi dòng là **CHỜ QUYẾT ĐỊNH**; chưa gán
 nhân sự thực, lịch hoàn thành, ngân sách hoặc dấu phê duyệt. Phương án chưa được
 triển khai từ đợt audit này. Các ngưỡng nghiệm thu đề xuất cần PM/Engineering/QA
 chốt trước khi đưa vào Issue; chúng không thay hợp đồng sản phẩm hiện hành.
@@ -241,22 +254,22 @@ nhận và thời điểm xem lại. Ô CHỜ QUYẾT ĐỊNH không phải phê
 
 | Mã | Nội dung cần quyết | Khuyến nghị Engineering | Vai cần tham gia | Kết quả / owner thực / mốc / điều kiện |
 |---|---|---|---|---|
-| D01 | Cho phép đợt 0 khóa baseline, instrument có giới hạn và lập Issue riêng | Chọn A §4.7; instrument theo §4.1–4.3, đo overhead, giữ cấu hình/Program hiện tại | PM + Tech Lead + QA | **CHỜ QUYẾT ĐỊNH** |
-| D02 | Phạm vi sửa snapshot: retry có deadline hay shared sampler | Snapshot A; B chỉ sau profile; giao tiêu chí freshness/fail-safe rõ | PM + Web API + QA IPC | **CHỜ QUYẾT ĐỊNH** |
-| D03 | Chính sách tick trễ IOBus và fixture kiểm IOP | IOBus A hai bước; không tự tăng period; chốt watchdog/output trước implement | PM + FW-SOM + Architect + QA giao tiếp | **CHỜ QUYẾT ĐỊNH** |
-| D04 | Phạm vi điều tra Core và điều kiện mở lane BSP/kernel | Core A trước, B có điều kiện theo dữ liệu; giữ C4 hiện hành | PM + FW-SOM/BSP + Architect + QA | **CHỜ QUYẾT ĐỊNH** |
-| D05 | Cho phép thay chính sách log READ/GET thành công và giảm polling | Log A; giữ 100% audit quan trọng, chốt retention và nhận diện caller | PM + owner audit/Product + Core/Web/FE + QA | **CHỜ QUYẾT ĐỊNH** |
-| D06 | Giao nhóm tối ưu API/FE độc lập và thứ tự ưu tiên | Collector nền + nén sẵn trước; defer charts sau đo; không nén động nếu chưa đo CPU | PM + Web/FE/packaging + QA | **CHỜ QUYẾT ĐỊNH** |
-| D07 | Nguồn lực/lịch thử bền và HIL, pilot lab, phạm vi claim sau nghiệm thu | Chốt owner/fixture/mốc, gắn từng claim với bằng chứng; không nâng release từ audit | PM + QA + FW-SOM + Product/Release owner | **CHỜ QUYẾT ĐỊNH** |
+| D01 | Cho phép đợt 0 khóa baseline, instrument có giới hạn và lập Issue riêng | Chọn A §4.7; instrument theo §4.1–4.3, đo overhead, giữ cấu hình/Program hiện tại | PM + Tech Lead + QA | **DUYỆT qua G0 Plan 63** (chủ sở hữu, 2026-09-28) theo khuyến nghị Engineering; W0 = T63-001…005. Owner thực và mốc chưa gán |
+| D02 | Phạm vi sửa snapshot: retry có deadline hay shared sampler | Snapshot A; B chỉ sau profile; giao tiêu chí freshness/fail-safe rõ | PM + Web API + QA IPC | **Chọn A** qua G0 Plan 63 §5 (T63-101/102); B chỉ mở Issue mới nếu A không đạt tiêu chí |
+| D03 | Chính sách tick trễ IOBus và fixture kiểm IOP | IOBus A hai bước; không tự tăng period; chốt watchdog/output trước implement | PM + FW-SOM + Architect + QA giao tiếp | **CHỜ QUYẾT ĐỊNH** — chuyển thành cổng G-D1 trên Issue #809, đầu vào là số đo T63-004 |
+| D04 | Phạm vi điều tra Core và điều kiện mở lane BSP/kernel | Core A trước, B có điều kiện theo dữ liệu; giữ C4 hiện hành | PM + FW-SOM/BSP + Architect + QA | **CHỜ QUYẾT ĐỊNH** — chuyển thành cổng G-D4, chỉ mở khi T63-005 đo sạch còn vi phạm |
+| D05 | Cho phép thay chính sách log READ/GET thành công và giảm polling | Log A; giữ 100% audit quan trọng, chốt retention và nhận diện caller | PM + owner audit/Product + Core/Web/FE + QA | **CHỜ QUYẾT ĐỊNH** — chuyển thành cổng G-D3 trước T63-105/106/107 |
+| D06 | Giao nhóm tối ưu API/FE độc lập và thứ tự ưu tiên | Collector nền + nén sẵn trước; defer charts sau đo; không nén động nếu chưa đo CPU | PM + Web/FE/packaging + QA | **DUYỆT qua G0 Plan 63** (chủ sở hữu, 2026-09-28): T63-103/104 trước, T63-109 sau khi nén; không nén động |
+| D07 | Nguồn lực/lịch thử bền và HIL, pilot lab, phạm vi claim sau nghiệm thu | Chốt owner/fixture/mốc, gắn từng claim với bằng chứng; không nâng release từ audit | PM + QA + FW-SOM + Product/Release owner | **DUYỆT một phần qua G0**: soak 24 giờ trong T63-401 nếu có cửa sổ bo; HIL vật lý ngoài phạm vi (#624); owner/lịch chưa gán |
 
 ### Ghi nhận cuộc review
 
 | Trường | Nội dung |
 |---|---|
-| Ngày review | Chưa ghi nhận |
-| PM / Tech Lead / QA tham dự | Chưa ghi nhận |
-| Quyết định D01–D07 | Chưa ghi nhận |
-| Issue / người được phân công / milestone | Chưa tạo từ báo cáo này |
+| Ngày review | 2026-09-28 — chủ sở hữu dự án duyệt Plan 63 (cổng G0) và cho bắt đầu implement |
+| PM / Tech Lead / QA tham dự | Chủ sở hữu dự án; PM/Tech Lead/QA chưa ghi nhận riêng |
+| Quyết định D01–D07 | D01, D02 (A), D06 duyệt; D07 duyệt một phần; D03/D04/D05 chờ cổng G-D1/G-D4/G-D3 — xem bảng trên |
+| Issue / người được phân công / milestone | Issue [#809](https://github.com/Mekong-HCM/MK-DDC-24/issues/809) (một Issue cho toàn bộ Plan 63), tạo 2026-09-28; chưa phân công người, chưa đặt milestone |
 | Phạm vi cho phép deploy lab | Chưa được xác lập từ báo cáo này |
 | Điều kiện chưa đồng thuận | Chưa ghi nhận; các giả thuyết kỹ thuật đang mở nêu ở §3–4 |
 | Người ghi biên bản / xác nhận | Chưa ghi nhận |
@@ -283,3 +296,5 @@ biên bản thực.
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-28 | Tạo báo cáo riêng theo yêu cầu chủ sở hữu: hiện trạng audit, 9 nhóm finding, các lựa chọn/trade-off, trình tự, tiêu chí đề xuất và D01–D07 để PM review/quyết định; chưa triển khai tối ưu |
+| 1.1 | 2026-09-28 | Nối báo cáo với Plan 63 và Issue #809 theo yêu cầu gộp một Issue của chủ sở hữu; ánh xạ D01–D07 sang cổng G0/G-D1…G-D4; D01–D07 vẫn CHỜ QUYẾT ĐỊNH |
+| 1.2 | 2026-09-28 | Ghi nhận chủ sở hữu duyệt cổng G0 Plan 63: D01, D02 (A), D06 duyệt; D07 duyệt một phần; D03/D04/D05 chờ cổng G-D1/G-D4/G-D3 trên Issue #809 |
