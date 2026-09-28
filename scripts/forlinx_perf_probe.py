@@ -561,7 +561,8 @@ for c in /sys/devices/system/cpu/cpu[0-9]*; do
 done
 echo "UPTIME $(cat /proc/uptime)"
 echo "KERNEL $(uname -r)"
-for f in /data/mkddc/provenance.json /opt/mkddc/provenance.json /usr/share/mkddc/provenance.json; do
+for f in /data/mkddc/provenance.json /opt/mkddc/provenance.json /usr/share/mkddc/provenance.json \
+         /usr/share/mkddc/artifact-manifest.json; do
   [ -f "$f" ] && echo "MANIFEST $f|$(sha256sum $f | cut -d' ' -f1)"
 done
 echo "IOBUS_DROPINS $(ls /etc/systemd/system/mkddc-iobus.service.d 2>/dev/null | tr '\n' ' ')"

@@ -114,6 +114,8 @@ fi
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
 [ -f build/release/checksums.sha256 ] || { echo "ERROR: thiếu checksums.sha256" >&2; exit 1; }
+# T63-002: không có manifest từng artifact thì read-back sau cài không có gì để so.
+[ -f build/release/artifact-manifest.json ] || { echo "ERROR: thiếu artifact-manifest.json (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 sha256sum --check build/release/checksums.sha256
 
 # user/group service (idempotent); user mkddc thuộc dialout để mở UART
@@ -296,7 +298,7 @@ if [ -x "$SBIN/mkddc-core" ]; then
              "$SBIN/mkddc-st-compile" "$SBIN/mkddc-st-package" \
              "$SBIN/mkddc-fake-mcu" "$SBIN/mkddc-hmi" "$WEBDIR/mkddc-web" \
              "$WEBDIR/mkddc-schedule-sim" "$WEBDIR/mkddc-programming-sim-worker" \
-             "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256"; do
+             "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256" "$SHAREDIR/artifact-manifest.json"; do
         [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
     done
     # F-P59-ROLLBACK-DB-001 — CHỤP CẢ STORE PROGRAMMING, không chỉ binary.
@@ -380,6 +382,9 @@ inst -d -m 0755 "$ETCDIR/chrony/sources.d"
 inst -d -m 0755 "$LIBEXECDIR" "$SHAREDIR/avahi"
 inst -m 0644 build/release/provenance.json "$SHAREDIR/provenance.json"
 inst -m 0644 build/release/checksums.sha256 "$SHAREDIR/checksums.sha256"
+# T63-002: manifest từng artifact. Deploy một phần sau này sửa đúng mục của nó
+# (`scripts/artifact_manifest.py deploy-record`), nên file phải nằm trên bo từ lần cài.
+inst -m 0644 build/release/artifact-manifest.json "$SHAREDIR/artifact-manifest.json"
 {
     "$SBIN/mkddc-core" --version
     "$SBIN/mkddc-iobus" --version

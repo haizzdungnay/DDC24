@@ -36,6 +36,7 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net
 | `/data/mkddc/state/programming/` | Programming state |
 | `/run/mkddc/core.sock` | Core IPC socket |
 | `/run/mkddc/programming-v1.sock` | Programming IPC socket |
+| `/usr/share/mkddc/artifact-manifest.json` | Manifest provenance từng artifact (T63-002): tên, sha256, commit, dirty, thời điểm build, toolchain. `install.sh` cài; deploy một phần cập nhật bằng `scripts/artifact_manifest.py deploy-record` |
 
 Process chạy dưới user `mkddc`. Port listen: **8082**.
 
@@ -118,6 +119,7 @@ SSH="ssh -p 22 -i ~/.ssh/mkddc24_som -o StrictHostKeyChecking=no -o UserKnownHos
 $SSH $FOXLINX "
   cp /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-web.bak-${TIMESTAMP}
   mv /opt/mkddc-web/dist /opt/mkddc-web/dist.bak-${TIMESTAMP} 2>/dev/null || true
+  cp /usr/share/mkddc/artifact-manifest.json /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} 2>/dev/null || true
 "
 ```
 
@@ -172,6 +174,28 @@ trình mồ côi còn chạy binary cũ vẫn có thể giữ cổng. Hai helper
 với web, nên chỉ restart `mkddc-web-pi` thì chúng vẫn chạy bản cũ (U-21 của
 `REC-DDC-FIELD-USE-20260927`).
 
+### Bước 6b: Ghi manifest cho đúng artifact vừa deploy (T63-002)
+
+Chạy từ gốc repo, ngay sau khi chép xong. Script đọc
+`/usr/share/mkddc/artifact-manifest.json` trên bo, thay đúng mục của artifact được
+liệt kê, giữ nguyên mục khác, ghi nguyên tử rồi đọc lại để xác nhận:
+
+```bash
+python3 scripts/artifact_manifest.py deploy-record --ssh "$SSH $FOXLINX" \
+  --artifact mkddc-web=/tmp/mkddc-web-foxlinx \
+  --artifact web-ui=build/web-ui/dist/index.html
+# Có cài tool ST ở bước 2b thì thêm --artifact mkddc-st-compile=…, mkddc-st-package=…,
+# mkddc-st-validate=…; có deploy core/iobus thì thêm mkddc-core=…, mkddc-iobus=…
+```
+
+Commit, dirty, thời điểm build và toolchain lấy từ **file build trên máy này**
+(binary Go/C++ tự mang commit; FE và tool ST phải là output build của worktree).
+Không xác định được nguồn build thì script từ chối (exit 2) và không ghi gì.
+**Không** điền sha256 đọc từ bo vào manifest và không sửa manifest bằng tay.
+Bo cài trước T63-002 chưa có manifest: lần `deploy-record` đầu chỉ tạo mục cho
+artifact vừa deploy, bước 7b báo `NO_ENTRY` cho phần còn lại tới khi chúng được
+deploy kèm `deploy-record` hoặc cài lại bằng `install.sh`.
+
 ### Bước 7: Smoke test
 
 Board Buildroot không có `curl` — dùng `wget` (busybox):
@@ -212,6 +236,24 @@ Kỳ vọng:
 - FE: HTML `<html lang="vi">` được serve
 - Toolchain: `INFO programming.toolchain ok … profile_sha256=<sha của web>`. Gặp `ERROR programming.toolchain` thì quay lại bước 2b; đừng để người dùng phát hiện qua một Check hỏng.
 
+### Bước 7b: Read-back sha256 với manifest (T63-002, bắt buộc)
+
+Chỉ đọc trên bo: so sha256 `/proc/<MainPID>/exe` của `mkddc-core`, `mkddc-iobus`,
+`mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper`, `index.html` mà web đang
+phục vụ (theo `STATIC_DIR` trong `/proc/<pid>/environ`, kèm một `GET /`) và các file
+khác trong manifest:
+
+```bash
+python3 scripts/artifact_manifest.py readback --ssh "$SSH $FOXLINX" \
+  --json /tmp/foxlinx-readback-${TIMESTAMP}.json
+```
+
+Kỳ vọng dòng cuối `READBACK: <n> kiểm, 0 lệch`, exit 0. Exit 1 là còn lệch
+(`STALE_EXE`: unit còn chạy binary đã bị thay, restart đúng unit gồm cả hai helper;
+`SHA_MISMATCH`/`WRONG_PATH`: bo chạy bản khác bản vừa ghi; `NO_ENTRY`: manifest chưa
+có mục đó). Exit 2 là lỗi SSH/manifest. Còn lệch thì chưa được báo deploy xong.
+Vòng `for u in …` ở bước 6 chỉ là kiểm nhanh; 7b là kiểm chính thức.
+
 ## Rollback
 
 Khôi phục từ backup:
@@ -224,7 +266,13 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
   cp /opt/mkddc-web/mkddc-web.bak-${TIMESTAMP} /opt/mkddc-web/mkddc-web
   rm -rf /opt/mkddc-web/dist
   mv /opt/mkddc-web/dist.bak-${TIMESTAMP} /opt/mkddc-web/dist
-  # Restart theo bước 6
+  # Manifest lùi cùng binary; không có bản backup thì gỡ để read-back báo NO_MANIFEST.
+  if [ -f /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} ]; then
+    cp /usr/share/mkddc/artifact-manifest.json.bak-${TIMESTAMP} /usr/share/mkddc/artifact-manifest.json
+  else
+    rm -f /usr/share/mkddc/artifact-manifest.json
+  fi
+  # Restart theo bước 6, rồi read-back theo bước 7b
 "
 ```
 
@@ -236,7 +284,8 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
 2. **Build bản cài từ `main`:**
    - cross-build C++ vào `build/release/cpp`, kèm khoá phát hành (lệnh ở bước 2b), HMI ON, test OFF;
    - web Go `linux/arm64`, FE `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`;
-   - `provenance.json`, `sbom.json` và `checksums.sha256` theo đúng định dạng `build-release.sh`.
+   - `provenance.json`, `sbom.json` và `checksums.sha256` theo đúng định dạng `build-release.sh`;
+   - `artifact-manifest.json`: `python3 scripts/artifact_manifest.py record --fresh --origin factory-reset --manifest build/release/artifact-manifest.json --artifact …` với cùng 9 artifact như `build-release.sh`. `install.sh` từ chối gói thiếu file này.
 3. **Đóng gói** `platform/packaging`, `platform/systemd`, `apps/hmi/packaging/{hmi.conf,point_db.example.json}`, `build/release/**` và `build/web-ui/dist`. Giải nén vào `/var/tmp/mkddc-release` trên bo, rồi `sha256sum --check build/release/checksums.sha256`.
 4. **Chạy `tools/deploy/foxlinx_factory_reset.sh` theo từng pha, kiểm kết quả sau mỗi pha:**
    - `stop`: sau pha này, chụp DB lúc đã dừng;
@@ -249,7 +298,7 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
    - ba unit bảo mật sau sự cố;
    - drop-in iobus `nomcu.conf`. (`pidfile.conf` không còn cần từ `main@3cb08fbc`: iobus tự ghi pidfile.)
 6. **Kiểm sau cài:**
-   - `/proc/MainPID/exe` khớp `runtime-checksums.sha256`;
+   - `/proc/MainPID/exe` khớp `runtime-checksums.sha256`, và `scripts/artifact_manifest.py readback` báo 0 lệch;
    - `mkddc-core --st-key-info` ra `RELEASE`;
    - health 6/6;
    - Programming `READY` với 0 Project;

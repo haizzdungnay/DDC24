@@ -451,7 +451,7 @@ Cột **Evidence** ghi đường dẫn hoặc số đo thật; để trống khi
 | `PERF-SYS-06` | P2 | T63-110 | Bảng nguồn ghi eMMC 24 giờ | — | TODO | |
 | `PERF-FE-01` | P2 | T63-104 | Transfer cold load trước/sau; test header | — | TODO | |
 | `PERF-FE-02` | P2 | T63-109 | Login không tải `charts` | — | TODO | |
-| `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | TODO | |
+| `PERF-PROV-01` | P2 | T63-002 | Read-back 0 lệch | — | IN-PROGRESS — `artifact-manifest.json` từng artifact + `deploy-record` + `readback`; selftest HOST 64/64 (gồm e2e `/proc` thật), `test_release_packaging_guard` 14/14; read-back TARGET NOT_RUN (container implementer không có TCP ra bo) | `python3 scripts/artifact_manifest.py selftest`; DEPLOY_FOXLINX bước 6b/7b |
 | `PERF-SYS-04`, `PERF-API-04` | P3 | T63-003 | Trường window/epoch; test hợp đồng | — | TODO | |
 | Baseline / đóng | — | T63-001, T63-401, T63-402 | So sánh trước/sau; hồ sơ cập nhật | G0 (APPROVED 2026-09-28) | T63-001 IN-PROGRESS — `scripts/forlinx_perf_probe.py` selftest HOST 34/34; baseline TARGET NOT_RUN (container implementer không có TCP ra bo); `seqlock_fail` Core chưa được công bố → giao T63-005 | [evidence](../07_records/test-evidence/fw-som/forlinx-perf-remediation-20260928/README.md) |
 
