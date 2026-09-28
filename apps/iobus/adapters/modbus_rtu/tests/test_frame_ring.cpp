@@ -172,3 +172,64 @@ TEST(FrameRing, GhiDongThoiKhongMatBanGhi)
     EXPECT_EQ(ring.size(), kFrameRingCapacity);
     EXPECT_EQ(count_items(ring.to_json(0, static_cast<int>(kFrameRingCapacity))), kFrameRingCapacity);
 }
+
+/* U-18 (REC-DDC-FIELD-USE-20260927) — khung GHI mang giá trị đã phát.
+ *
+ * Trước bản này người vận hành chỉ thấy "FC05 coil 3 OK" và phải đợi lượt đọc
+ * một giây sau để đoán lệnh vừa rồi là đóng hay mở relay. */
+TEST(FrameRing, KhungGhiMangGiaTriKhungDocKhong)
+{
+    FrameRing ring;
+    FrameRecord read = make(1, 4, 1000, true, "ok");
+    read.fc = 1;
+    ring.record(read);
+
+    FrameRecord fc15 = make(1, 4, 2000, true, "ok");
+    fc15.fc = 15;
+    fc15.addr = 0;
+    fc15.count = 8;
+    const uint16_t bits[8] = {1, 0, 1, 1, 0, 0, 1, 0};
+    for (int k = 0; k < 8; k++) fc15.values[k] = bits[k];
+    fc15.value_count = 8;
+    ring.record(fc15);
+
+    FrameRecord fc16 = make(1, 4, 3000, true, "ok");
+    fc16.fc = 16;
+    fc16.count = 2;
+    fc16.values[0] = 0x4148;
+    fc16.values[1] = 0x0000;
+    fc16.value_count = 2;
+    ring.record(fc16);
+
+    const std::string json = ring.to_json(0, 50);
+    EXPECT_NE(json.find("\"fc\":15,\"addr\":0,\"count\":8"), std::string::npos) << json;
+    EXPECT_NE(json.find("\"values\":[1,0,1,1,0,0,1,0]}"), std::string::npos) << json;
+    EXPECT_NE(json.find("\"values\":[16712,0]}"), std::string::npos) << "word 16-bit như trên dây: " << json;
+    /* Khung đọc giữ nguyên hình dạng cũ — client cũ không thấy gì lạ. */
+    const size_t read_pos = json.find("\"at\":1000");
+    ASSERT_NE(read_pos, std::string::npos);
+    EXPECT_EQ(json.find("values", read_pos), std::string::npos) << json;
+    EXPECT_EQ(count_items(json), 3u);
+}
+
+/* Đủ 16 giá trị — trần gom FC15 — vẫn là JSON trọn vẹn, không bị cắt ngang. */
+TEST(FrameRing, MuoiSauGiaTriVanLaJsonTronVen)
+{
+    FrameRing ring;
+    FrameRecord frame = make(255, 247, 18446744073709551615ull, false, "exception");
+    frame.fc = 15;
+    frame.addr = 65535;
+    frame.count = 65535;
+    frame.elapsed_us = 4294967295u;
+    frame.attempt = 255;
+    for (int k = 0; k < FrameRecord::kMaxValues; k++) frame.values[k] = 65535;
+    frame.value_count = 200;   /* ngoài trần — phải bị kẹp, không đọc tràn mảng */
+    ring.record(frame);
+    const std::string json = ring.to_json(0, 1);
+    std::string expected = "\"values\":[";
+    for (int k = 0; k < FrameRecord::kMaxValues; k++) expected += (k ? ",65535" : "65535");
+    expected += "]}]";
+    EXPECT_NE(json.find(expected), std::string::npos) << json;
+    EXPECT_EQ(json.front(), '[');
+    EXPECT_EQ(json.back(), ']');
+}

@@ -148,6 +148,17 @@ export function DiagnosticsPage() {
           <p className="mt-3 text-sm text-[var(--c-text-dim)]">{pick('Chưa có telemetry Modbus RTU từ iobus.', 'No Modbus RTU telemetry from iobus yet.')}</p>
         )}
       </section>
+
+      {/* `T57-3.9`: bộ đếm ở trên nói CÓ BAO NHIÊU lỗi; bảng dưới nói lỗi xảy
+          ra Ở ĐÂU và LÚC NÀO — hai câu hỏi khác nhau, và câu thứ hai trước nay
+          phải trả lời bằng máy phân tích bus cắm song song.
+
+          Từ `af1a7ef0` (2026-08-19) tới bản sửa U-18 (2026-09-27), khối này nằm
+          NHẦM bên trong `NeverPolledWarning` — thành phần `return null` khi mọi
+          thiết bị đã được poll. Hệ quả: trên một bus khoẻ, tức đúng lúc người ta
+          cần soi lệnh ghi, Frame Monitor không hề hiện; nó chỉ lộ ra khi có
+          thiết bị chưa từng được poll. Test của trang giờ khoá vị trí này. */}
+      <FrameMonitor />
     </div>
   )
 }
@@ -203,10 +214,6 @@ function NeverPolledWarning({ rows, deviceNames }: {
           'This is NOT the same as "offline": an offline device answered before and then stopped, whereas here the bus has never sent it a single frame. The usual cause is configuration rather than wiring — the device profile could not be resolved (the port still opens and the service still runs, but the slave gets no data window), or its bus is enabled while the physical port does not exist. Check alarm E302 modbus.slave_config_error and the iobus log before chasing cables.'
         )}
       </div>
-      {/* `T57-3.9`: bộ đếm ở trên nói CÓ BAO NHIÊU lỗi; bảng dưới nói lỗi xảy
-          ra Ở ĐÂU và LÚC NÀO — hai câu hỏi khác nhau, và câu thứ hai trước nay
-          phải trả lời bằng máy phân tích bus cắm song song. */}
-      <FrameMonitor />
     </div>
   )
 }

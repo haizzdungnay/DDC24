@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `GUIDE-PROG-ST-DO16-001` |
-| Phiên bản | 1.3 |
-| Ngày | 2026-09-27 |
+| Phiên bản | 1.4 |
+| Ngày | 2026-09-27 (cập nhật 2026-09-28) |
 | Trạng thái | **Đã triển khai trên bo lab Foxlinx (2026-09-27).** Revision Active `a0f107fa…`, Program `RUNNING` ở chế độ **AUTO**. Mã biên dịch PASS, mô phỏng 16 kịch bản trên host; Check/Commission trên bo PASS; nghiệm thu T1–T12 PASS ở lớp lệnh FC05 và readback coil; **kiểm từng chu kỳ trên bo: 2 120 chu kỳ cho 8 chế độ (mỗi chế độ ≥ 127 chu kỳ ổn định) và 1 665 chu kỳ cho AUTO (đủ 8 chế độ con), 0 vi phạm thiết kế**. **Chưa** đo điện tại tiếp điểm relay |
 | Đối tượng đọc | Kỹ sư lập trình DDC tự nhập chương trình trên Web UI Programming |
 | Phạm vi | 1 `PROGRAM` + 5 `FUNCTION` + 5 `FUNCTION_BLOCK`; 16 DO relay trên CK508-04 và CK508-05 (RS-485 `rs485-1`) |
@@ -73,7 +73,7 @@ Mỗi dòng dưới đây đã đối chiếu mã nguồn ở `main@0f5d46f3`. D
 | 5 | Mỗi instance FB chỉ được gọi **một lần mỗi chu kỳ** (`ST-SEM-010`) | `apps/core/application/st/samples/err_fb_called_twice.st` | Mục 3 của Program gọi mọi instance vô điều kiện; `CASE` chỉ đọc output |
 | 6 | FUNCTION phải thuần: không instance FB, không `VAR_OUTPUT`, không `VAR RETAIN`, không Published Signal (`ST-POU-002`). Gọi FUNCTION theo **vị trí** đối số (thứ tự `VAR_INPUT`), gọi FB theo **tên** cổng | `st_pou_registry.cpp` | 5 FUNCTION chỉ tính toán, trạng thái nằm trong FB |
 | 7 | FB/FUNCTION người dùng được **inline** vào Program: dùng chung trần 4096 lệnh IR, 512 slot ghi được, 64 instance FB chuẩn (tính cả `TON` nằm trong FB người dùng) | `st_compile.cpp`, `st_profile_generated.hpp` | Đo thật ở §9: 1463 lệnh, 453 slot, 42 instance |
-| 8 | Nhãn `CASE` được bung thành tập giá trị; dải lớn như `16..32767` bị từ chối (`CASE label set is too large`) | `st_parser.cpp` | Nhánh "từ 16 trở lên" viết bằng `IF` |
+| 8 | Nhãn `CASE` dạng dải: từ compiler có U-11 (PR #803) dải rộng như `16..32767:` **hợp lệ** (trần đếm theo số nhãn). Tool ST trên bo lab hiện là bản RC `f86150e3`, cũ hơn U-11, nên vẫn từ chối (`CASE label set is too large`) cho tới khi deploy lại tool | `st_parser.cpp`; `DDD-LANG-PROG-001` §4.3 | Nhánh "từ 16 trở lên" viết bằng `IF`: chạy được ở cả hai bản, nên giữ nguyên |
 | 9 | Lỗi runtime làm Program **FAULTED** và phải reset tay: tràn số nguyên (không quấn vòng), chia 0, ép kiểu ngoài miền, `TIME` âm, `LIMIT` có cận đảo, `HYSTERESIS` có `LOW ≥ HIGH`, số thực không hữu hạn | `st_exec.cpp`, `st_scheduler.cpp` | Chặn trần bộ đếm, kẹp trước khi đổi kiểu, sắp lại cận trong `FN_SEC_TO_TIME` |
 | 10 | `PID` mang nhãn `REVIEW_REQUIRED`: Check từ chối mọi Program dùng nó | `st_profile_generated.hpp` | Không dùng `PID` |
 | 11 | Chu kỳ Program chỉ nhận {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms (ADR-061) | `kAllowedPeriodMs` | Chọn 100 ms |
@@ -81,7 +81,7 @@ Mỗi dòng dưới đây đã đối chiếu mã nguồn ở `main@0f5d46f3`. D
 | 13 | Virtual Point tới chương trình theo **slot**: `boolean` → `BV` → `BOOL`; `integer`/`float` → `AV` → **`REAL`**; `multistate` → `MSV` → `UINT`. VP chủ sở hữu `WEB` chỉ đọc được; Program muốn ghi thì VP phải có chủ sở hữu `PROGRAM` | `programming_pointcatalog.go`; `point_binding_facts.go` (PR #795) | `CmdManualMask` là `REAL`, đổi sang `UINT` bằng `FN_MASK_FROM_REAL`. Web RC `f86150e3` trở về trước suy kiểu từ `signalType` và **từ chối** VP `integer`/`multistate` (`PIO-SRC-001`); cần web có PR #795 (xem §10) |
 | 14 | `REAL_TO_TIME` nhận **giây**; `REAL_TO_INT` làm tròn nửa ra xa 0; `CTU` bão hoà ở 32767 (không lỗi); `TP` bỏ qua sườn lên giữa xung | `st_exec.cpp` | `FN_SEC_TO_TIME`, `TestStep` |
 | 15 | `SCALE(IN, IN_MIN, IN_MAX, OUT_MIN, OUT_MAX)`; `DEADBAND(IN, DB, REF)` trả `REF` khi \|IN − REF\| ≤ DB, ngược lại trả `IN` | `st_compile.cpp` | `FB_STAGER`; bộ lọc giữ giá trị `DemandUsed` |
-| 16 | Mỗi DO Modbus là **một lệnh FC05 riêng**, không gộp FC15; lệnh mới đè lệnh cũ chưa gửi của cùng coil | `apps/iobus/adapters/modbus_rtu/bus_worker.cpp` | §8: nhịp tối thiểu 0,5 s, BLINK tối thiểu 1 s |
+| 16 | Mặc định mỗi DO Modbus là **một lệnh FC05 riêng**. Từ PR #804 (U-07) có tuỳ chọn **theo thiết bị** "Ghi nhiều coil một lần (FC15)" (`coil_write_batch_max`, **mặc định tắt**): bật thì các coil **liền kề** đổi cùng lúc lên dây thành một FC15; coil không liền kề và điểm bật xác nhận sau khi ghi vẫn đi riêng. Lệnh mới đè lệnh cũ chưa gửi của cùng coil | `apps/iobus/adapters/modbus_rtu/{bus_worker.cpp,coil_write_batch.cpp}` | §8: nhịp tối thiểu 0,5 s, BLINK tối thiểu 1 s (giữ nguyên, vì mặc định vẫn là FC05) |
 | 17 | Disable Program thì iobus ghi **"Giá trị an toàn"** của từng điểm (F06, đo ≤ 1,2 s). Điểm chưa khai giá trị này thì **giữ giá trị cuối** kèm WARN | `docs/07_records/test-evidence/programming/2026-09-25-fbd-st-modbus-do-audit.md` F06 | §5.1 bắt buộc khai cho cả 16 DO |
 | 18 | VP chủ sở hữu `PROGRAM` vẫn phải để `writable = true` ("cho phép ghi"), nếu không Check báo "khai chỉ đọc (writable=false) nhưng chương trình đang GHI vào nó" | `point_binding_facts.go` | §5.3 |
 
@@ -946,7 +946,7 @@ Chỉnh VP trên trang Virtual Points. Quan sát giá trị lệnh trong Monitor
 ### 7.2 Số đo cần ghi
 
 - Theo chu kỳ Program: `lastExecNs`, `maxExecNs`, `overrunCount`, `missedReleaseCount`. Kỳ vọng `overrunCount = 0` và `missedReleaseCount = 0`.
-- Theo bus: số FC05 mỗi phút, % bận của bus, bộ đếm timeout/CRC.
+- Theo bus: số FC05 (hoặc FC15 nếu đã bật) mỗi phút, % bận của bus, bộ đếm timeout/CRC. Cột "Giá trị ghi" của Frame Monitor (PR #804, U-18) cho thấy ngay giá trị từng lệnh đã phát.
 - Độ trễ từ lúc Program đổi lệnh tới lúc có FC05, và từ FC05 tới lúc đọc lại được coil.
 - Relay thật: chỉ ghi PASS khi **đo được tiếp điểm**. Nhìn LED không thay cho phép đo điện.
 
@@ -960,7 +960,9 @@ Chỉnh VP trên trang Virtual Points. Quan sát giá trị lệnh trong Monitor
 
 Số liệu nền lấy từ audit 2026-09-25 trên bo lab: 9600 8N1, một giao dịch FC05 mất **≈ 29 ms**; nền poll của 4 slave chiếm ≈ 15,9 % bus.
 
-| Chế độ | Số FC05 mỗi lần đổi | Tải thêm ở 9600 baud |
+Bảng dưới là **mặc định** (FC05 từng coil). Nếu bật "Ghi nhiều coil một lần (FC15)" cho CK508-04 và CK508-05 (Modbus RTU → Thiết bị → Sửa, PR #804), mỗi module chỉ cần **một** FC15 cho các coil liền kề đổi cùng lúc. Đo trên bo 2026-09-27 với chương trình này ở AUTO ([`EV-MB-FC15-20260927`](../07_records/test-evidence/modbus/2026-09-27-fc15-coil-batch-target.md)): đợt BLINK 16 DO từ 16 FC05 / 458,8 ms xuống **2 FC15 / 61,1 ms**, chiếm dây trong giây có đổi từ 63,1 % xuống **22,2 %** (riêng lệnh ghi 46,1 % → 6,1 %), 0 lỗi. Chỉ bật khi datasheet thiết bị có FC15 (0x0F); CK-508 đã được xác nhận trên bo.
+
+| Chế độ | Số giao dịch ghi mỗi lần đổi (mặc định FC05) | Tải thêm ở 9600 baud |
 |---|---|---|
 | CHASE, 1 s/bước | 2 (nhả kênh cũ, đóng kênh mới) | ≈ 6 % |
 | CHASE / TEST, 0,5 s/bước | 2 | ≈ 12 % |
@@ -968,11 +970,14 @@ Số liệu nền lấy từ audit 2026-09-25 trên bo lab: 9600 8N1, một giao
 | BLINK, 1 s | 16 | ≈ 46 % (cộng nền ≈ 62 %) |
 | BLINK, 0,5 s (**bị chặn**) | 16 | ≈ 93 % (cộng nền > 100 %: bus không theo kịp) |
 | PULSE, hoặc MANUAL đổi cả 16 kênh | 16, một lần | ≈ 0,46 s để phát hết 16 lệnh |
+| BLINK 1 s, **đã bật FC15** cho hai CK-508 | 2 FC15 × 8 | ≈ 6 % (cộng nền ≈ 22 %, đo trên bo) |
 
 Hệ quả:
 
 - **Không thể** đổi relay theo chu kỳ 100 ms của Program. Chu kỳ 100 ms chỉ giúp nút bấm và bộ nhịp phản ứng nhanh; relay đi theo tốc độ bus. Vì vậy `FN_SEC_TO_TIME` chặn bước tối thiểu 0,5 s, và BLINK tối thiểu 1 s.
-- Khi 16 kênh đổi cùng lúc, relay CK508-05 đóng sau relay CK508-04 tới ≈ 0,46 s. Đây là giới hạn của FC05 tuần tự, không phải lỗi chương trình.
+- Khi 16 kênh đổi cùng lúc, relay CK508-05 đóng sau relay CK508-04 tới ≈ 0,46 s. Đây là giới hạn của FC05 tuần tự, không phải lỗi chương trình. Bật FC15 cho hai module thì lệch này còn một giao dịch (đo được 30 ms).
+- Coil không liền kề vẫn đi FC05 từng coil kể cả khi bật FC15: ví dụ rời BLINK thì nhả DO01/03/05/07 (coil 0, 2, 4, 6) là 4 lệnh riêng mỗi module, vì gom qua khoảng trống sẽ ghi đè coil mà chương trình không ra lệnh.
+- Bản 1.4 **không** nới BLINK tối thiểu 1 s hay bước tối thiểu 0,5 s: mặc định iobus vẫn là FC05, và cùng một chương trình phải chạy được ở cả hai cấu hình.
 - Nếu Program đổi lệnh nhanh hơn bus, iobus chỉ phát **giá trị mới nhất** của mỗi coil; trạng thái trung gian bị bỏ.
 - Audit đo độ trễ từ lúc Program chạy tới FC05 điển hình ≈ 377 ms, và đọc lại coil qua API trung vị ≈ 0,7 s, tối đa ≈ 2 s. Hãy đo lại ở §7.2 vì các con số này có thể đã khác sau các bản sửa sau audit.
 - Tăng baud lên 19 200 thì mỗi FC05 còn ≈ 17 ms (ước lượng trong audit, cần datasheet CK-508 xác nhận).
@@ -1001,7 +1006,7 @@ Slot ghi được là tài nguyên eo hẹp nhất (AUTO tốn thêm 14 slot): m
 
 | # | Phát hiện bởi | Triệu chứng | Nguyên nhân | Đã sửa |
 |---|---|---|---|---|
-| 1 | Compiler | `ST-SYN-001 CASE label set is too large` | Nhãn `16..32767` bị bung thành 32 752 giá trị | `FN_FIRST_N` xử lý N ≥ 16 bằng `IF` |
+| 1 | Compiler | `ST-SYN-001 CASE label set is too large` | Nhãn `16..32767` bị bung thành 32 752 giá trị | `FN_FIRST_N` xử lý N ≥ 16 bằng `IF`. Lỗi compiler này đã sửa ở U-11 (PR #803): dải rộng nay hợp lệ; tool ST trên bo lab (RC) vẫn từ chối cho tới khi deploy lại. Mã mẫu giữ `IF` để chạy được ở cả hai bản |
 | 2 | Compiler | `'tOn' is a keyword and cannot be a variable name` | Tên không phân biệt hoa thường: `tOn` = `TON`, `TOn` = `TON` | Đổi thành `TmrOn`/`TmrOff`/`TimeOn`/`TimeOff` |
 | 3 | Mô phỏng | CHASE 1 s/bước thực tế 1,2 s; TEST 0,5 s thực tế 0,7 s | `TON` tự nạp lại kiểu `IN := NOT Q` cần 2 chu kỳ để khởi động lại | `FB_STEP_TIMER`/`FB_BLINK` dùng đồng hồ chạy tự do với mốc cộng dồn: đúng 1,0 s và 0,5 s |
 | 4 | Mô phỏng | STAGGER đóng **7 relay cùng lúc** tại t = 10 s | Bước vẫn tăng trong lúc kênh chờ hết thời gian nghỉ tối thiểu, rồi các kênh đóng dồn | Chỉ tăng bước khi `AnyWaiting = FALSE`; bộ nhịp dừng khi còn kênh chờ |
@@ -1095,7 +1100,7 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | Mã / hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | `ST-SYN-001 … is a keyword` | Tên biến trùng từ khoá, kể cả khác hoa thường (`tOn`, `Tp`, `Ctu`) | Đổi tên |
-| `ST-SYN-001 CASE label set is too large` | Dải nhãn `CASE` quá rộng | Tách nhánh lớn ra `IF` |
+| `ST-SYN-001 CASE label set is too large` | Tool ST cũ hơn U-11 (PR #803), như bản RC trên bo lab, bung dải nhãn `CASE` thành từng giá trị | Tách nhánh lớn ra `IF`, hoặc deploy tool ST từ `main` có U-11 (dải rộng như `16..32767:` hợp lệ). Trần mới đếm theo số nhãn: vượt thì báo `CASE has too many labels` |
 | `ST-SYN-001 expected ';' after variable declaration` | Viết giá trị khởi tạo trong khối `VAR` (`x : INT := 5;`) | Bỏ `:= …`; gán trong thân hoặc lấy từ VP |
 | `ST-SEM-010` | Gọi một instance FB hai lần trong một chu kỳ | Mỗi instance gọi đúng một lần, ngoài `IF`/`CASE` |
 | `ST-SEM-013 'X' is not an output of …` | Đọc cổng không tồn tại của FB (ví dụ `Ch01.QX`) | Sửa tên cổng |
@@ -1130,3 +1135,4 @@ Chi tiết: [`EV-PROG-DO16-MB-20260927`](../07_records/test-evidence/programming
 | 1.1 | 2026-09-27 | Triển khai lên bo lab Foxlinx và nghiệm thu T1–T12; sửa lỗi giữ relay khi đổi sang chế độ tải (lỗi 7); ghi lỗi sản phẩm VP `integer`/`multistate` (PR #795); thêm §6.8, §9.5, ràng buộc 18 |
 | 1.2 | 2026-09-27 | Kiểm từng chu kỳ trên bo (2 120 chu kỳ); sửa STAGING giảm bậc có "lỗ" và nhả dồn (lỗi 8, `FB_STAGER`); thêm S15, §9.6; khoảng nghỉ đổi chế độ ghi đúng ≈ 2,1 s |
 | 1.3 | 2026-09-27 | Thêm chế độ AUTO (`CmdMode = 10`) tự chạy lần lượt mọi chế độ; sửa lỗi bỏ qua bước OFF khi khởi động (lỗi 9); thêm S16, T13; kiểm AUTO trên bo 1 665 chu kỳ |
+| 1.4 | 2026-09-28 | Ràng buộc 16 và §8: tuỳ chọn FC15 theo thiết bị (PR #804, U-07), mặc định tắt, kèm số đo trên bo (`EV-MB-FC15-20260927`); §7.2 nhắc cột "Giá trị ghi" (U-18). Ràng buộc 8, §9.2 và §10: dải `CASE` rộng hợp lệ từ compiler có U-11 (PR #803), tool ST RC trên bo vẫn từ chối tới khi deploy lại. Mã chương trình không đổi |

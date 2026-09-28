@@ -114,6 +114,7 @@ có provenance riêng và phải bị từ chối ở production profile.
 | `timeout_ms` | int 20..5000 | có | `300` | timeout **mỗi lần phát**, không phải mỗi lượt poll |
 | `retry_count` | int 0..3 | có | `2` | **số lần PHÁT LẠI một giao dịch Modbus bị lỗi** trong cùng lượt poll (Đ-05). `0` là giá trị hợp lệ và có nghĩa: "không phát lại, báo lỗi ngay". Validator **không được** âm thầm đổi `0` thành `2`. Chi phí xấu nhất một lượt poll = `(1 + retry_count) × timeout_ms` |
 | `offline_after_errors` | int 1..10 | có | `2` | **số LƯỢT POLL thất bại liên tiếp** trước khi chuyển OFFLINE. Tách hẳn khỏi `retry_count` (Đ-05); mỗi lượt đã bao gồm đủ số lần phát lại |
+| `coil_write_batch_max` | int 0..16 | không | `0` | U-07 (`REC-DDC-FIELD-USE-20260927`): số coil tối đa gom vào **một** FC15. `0`/`1` = tắt (mỗi coil một giao dịch như trước); `2..16` = các coil liền kề đổi cùng lúc lên dây thành một khung. Ngoài dải ⇒ `OUT_OF_RANGE`, không kẹp lặng. BE ghi `max_coils_per_write` vào profile chỉ khi > 1, nên thiết bị chưa bật giữ profile cũ từng byte. Chỉ bật khi thiết bị hỗ trợ FC15 |
 | `stale_after_ms` | int | có | `poll×3` | phải `≥ poll_interval_ms + timeout_ms` |
 | `offline_after_ms` | int | có | `poll×6` | phải `> stale_after_ms` |
 | `verify_write` | bool | không | `true` | readback sau write khi register đọc được |
@@ -377,3 +378,4 @@ và là định dạng duy nhất round-trip được cả Bus và Device.
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo data model canonical Bus/Device/Point, quality năm trạng thái, import/export và gap As-Built |
 | 0.2 | 2026-08-05 | In Review | Áp dụng Đ-01/Đ-05/Đ-07 và đối chiếu lại với `eade4e5`. **Thay thế:** (a) "hai bus độc lập" → Rev A một instance, giữ entity Bus và `bus_id` (Đ-01); (b) `retry_count` từ "số retry sau attempt đầu" → định nghĩa Đ-05 kèm field mới `offline_after_errors`; (c) thêm `direction_control` vào Bus, đánh dấu còn mở; (d) capacity import từ 64 → theo Đ-07 ≥256; (e) thêm luật fail-closed khi encode vào §5.3; (f) §9 đối chiếu lại toàn bộ: hạ G-DM-01/G-DM-08 xuống P2, thêm G-DM-12/G-DM-13, tách §9.1 ba gap đã đóng bằng Track A |
+| 0.2 (+U-07) | 2026-09-27 | Active | §4 thêm field tuỳ chọn `coil_write_batch_max` (gom coil liền kề thành FC15, mặc định tắt). Không đổi field nào đã có |

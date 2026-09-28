@@ -71,6 +71,20 @@ struct FrameRecord {
     /* `ok` · `timeout` · `crc` · `exception` · `error` — phân loại đã có sẵn ở
      * chỗ gọi, không suy đoán lại ở đây. */
     char reason[12] = "ok";
+    /* U-18 (REC-DDC-FIELD-USE-20260927) — giá trị TRÊN DÂY của lệnh GHI.
+     *
+     * Trước bản này khung ghi chỉ có địa chỉ và số lượng: muốn biết lệnh vừa
+     * phát là ĐÓNG hay MỞ relay, người vận hành phải suy từ lượt đọc lại một
+     * giây sau — tức là suy từ chính thứ đang nghi ngờ. Nay khung ghi mang giá
+     * trị đã phát: coil là 0/1 theo từng bit (FC15 nhiều coil đủ từng bit, bit
+     * đầu là `addr`), thanh ghi là word 16-bit đúng như trên dây (FC16 32-bit
+     * là hai word theo byte order của điểm).
+     *
+     * `value_count = 0` với khung ĐỌC: giá trị đọc đã có ở bảng điểm, chép lại
+     * vào vòng nhớ chỉ làm nó to ra. */
+    static constexpr uint8_t kMaxValues = 16;
+    uint8_t  value_count = 0;
+    uint16_t values[kMaxValues] = {};
 };
 
 class FrameRing {
@@ -102,13 +116,28 @@ public:
             char buf[256];
             std::snprintf(buf, sizeof(buf),
                           "%s{\"at\":%llu,\"bus\":%u,\"slave\":%u,\"fc\":%u,\"addr\":%u,"
-                          "\"count\":%u,\"ok\":%s,\"reason\":\"%s\",\"elapsedUs\":%u,\"attempt\":%u}",
+                          "\"count\":%u,\"ok\":%s,\"reason\":\"%s\",\"elapsedUs\":%u,\"attempt\":%u",
                           emitted ? "," : "",
                           static_cast<unsigned long long>(item.at_ms),
                           item.bus, item.slave, item.fc, item.addr, item.count,
                           item.ok ? "true" : "false", item.reason,
                           item.elapsed_us, item.attempt);
             out += buf;
+            /* U-18: chỉ khung ghi có `values`; khung đọc giữ nguyên hình dạng cũ
+             * để client chưa nâng cấp không thấy gì lạ. */
+            const uint8_t n = item.value_count < FrameRecord::kMaxValues
+                                  ? item.value_count : FrameRecord::kMaxValues;
+            if (n > 0) {
+                out += ",\"values\":[";
+                for (uint8_t k = 0; k < n; k++) {
+                    char num[8];
+                    std::snprintf(num, sizeof(num), "%s%u", k ? "," : "",
+                                  static_cast<unsigned>(item.values[k]));
+                    out += num;
+                }
+                out += "]";
+            }
+            out += "}";
             emitted++;
         }
         out += "]";

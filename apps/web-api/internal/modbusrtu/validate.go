@@ -229,6 +229,12 @@ func validateDevices(cfg Config, buses map[string]Bus, opts ValidateOptions,
 		if device.OfflineAfterErrors < 1 || device.OfflineAfterErrors > 10 {
 			add(base+".offline_after_errors", CodeOutOfRange, "phải trong 1..10")
 		}
+		// U-07: 0/1 = tắt gom FC15; trần 16 khớp `kMaxCoilsPerWrite` của iobus.
+		// Từ chối thay vì kẹp: người dùng gõ 32 phải biết nó không có tác dụng.
+		if device.CoilWriteBatchMax < 0 || device.CoilWriteBatchMax > MaxCoilWriteBatch {
+			add(base+".coil_write_batch_max", CodeOutOfRange,
+				fmt.Sprintf("phải trong 0..%d (0 hoặc 1 = tắt gom FC15)", MaxCoilWriteBatch))
+		}
 	}
 	return devices
 }

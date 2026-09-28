@@ -436,43 +436,45 @@ void BusWorker::emit_result(const std::string& request_id, const char* status,
     result_sink_(result);
 }
 
+bool BusWorker::enqueue_locked(const PendingWrite& w)
+{
+    for (auto& pending : pending_writes_) {
+        /* `MBA-FW-04`: KHÔNG coalesce vào mục đang bay — xem `in_flight`. Lệnh
+         * mới đi thành mục riêng, đứng SAU mục đang bay trong hàng đợi, nên thứ
+         * tự trên dây vẫn là cũ rồi mới. */
+        if (!pending.submitted && !pending.in_flight && pending.slave_addr == w.slave_addr &&
+            pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
+            /* Coalesce: setpoint mới thay setpoint cũ chưa gửi. Giá trị cũ
+             * không còn ai muốn ghi, giữ lại nó chỉ để phát ra dây là sai.
+             * Đây là nguyên tắc "giá trị mới nhất tại lúc phát trên bus" của
+             * spec I/O mở rộng (G7(d)). */
+            const std::string superseded = pending.request_id;
+            pending = w;
+            pending.seq       = next_write_seq_++;
+            pending.in_flight = false;
+            if (!superseded.empty() && superseded != w.request_id)
+                emit_result(superseded, "rejected", "superseded_by_newer_setpoint", 0);
+            return true;
+        }
+    }
+    if (pending_writes_.size() >= kMaxPendingWrites) {
+        std::fprintf(stderr, "ERROR bus_worker.write_queue_full bus=%u slave=%u reg=%u"
+                     " limit=%zu — TỪ CHỐI lệnh ghi\n",
+                     bus_.id, w.slave_addr, w.reg_addr, kMaxPendingWrites);
+        emit_result(w.request_id, "rejected", "write_queue_full", 0);
+        return false;
+    }
+    pending_writes_.push_back(w);
+    pending_writes_.back().seq       = next_write_seq_++;
+    pending_writes_.back().in_flight = false;
+    return true;
+}
+
 bool BusWorker::enqueue_write(const PendingWrite& w)
 {
     {
         std::lock_guard<std::mutex> lock(queue_mu_);
-        bool coalesced = false;
-        for (auto& pending : pending_writes_) {
-            /* `MBA-FW-04`: KHÔNG coalesce vào mục đang bay — xem `in_flight`. Lệnh
-             * mới đi thành mục riêng, đứng SAU mục đang bay trong hàng đợi, nên thứ
-             * tự trên dây vẫn là cũ rồi mới. */
-            if (!pending.submitted && !pending.in_flight && pending.slave_addr == w.slave_addr &&
-                pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
-                /* Coalesce: setpoint mới thay setpoint cũ chưa gửi. Giá trị cũ
-                 * không còn ai muốn ghi, giữ lại nó chỉ để phát ra dây là sai.
-                 * Đây là nguyên tắc "giá trị mới nhất tại lúc phát trên bus" của
-                 * spec I/O mở rộng (G7(d)). */
-                const std::string superseded = pending.request_id;
-                pending = w;
-                pending.seq       = next_write_seq_++;
-                pending.in_flight = false;
-                if (!superseded.empty() && superseded != w.request_id)
-                    emit_result(superseded, "rejected", "superseded_by_newer_setpoint", 0);
-                coalesced = true;
-                break;
-            }
-        }
-        if (!coalesced) {
-            if (pending_writes_.size() >= kMaxPendingWrites) {
-                std::fprintf(stderr, "ERROR bus_worker.write_queue_full bus=%u slave=%u reg=%u"
-                             " limit=%zu — TỪ CHỐI lệnh ghi\n",
-                             bus_.id, w.slave_addr, w.reg_addr, kMaxPendingWrites);
-                emit_result(w.request_id, "rejected", "write_queue_full", 0);
-                return false;
-            }
-            pending_writes_.push_back(w);
-            pending_writes_.back().seq       = next_write_seq_++;
-            pending_writes_.back().in_flight = false;
-        }
+        if (!enqueue_locked(w)) return false;
         /* G7(b): lệnh mới là một SỰ KIỆN — worker phải thức ngay, không chờ trần
          * ngủ. Đặt cờ trong cùng vùng khoá với hàng đợi nên worker không thể thấy
          * lệnh mà lỡ cờ, hoặc thấy cờ mà chưa thấy lệnh. */
@@ -480,6 +482,26 @@ bool BusWorker::enqueue_write(const PendingWrite& w)
     }
     wake_cv_.notify_one();
     return true;
+}
+
+std::vector<bool> BusWorker::enqueue_writes(const std::vector<PendingWrite>& writes)
+{
+    std::vector<bool> accepted(writes.size(), false);
+    bool any = false;
+    {
+        /* U-07: cả loạt vào hàng đợi trong MỘT vùng khoá. Worker chụp hàng đợi
+         * dưới cùng khoá này, nên nó thấy hoặc không lệnh nào, hoặc đủ cả loạt
+         * — không bao giờ phát lệnh đầu một mình trong khi bảy lệnh kia còn
+         * đang được xếp. */
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        for (size_t k = 0; k < writes.size(); k++) {
+            accepted[k] = enqueue_locked(writes[k]);
+            any = any || accepted[k];
+        }
+        if (any) wake_pending_ = true;
+    }
+    if (any) wake_cv_.notify_one();
+    return accepted;
 }
 
 void BusWorker::wake()
@@ -841,21 +863,71 @@ void BusWorker::note_dropped_write_slot(uint16_t ext_idx)
     dropped_write_slots_.push_back(ext_idx);
 }
 
-void BusWorker::record_write_frame(const PendingWrite& w, uint8_t slave, int rc, int saved_errno,
-                                   uint32_t elapsed_us, FieldbusMetrics& metrics)
+void BusWorker::record_write_frame(uint8_t fc, uint16_t addr, uint16_t count, uint8_t attempt,
+                                   const uint16_t* values, uint8_t value_count, uint8_t slave,
+                                   int rc, int saved_errno, uint32_t elapsed_us,
+                                   FieldbusMetrics& metrics)
 {
     FrameRecord frame;
     frame.at_ms      = frame_wall_clock_ms();
     frame.bus        = bus_.id;
     frame.slave      = slave;
-    frame.fc         = w.fc;
-    frame.addr       = w.reg_addr;
-    frame.count      = (w.fc == 16) ? 2u : 1u;
+    frame.fc         = fc;
+    frame.addr       = addr;
+    frame.count      = count;
     frame.elapsed_us = elapsed_us;
-    frame.attempt    = w.attempts;
+    frame.attempt    = attempt;
     frame.ok         = rc >= 0;
     std::snprintf(frame.reason, sizeof(frame.reason), "%s", frame_reason(rc, saved_errno));
+    /* U-18: giá trị ĐÃ PHÁT, kể cả khi slave không trả lời — "lệnh nào đã rời
+     * master" là đúng câu hỏi người vận hành đang hỏi khi thấy một khung lỗi. */
+    const uint8_t n = value_count < FrameRecord::kMaxValues ? value_count : FrameRecord::kMaxValues;
+    for (uint8_t k = 0; k < n; k++) frame.values[k] = values[k];
+    frame.value_count = n;
     metrics.frames().record(frame);
+}
+
+/* Điểm profile mà một lệnh ghi nhắm tới.
+ *
+ * Khớp ĐÚNG địa chỉ trước — đúng như bản trước — rồi mới tới điểm có dải
+ * `[addr, addr + count)` chứa địa chỉ ghi. Bản trước chỉ so `pt.addr ==
+ * reg_addr`, nên một điểm coil khai `count: 8` kèm `verify_after_write` chỉ được
+ * xác nhận ở coil đầu; bảy coil còn lại đi xuống dây không ai kiểm. Với U-07 lỗ
+ * đó còn tệ hơn: chính cờ này quyết định lệnh có được gom vào FC15 hay không. */
+static const ProfilePoint* find_write_target(const DeviceProfile& profile, const PendingWrite& w)
+{
+    const bool coil_write = is_coil_write_fc(w.fc);
+    auto same_class = [coil_write](const ProfilePoint& pt) {
+        const bool coil_point = (pt.fc == 1 || pt.fc == 5 || pt.fc == 15);
+        return coil_write == coil_point;
+    };
+    for (const auto& pt : profile.points) {
+        if (pt.addr == w.reg_addr && same_class(pt)) return &pt;
+    }
+    for (const auto& pt : profile.points) {
+        if (!same_class(pt)) continue;
+        if (w.reg_addr > pt.addr &&
+            static_cast<uint32_t>(w.reg_addr) < static_cast<uint32_t>(pt.addr) + pt.count)
+            return &pt;
+    }
+    return nullptr;
+}
+
+/* `ISS-PIO-23` — lệnh này có phải đọc lại xác nhận không: cờ trên request HOẶC
+ * `verify_after_write` khai theo điểm. */
+static bool write_needs_readback(const DeviceProfile& profile, const PendingWrite& w)
+{
+    if (w.readback) return true;
+    const ProfilePoint* pt = find_write_target(profile, w);
+    return pt != nullptr && pt->verify_after_write;
+}
+
+/* D-03 — hạn TTL của một lệnh; mục chưa có mốc enqueue lấy `now_ms`. */
+static bool write_expired(const PendingWrite& w, uint64_t now_ms)
+{
+    const uint64_t enqueued = (w.enqueued_ms != 0) ? w.enqueued_ms : now_ms;
+    const uint64_t deadline = (w.deadline_ms > 0) ? w.deadline_ms : (enqueued + kWriteTtlMs);
+    return now_ms > deadline;
 }
 
 size_t BusWorker::oldest_pending_slave(const std::vector<bool>& visited) const
@@ -904,191 +976,61 @@ size_t BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metr
      * Giữ khoá suốt vòng flush là sai (mỗi transaction tốn hàng trăm ms và sẽ
      * chặn control thread), nên lấy ảnh có khoá rồi hợp nhất lại sau. */
     std::vector<PendingWrite> batch;
+    std::vector<WritePlanTx>  plan;
     {
         std::lock_guard<std::mutex> lock(queue_mu_);
-        /* `MBA-FW-04`: chỉ chụp mục của slave này, và ĐÁNH DẤU chúng đang bay
-         * ngay trong vùng khoá. Từ đây tới lúc hợp nhất, `enqueue_write` không
-         * được ghi đè chúng — lệnh mới cho cùng register thành mục riêng.
+        /* U-07: lập kế hoạch trên MỌI lệnh chờ của slave này (theo thứ tự hàng
+         * đợi), rồi chỉ lấy `max_items` GIAO DỊCH đầu. Tắt gom (mặc định) thì mỗi
+         * mục là một giao dịch — tức đúng "chụp tối đa `max_items` mục theo thứ
+         * tự hàng đợi" của G7(c).
          *
-         * G7(c): chụp tối đa `max_items` mục theo thứ tự hàng đợi; phần còn lại
-         * KHÔNG bị đánh dấu đang bay và vẫn coalesce được bình thường. */
+         * `profile` chỉ thread worker đọc/ghi (apply_config dựng worker mới), nên
+         * tra nó trong vùng khoá hàng đợi là an toàn. */
+        std::vector<PendingWrite*> candidates;
         for (auto& live : pending_writes_) {
-            if (batch.size() >= max_items) break;
             if (live.submitted || live.slave_addr != sc.addr) continue;
-            live.in_flight = true;
-            batch.push_back(live);
+            candidates.push_back(&live);
+        }
+        const uint16_t max_coils = binding.profile.max_coils_per_write;
+        std::vector<WritePlanItem> items;
+        items.reserve(candidates.size());
+        for (const PendingWrite* c : candidates) {
+            WritePlanItem item;
+            item.fc   = c->fc;
+            item.addr = c->reg_addr;
+            /* Không gom: lệnh cần đọc lại xác nhận (phải đọc đúng coil của nó
+             * ngay sau lệnh ghi của nó) và lệnh đã quá hạn (đường cũ bỏ nó mà
+             * không chạm dây, kèm kết quả `timeout` riêng). */
+            item.groupable = max_coils > 1 && is_coil_write_fc(c->fc) &&
+                             !write_needs_readback(binding.profile, *c) &&
+                             !write_expired(*c, now_ms);
+            items.push_back(item);
+        }
+        std::vector<WritePlanTx> full = plan_write_transactions(items, max_coils);
+        const size_t take = std::min(max_items, full.size());
+        /* `MBA-FW-04`: ĐÁNH DẤU đang bay ngay trong vùng khoá, và CHỈ những mục
+         * sẽ phát lượt này. Từ đây tới lúc hợp nhất, `enqueue_write` không được
+         * ghi đè chúng — lệnh mới cho cùng register thành mục riêng. Mục ngoài
+         * trần không bị đánh dấu và vẫn coalesce được bình thường. */
+        for (size_t t = 0; t < take; t++) {
+            WritePlanTx tx = full[t];
+            for (size_t& idx : tx.items) {
+                candidates[idx]->in_flight = true;
+                batch.push_back(*candidates[idx]);
+                idx = batch.size() - 1;   /* đổi sang chỉ số trong `batch` */
+            }
+            plan.push_back(std::move(tx));
         }
     }
 
-    for (auto& w : batch) {
-        if (w.slave_addr != sc.addr || w.submitted) continue;
-
-        /* `ISS-PIO-23` — tuỳ chọn `verify_after_write` khai theo ĐIỂM cũng bật
-         * xác nhận, không chỉ cờ trên request. Một điểm actuator đã khai "phải
-         * kiểm chứng" thì mọi đường ghi tới nó đều phải kiểm chứng — nếu chỉ
-         * nghe cờ request thì đúng những lệnh không tự yêu cầu (lịch trình,
-         * chương trình ST, safe-state) lại đi qua mà không ai xác nhận. */
-        for (const auto& pt : binding.profile.points) {
-            if (pt.addr != w.reg_addr) continue;
-            const bool coil_write = (w.fc == 5 || w.fc == 15);
-            const bool coil_point = (pt.fc == 1 || pt.fc == 5 || pt.fc == 15);
-            if (coil_write != coil_point) continue;
-            if (pt.verify_after_write) w.readback = true;
-            if (w.readback_tolerance <= 0.0) w.readback_tolerance = pt.readback_tolerance;
-            break;
+    for (const auto& tx : plan) {
+        if (tx.multi_coil()) {
+            write_coil_group(binding, batch, tx, now_ms, metrics);
+        } else {
+            PendingWrite& w = batch[tx.items.front()];
+            if (w.slave_addr != sc.addr || w.submitted) continue;
+            write_single(binding, w, now_ms, metrics);
         }
-
-        /* D-03: mốc TTL. Đường enqueue trực tiếp có thể chưa đặt, stamp ở lần
-         * gặp đầu. */
-        if (w.enqueued_ms == 0) w.enqueued_ms = now_ms;
-
-        /* D-03: quá hạn ⇒ bỏ hẳn, KHÔNG phát xuống dây. Đây là chỗ chặn kịch bản
-         * "thiết bị mất điện lúc 09:00, có điện lại lúc 14:00 và nhận luôn lệnh
-         * cũ". Lệnh cũ phải chết cùng ngữ cảnh sinh ra nó. */
-        const uint64_t ttl_deadline =
-            (w.deadline_ms > 0) ? w.deadline_ms : (w.enqueued_ms + kWriteTtlMs);
-        if (now_ms > ttl_deadline) {
-            std::fprintf(stderr, "ERROR modbus.write_dropped_expired bus=%u slave=%s addr=%u fc=%u"
-                         " reg=%u value=%g age_ms=%llu — lệnh quá hạn, KHÔNG ghi\n",
-                         bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
-                         static_cast<double>(w.value),
-                         static_cast<unsigned long long>(now_ms - w.enqueued_ms));
-            metrics.record_write_dropped(binding.global_idx);
-            emit_result(w.request_id, "timeout", "deadline_exceeded", 0);
-            note_dropped_write_slot(w.ext_idx);
-            w.submitted = true;
-            continue;
-        }
-
-        uint16_t regs[2] = {};
-        uint8_t  coil = 0;
-        int rc = -1;
-        const int64_t t0 = monotonic_ns();
-
-        if (w.fc == 5 || w.fc == 15) {
-            coil = (w.value != 0.0f) ? 1u : 0u;
-            if (w.fc == 5)       rc = modbus_write_bit(ctx, w.reg_addr, coil);
-            else /* fc==15 */    rc = modbus_write_bits(ctx, w.reg_addr, 1, &coil);
-        } else if (w.fc == 6 || w.fc == 16) {
-            if (!encode_register(w.value, regs, 2, w.type, w.byte_order, w.scale, w.offset)) {
-                /* D-01: giá trị không encode được (ngoài dải, NaN, scale=0).
-                 * Bỏ request và nói rõ lý do — im lặng ở đây từng là cách một
-                 * setpoint sai biến mất mà không ai biết. */
-                std::fprintf(stderr, "ERROR modbus.write_rejected_encode bus=%u slave=%s addr=%u"
-                             " fc=%u reg=%u value=%g — giá trị không biểu diễn được, KHÔNG ghi\n",
-                             bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
-                             static_cast<double>(w.value));
-                metrics.record_write_dropped(binding.global_idx);
-                emit_result(w.request_id, "rejected", "value_not_encodable", 0);
-                note_dropped_write_slot(w.ext_idx);
-                w.submitted = true;
-                continue;
-            }
-            if (w.fc == 6)      rc = modbus_write_register(ctx, w.reg_addr, regs[0]);
-            else /* fc==16 */    rc = modbus_write_registers(ctx, w.reg_addr, 2, regs);
-        }
-        const int saved_errno = errno;
-        const uint32_t write_elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
-        metrics.record_bus_transaction(bus_.id, write_elapsed_us, rc >= 0);
-
-        w.attempts++;
-        record_write_frame(w, sc.addr, rc, saved_errno, write_elapsed_us, metrics);
-
-        if (rc < 0) {
-            metrics.record_write_failed(binding.global_idx);
-            uint8_t exc = 0;
-            if (saved_errno > MODBUS_ENOBASE && saved_errno <= MODBUS_ENOBASE + 11)
-                exc = static_cast<uint8_t>(saved_errno - MODBUS_ENOBASE);
-            /* D-03: hết lượt thử ⇒ bỏ hẳn thay vì giữ lại vô thời hạn. */
-            if (w.attempts >= kMaxWriteAttempts) {
-                std::fprintf(stderr, "ERROR modbus.write_dropped_attempts bus=%u slave=%s addr=%u"
-                             " fc=%u reg=%u value=%g attempts=%u err=%s — bỏ lệnh, KHÔNG giữ lại\n",
-                             bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
-                             static_cast<double>(w.value), w.attempts,
-                             modbus_strerror(saved_errno));
-                metrics.record_write_dropped(binding.global_idx);
-                emit_result(w.request_id,
-                            (saved_errno == ETIMEDOUT) ? "timeout" : "rejected",
-                            "write_failed_after_max_attempts", exc);
-                note_dropped_write_slot(w.ext_idx);
-                w.submitted = true;
-            } else {
-                std::fprintf(stderr, "WARN  modbus.write_fail bus=%u slave=%s fc=%u addr=%u"
-                             " attempt=%u/%u err=%s\n",
-                             bus_.id, sc.name.c_str(), w.fc, w.reg_addr, w.attempts,
-                             kMaxWriteAttempts, modbus_strerror(saved_errno));
-            }
-            continue;
-        }
-
-        /* MBR-B107: readback tuỳ chọn. `applied` chỉ được khẳng định khi slave
-         * đã trả lời cho lệnh ghi; readback nâng thêm một bậc: xác nhận thiết bị
-         * thật sự GIỮ giá trị chứ không chỉ ACK rồi bỏ qua (nhiều VFD làm vậy
-         * khi tham số bị khoá). */
-        WriteResult result;
-        result.request_id = w.request_id;
-        result.status     = "applied";
-        if (w.readback) {
-            /* `ISS-PIO-23` — coil cũng phải xác nhận được. Bản MBR-B107 chỉ đọc
-             * lại thanh ghi, nên đúng nhóm điểm nguy hiểm nhất — relay đóng/cắt
-             * — không có cách nào kiểm chứng. */
-            bool read_ok = false;
-            double observed = 0.0;
-            if (w.fc == 5 || w.fc == 15) {
-                uint8_t rb_bit = 0;
-                if (modbus_read_bits(ctx, w.reg_addr, 1, &rb_bit) >= 0) {
-                    read_ok  = true;
-                    observed = rb_bit ? 1.0 : 0.0;
-                }
-            } else {
-                uint16_t rb[2] = {};
-                const int n = (w.fc == 16) ? 2 : 1;
-                if (modbus_read_registers(ctx, w.reg_addr, n, rb) >= 0) {
-                    read_ok  = true;
-                    observed = static_cast<double>(
-                        decode_register(rb, static_cast<uint16_t>(n), w.type, w.byte_order,
-                                        w.scale, w.offset));
-                }
-            }
-
-            /* Giá trị ĐÃ GHI để đối chiếu: với coil là 0/1 chuẩn hoá, với thanh
-             * ghi là chính `w.value` (đơn vị kỹ thuật, cùng hệ với `decode`). */
-            const double intended = (w.fc == 5 || w.fc == 15)
-                                        ? ((w.value != 0.0f) ? 1.0 : 0.0)
-                                        : static_cast<double>(w.value);
-
-            /* Luật "khi nào được nói applied" nằm ở `verify_write_outcome` —
-             * hàm thuần, kiểm được mà không cần dựng bus giả. Bản MBR-B107 để
-             * luật này lẫn trong vòng lặp và chỉ đặt `reason`, còn `status` vẫn
-             * là `applied`, nên không consumer nào phân biệt được một lệnh đã
-             * xác nhận thật với một lệnh chưa chứng minh được gì. */
-            const VerifyOutcome outcome =
-                verify_write_outcome(read_ok, intended, observed, w.scale, w.readback_tolerance);
-            result.has_readback   = read_ok;
-            result.readback_value = read_ok ? observed : 0.0;
-            result.status = outcome.status;
-            result.reason = outcome.reason;
-
-            if (result.status != std::string("applied")) {
-                metrics.record_write_failed(binding.global_idx);
-                if (!read_ok) {
-                    std::fprintf(stderr, "WARN  modbus.readback_failed bus=%u slave=%s addr=%u fc=%u"
-                                 " reg=%u — slave ACK lệnh ghi nhưng KHÔNG đọc lại được để xác nhận\n",
-                                 bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr);
-                } else {
-                    /* Ca mà issue nêu đích danh: nhiều VFD ACK lệnh rồi bỏ qua
-                     * khi tham số bị khoá. Báo `applied` ở đây là nói dối về một
-                     * thiết bị đang không nghe lời. */
-                    std::fprintf(stderr, "ERROR modbus.readback_mismatch bus=%u slave=%s addr=%u"
-                                 " fc=%u reg=%u written=%g read_back=%g — thiết bị KHÔNG giữ giá trị\n",
-                                 bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
-                                 intended, observed);
-                }
-            }
-        }
-        if (!w.request_id.empty() && result_sink_) result_sink_(result);
-
-        w.submitted = true;
     }
 
     /* Hợp nhất lại: chép trạng thái đã xử lý về hàng đợi thật rồi xoá phần đã
@@ -1137,7 +1079,269 @@ size_t BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metr
     }
     for (const auto& id : superseded_ids)
         emit_result(id, "rejected", "superseded_by_newer_setpoint", 0);
-    return batch.size();
+    return plan.size();
+#endif
+}
+
+void BusWorker::write_single(BusSlaveBinding& binding, PendingWrite& w, uint64_t now_ms,
+                             FieldbusMetrics& metrics)
+{
+#ifndef MKDDC_ENABLE_MODBUS
+    (void)binding; (void)w; (void)now_ms; (void)metrics;
+#else
+    const SlaveConfig& sc = binding.cfg;
+    modbus_t* ctx = static_cast<modbus_t*>(ctx_);
+
+    /* `ISS-PIO-23` — tuỳ chọn `verify_after_write` khai theo ĐIỂM cũng bật
+     * xác nhận, không chỉ cờ trên request. Một điểm actuator đã khai "phải
+     * kiểm chứng" thì mọi đường ghi tới nó đều phải kiểm chứng — nếu chỉ
+     * nghe cờ request thì đúng những lệnh không tự yêu cầu (lịch trình,
+     * chương trình ST, safe-state) lại đi qua mà không ai xác nhận. */
+    if (const ProfilePoint* pt = find_write_target(binding.profile, w)) {
+        if (pt->verify_after_write) w.readback = true;
+        if (w.readback_tolerance <= 0.0) w.readback_tolerance = pt->readback_tolerance;
+    }
+
+    /* D-03: mốc TTL. Đường enqueue trực tiếp có thể chưa đặt, stamp ở lần
+     * gặp đầu. */
+    if (w.enqueued_ms == 0) w.enqueued_ms = now_ms;
+
+    /* D-03: quá hạn ⇒ bỏ hẳn, KHÔNG phát xuống dây. Đây là chỗ chặn kịch bản
+     * "thiết bị mất điện lúc 09:00, có điện lại lúc 14:00 và nhận luôn lệnh
+     * cũ". Lệnh cũ phải chết cùng ngữ cảnh sinh ra nó. */
+    if (write_expired(w, now_ms)) {
+        std::fprintf(stderr, "ERROR modbus.write_dropped_expired bus=%u slave=%s addr=%u fc=%u"
+                     " reg=%u value=%g age_ms=%llu — lệnh quá hạn, KHÔNG ghi\n",
+                     bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                     static_cast<double>(w.value),
+                     static_cast<unsigned long long>(now_ms - w.enqueued_ms));
+        metrics.record_write_dropped(binding.global_idx);
+        emit_result(w.request_id, "timeout", "deadline_exceeded", 0);
+        note_dropped_write_slot(w.ext_idx);
+        w.submitted = true;
+        return;
+    }
+
+    uint16_t regs[2] = {};
+    uint8_t  coil = 0;
+    int rc = -1;
+    /* U-18: giá trị ĐÚNG như trên dây, cho vòng nhớ khung. */
+    uint16_t wire[2] = {};
+    uint8_t  wire_count = 0;
+    const int64_t t0 = monotonic_ns();
+
+    if (w.fc == 5 || w.fc == 15) {
+        coil = (w.value != 0.0f) ? 1u : 0u;
+        wire[0] = coil;
+        wire_count = 1;
+        if (w.fc == 5)       rc = modbus_write_bit(ctx, w.reg_addr, coil);
+        else /* fc==15 */    rc = modbus_write_bits(ctx, w.reg_addr, 1, &coil);
+    } else if (w.fc == 6 || w.fc == 16) {
+        if (!encode_register(w.value, regs, 2, w.type, w.byte_order, w.scale, w.offset)) {
+            /* D-01: giá trị không encode được (ngoài dải, NaN, scale=0).
+             * Bỏ request và nói rõ lý do — im lặng ở đây từng là cách một
+             * setpoint sai biến mất mà không ai biết. */
+            std::fprintf(stderr, "ERROR modbus.write_rejected_encode bus=%u slave=%s addr=%u"
+                         " fc=%u reg=%u value=%g — giá trị không biểu diễn được, KHÔNG ghi\n",
+                         bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                         static_cast<double>(w.value));
+            metrics.record_write_dropped(binding.global_idx);
+            emit_result(w.request_id, "rejected", "value_not_encodable", 0);
+            note_dropped_write_slot(w.ext_idx);
+            w.submitted = true;
+            return;
+        }
+        wire[0] = regs[0];
+        wire[1] = regs[1];
+        wire_count = (w.fc == 16) ? 2u : 1u;
+        if (w.fc == 6)      rc = modbus_write_register(ctx, w.reg_addr, regs[0]);
+        else /* fc==16 */    rc = modbus_write_registers(ctx, w.reg_addr, 2, regs);
+    }
+    const int saved_errno = errno;
+    const uint32_t write_elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
+    metrics.record_bus_transaction(bus_.id, write_elapsed_us, rc >= 0);
+
+    w.attempts++;
+    record_write_frame(w.fc, w.reg_addr, (w.fc == 16) ? 2u : 1u, w.attempts, wire, wire_count,
+                       sc.addr, rc, saved_errno, write_elapsed_us, metrics);
+
+    if (rc < 0) {
+        metrics.record_write_failed(binding.global_idx);
+        uint8_t exc = 0;
+        if (saved_errno > MODBUS_ENOBASE && saved_errno <= MODBUS_ENOBASE + 11)
+            exc = static_cast<uint8_t>(saved_errno - MODBUS_ENOBASE);
+        /* D-03: hết lượt thử ⇒ bỏ hẳn thay vì giữ lại vô thời hạn. */
+        if (w.attempts >= kMaxWriteAttempts) {
+            std::fprintf(stderr, "ERROR modbus.write_dropped_attempts bus=%u slave=%s addr=%u"
+                         " fc=%u reg=%u value=%g attempts=%u err=%s — bỏ lệnh, KHÔNG giữ lại\n",
+                         bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                         static_cast<double>(w.value), w.attempts,
+                         modbus_strerror(saved_errno));
+            metrics.record_write_dropped(binding.global_idx);
+            emit_result(w.request_id,
+                        (saved_errno == ETIMEDOUT) ? "timeout" : "rejected",
+                        "write_failed_after_max_attempts", exc);
+            note_dropped_write_slot(w.ext_idx);
+            w.submitted = true;
+        } else {
+            std::fprintf(stderr, "WARN  modbus.write_fail bus=%u slave=%s fc=%u addr=%u"
+                         " attempt=%u/%u err=%s\n",
+                         bus_.id, sc.name.c_str(), w.fc, w.reg_addr, w.attempts,
+                         kMaxWriteAttempts, modbus_strerror(saved_errno));
+        }
+        return;
+    }
+
+    /* MBR-B107: readback tuỳ chọn. `applied` chỉ được khẳng định khi slave
+     * đã trả lời cho lệnh ghi; readback nâng thêm một bậc: xác nhận thiết bị
+     * thật sự GIỮ giá trị chứ không chỉ ACK rồi bỏ qua (nhiều VFD làm vậy
+     * khi tham số bị khoá). */
+    WriteResult result;
+    result.request_id = w.request_id;
+    result.status     = "applied";
+    if (w.readback) {
+        /* `ISS-PIO-23` — coil cũng phải xác nhận được. Bản MBR-B107 chỉ đọc
+         * lại thanh ghi, nên đúng nhóm điểm nguy hiểm nhất — relay đóng/cắt
+         * — không có cách nào kiểm chứng. */
+        bool read_ok = false;
+        double observed = 0.0;
+        if (w.fc == 5 || w.fc == 15) {
+            uint8_t rb_bit = 0;
+            if (modbus_read_bits(ctx, w.reg_addr, 1, &rb_bit) >= 0) {
+                read_ok  = true;
+                observed = rb_bit ? 1.0 : 0.0;
+            }
+        } else {
+            uint16_t rb[2] = {};
+            const int n = (w.fc == 16) ? 2 : 1;
+            if (modbus_read_registers(ctx, w.reg_addr, n, rb) >= 0) {
+                read_ok  = true;
+                observed = static_cast<double>(
+                    decode_register(rb, static_cast<uint16_t>(n), w.type, w.byte_order,
+                                    w.scale, w.offset));
+            }
+        }
+
+        /* Giá trị ĐÃ GHI để đối chiếu: với coil là 0/1 chuẩn hoá, với thanh
+         * ghi là chính `w.value` (đơn vị kỹ thuật, cùng hệ với `decode`). */
+        const double intended = (w.fc == 5 || w.fc == 15)
+                                    ? ((w.value != 0.0f) ? 1.0 : 0.0)
+                                    : static_cast<double>(w.value);
+
+        /* Luật "khi nào được nói applied" nằm ở `verify_write_outcome` —
+         * hàm thuần, kiểm được mà không cần dựng bus giả. Bản MBR-B107 để
+         * luật này lẫn trong vòng lặp và chỉ đặt `reason`, còn `status` vẫn
+         * là `applied`, nên không consumer nào phân biệt được một lệnh đã
+         * xác nhận thật với một lệnh chưa chứng minh được gì. */
+        const VerifyOutcome outcome =
+            verify_write_outcome(read_ok, intended, observed, w.scale, w.readback_tolerance);
+        result.has_readback   = read_ok;
+        result.readback_value = read_ok ? observed : 0.0;
+        result.status = outcome.status;
+        result.reason = outcome.reason;
+
+        if (result.status != std::string("applied")) {
+            metrics.record_write_failed(binding.global_idx);
+            if (!read_ok) {
+                std::fprintf(stderr, "WARN  modbus.readback_failed bus=%u slave=%s addr=%u fc=%u"
+                             " reg=%u — slave ACK lệnh ghi nhưng KHÔNG đọc lại được để xác nhận\n",
+                             bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr);
+            } else {
+                /* Ca mà issue nêu đích danh: nhiều VFD ACK lệnh rồi bỏ qua
+                 * khi tham số bị khoá. Báo `applied` ở đây là nói dối về một
+                 * thiết bị đang không nghe lời. */
+                std::fprintf(stderr, "ERROR modbus.readback_mismatch bus=%u slave=%s addr=%u"
+                             " fc=%u reg=%u written=%g read_back=%g — thiết bị KHÔNG giữ giá trị\n",
+                             bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                             intended, observed);
+            }
+        }
+    }
+    if (!w.request_id.empty() && result_sink_) result_sink_(result);
+
+    w.submitted = true;
+#endif
+}
+
+void BusWorker::write_coil_group(BusSlaveBinding& binding, std::vector<PendingWrite>& batch,
+                                 const WritePlanTx& tx, uint64_t now_ms, FieldbusMetrics& metrics)
+{
+#ifndef MKDDC_ENABLE_MODBUS
+    (void)binding; (void)batch; (void)tx; (void)now_ms; (void)metrics;
+#else
+    const SlaveConfig& sc = binding.cfg;
+    modbus_t* ctx = static_cast<modbus_t*>(ctx_);
+    const size_t n = std::min<size_t>(tx.items.size(), kMaxCoilsPerWrite);
+
+    /* Bit thứ k trên dây là giá trị của `tx.items[k]` — kế hoạch đã sắp các
+     * mục theo địa chỉ tăng dần, liền kề tuyệt đối từ `tx.start_addr`. */
+    uint8_t  bits[kMaxCoilsPerWrite] = {};
+    uint16_t wire[kMaxCoilsPerWrite] = {};
+    for (size_t k = 0; k < n; k++) {
+        PendingWrite& w = batch[tx.items[k]];
+        if (w.enqueued_ms == 0) w.enqueued_ms = now_ms;   /* D-03: mốc TTL */
+        bits[k] = (w.value != 0.0f) ? 1u : 0u;
+        wire[k] = bits[k];
+    }
+
+    const int64_t t0 = monotonic_ns();
+    const int rc = modbus_write_bits(ctx, tx.start_addr, static_cast<int>(n), bits);
+    const int saved_errno = errno;
+    const uint32_t elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
+    /* MỘT giao dịch trên dây ⇒ MỘT mẫu thời lượng/độ chiếm dây. Đếm n lần sẽ
+     * thổi phồng mức sử dụng bus đúng ở chỗ bản sửa này làm nó giảm. */
+    metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0);
+
+    uint8_t attempt = 0;
+    for (size_t k = 0; k < n; k++) {
+        PendingWrite& w = batch[tx.items[k]];
+        w.attempts++;
+        if (w.attempts > attempt) attempt = w.attempts;
+    }
+    record_write_frame(15, tx.start_addr, static_cast<uint16_t>(n), attempt, wire,
+                       static_cast<uint8_t>(n), sc.addr, rc, saved_errno, elapsed_us, metrics);
+
+    if (rc < 0) {
+        uint8_t exc = 0;
+        if (saved_errno > MODBUS_ENOBASE && saved_errno <= MODBUS_ENOBASE + 11)
+            exc = static_cast<uint8_t>(saved_errno - MODBUS_ENOBASE);
+        std::fprintf(stderr, "WARN  modbus.write_group_fail bus=%u slave=%s fc=15 addr=%u count=%zu"
+                     " attempt=%u/%u err=%s%s\n",
+                     bus_.id, sc.name.c_str(), tx.start_addr, n, attempt, kMaxWriteAttempts,
+                     modbus_strerror(saved_errno),
+                     exc == 0x01 ? " — thiết bị KHÔNG hỗ trợ FC15? tắt coil_write_batch_max cho"
+                                   " thiết bị này" : "");
+        /* Lỗi của MỘT khung là lỗi của MỌI coil trong khung: mỗi điểm ghi nhận
+         * một lần ghi hỏng và tự đếm lượt thử của nó, đúng như khi đi riêng. */
+        for (size_t k = 0; k < n; k++) {
+            PendingWrite& w = batch[tx.items[k]];
+            metrics.record_write_failed(binding.global_idx);
+            if (w.attempts < kMaxWriteAttempts) continue;
+            std::fprintf(stderr, "ERROR modbus.write_dropped_attempts bus=%u slave=%s addr=%u"
+                         " fc=15 reg=%u value=%g attempts=%u err=%s — bỏ lệnh, KHÔNG giữ lại\n",
+                         bus_.id, sc.name.c_str(), sc.addr, w.reg_addr,
+                         static_cast<double>(w.value), w.attempts, modbus_strerror(saved_errno));
+            metrics.record_write_dropped(binding.global_idx);
+            emit_result(w.request_id, (saved_errno == ETIMEDOUT) ? "timeout" : "rejected",
+                        "write_failed_after_max_attempts", exc);
+            note_dropped_write_slot(w.ext_idx);
+            w.submitted = true;
+        }
+        return;
+    }
+
+    /* Slave ĐÃ ACK cả khung ⇒ `applied` cho từng request. Không có readback ở
+     * đây là đúng thiết kế: lệnh cần readback không bao giờ được gom. */
+    for (size_t k = 0; k < n; k++) {
+        PendingWrite& w = batch[tx.items[k]];
+        if (!w.request_id.empty() && result_sink_) {
+            WriteResult result;
+            result.request_id = w.request_id;
+            result.status     = "applied";
+            result_sink_(result);
+        }
+        w.submitted = true;
+    }
 #endif
 }
 

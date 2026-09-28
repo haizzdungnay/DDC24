@@ -6,7 +6,8 @@ import { I18nProvider } from '../../../shared/i18n'
 
 const api = vi.hoisted(() => ({
   getModbusDiagnostics: vi.fn(),
-  getModbusDevices: vi.fn()
+  getModbusDevices: vi.fn(),
+  getModbusFrames: vi.fn()
 }))
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
@@ -25,11 +26,38 @@ describe('DiagnosticsPage', () => {
     api.getModbusDiagnostics.mockResolvedValue([
       { device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 10, total_errors: 2, timeout_errors: 1, crc_errors: 1, retry_attempts: 2, consecutive_errors: 2, last_seen_ms: 123 }
     ])
+    api.getModbusFrames.mockResolvedValue({ schemaVersion: 1, bus: 0, volatile: true, rawBytes: false, frames: [] })
   })
 
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  /* U-18 (REC-DDC-FIELD-USE-20260927): Frame Monitor từng nằm nhầm trong khối
+   * cảnh báo "chưa từng được poll", nên trên bus khoẻ — mọi thiết bị đã poll —
+   * nó không hiện, đúng lúc người vận hành cần soi lệnh ghi. */
+  it('Frame Monitor hiện cả khi mọi thiết bị đã được poll', async () => {
+    api.getModbusDiagnostics.mockResolvedValue([
+      { device_id: 'ahu-1', slave_id: 7, online: true, total_polls: 10, total_errors: 0, timeout_errors: 0, crc_errors: 0, retry_attempts: 0, consecutive_errors: 0, last_seen_ms: 123 }
+    ])
+    api.getModbusFrames.mockResolvedValue({
+      schemaVersion: 1, bus: 0, volatile: true, rawBytes: false,
+      frames: [{ at: 1755600000000, bus: 1, slave: 7, fc: 15, addr: 0, count: 8, ok: true, reason: 'ok', elapsedUs: 30000, attempt: 1, values: [1, 1, 0, 0, 1, 1, 0, 0] }]
+    })
+    renderPage()
+    expect(await screen.findByText('Khung truyền gần nhất')).toBeInTheDocument()
+    expect(await screen.findByText('1 1 0 0 1 1 0 0')).toBeInTheDocument()
+    expect(screen.queryByText(/CHƯA TỪNG được poll/)).not.toBeInTheDocument()
+  })
+
+  it('Frame Monitor hiện đúng một lần khi có thiết bị chưa từng được poll', async () => {
+    api.getModbusDiagnostics.mockResolvedValue([
+      { device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 0, total_errors: 0, timeout_errors: 0, crc_errors: 0, retry_attempts: 0, consecutive_errors: 0, last_seen_ms: 0 }
+    ])
+    renderPage()
+    expect(await screen.findByText(/CHƯA TỪNG được poll/)).toBeInTheDocument()
+    expect(screen.getAllByText('Khung truyền gần nhất')).toHaveLength(1)
   })
 
   it('hiển thị bộ đếm CRC / timeout / phát lại theo slave', async () => {

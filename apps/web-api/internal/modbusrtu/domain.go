@@ -43,6 +43,15 @@ type Device struct {
 	 * 0 = suy từ `poll_ms` (fast = poll_ms, slow = poll_ms × 10). */
 	PollFastMS int `json:"poll_fast_ms,omitempty"`
 	PollSlowMS int `json:"poll_slow_ms,omitempty"`
+	// U-07 (REC-DDC-FIELD-USE-20260927) — số coil tối đa iobus được gom vào
+	// MỘT lệnh FC15 cho thiết bị này. 0 hoặc 1 = TẮT (mặc định): mỗi lệnh ghi
+	// coil là một giao dịch riêng, đúng hành vi trước bản này. 2..16 = gom các
+	// coil LIỀN KỀ đổi cùng lúc thành một khung, ví dụ 8 relay của một module
+	// CK-508 thành một giao dịch thay vì tám.
+	//
+	// Bật theo TỪNG thiết bị vì không phải slave Modbus nào cũng hỗ trợ FC15;
+	// thiết bị không hỗ trợ sẽ từ chối mọi lệnh ghi đã gom (ILLEGAL FUNCTION).
+	CoilWriteBatchMax int `json:"coil_write_batch_max,omitempty"`
 	// MBR-B202 / OD-MBRTU-002 (CLOSED): Device thuộc về một Bus.
 	// `rs485_port`/`baud`/`parity`/`stop_bits` vẫn có trong response để UI hiển
 	// thị, nhưng là KẾ THỪA READ-ONLY từ Bus — giao diện Thiết bị không được cho
@@ -162,6 +171,11 @@ type Diagnostics struct {
 	LastException     uint8  `json:"last_exception"`
 	LastSeenMS        uint64 `json:"last_seen_ms"`
 }
+
+// MaxCoilWriteBatch — trần `coil_write_batch_max`, khớp `kMaxCoilsPerWrite`
+// (`apps/iobus/adapters/modbus_rtu/coil_write_batch.hpp`). iobus kẹp giá trị
+// lớn hơn về trần này; BE từ chối ngay để người dùng không tin nhầm.
+const MaxCoilWriteBatch = 16
 
 func NormalizeDevice(device Device) Device {
 	device.DeviceID = strings.TrimSpace(device.DeviceID)

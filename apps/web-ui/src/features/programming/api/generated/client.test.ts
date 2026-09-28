@@ -174,7 +174,9 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // `1.44.0` — `ProgrammingTrace.source` (CORE | MONITOR_POLL) và freshness LIVE
     // cho mẫu Core (U-02/U-03); không thêm operation.
     // `1.45.0` — Trace `sampleMode` (EVERY_SAMPLE | ON_CHANGE) và `cycle` (U-09).
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.45.0");
+    // `1.46.0` — Modbus RTU: `coil_write_batch_max` (U-07) và `values` của khung ghi (U-18);
+    // không thêm operation Programming.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.46.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

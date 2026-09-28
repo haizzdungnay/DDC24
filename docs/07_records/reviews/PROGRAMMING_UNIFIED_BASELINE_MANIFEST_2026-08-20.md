@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.67 |
+| Phiên bản | 1.68 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; bản rà Product 3.4/SRS 1.4/VVP 2.5/Plan 59 đã ghim hash để review, chờ chữ ký owner; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -13,6 +13,8 @@
 ## 1. Phạm vi và quy tắc
 
 Manifest ghim đúng nội dung bộ hồ sơ để reviewer thấy cùng một revision. Revision
+1.68 re-pin `#10` (`DDD-LANG-PROG-001` 1.3) sau khi làm rõ câu chữ luật WCET
+`CASE` theo U-11 đã merge; không đổi Product/SRS/VVP/Trace/Risk. Revision
 1.67 re-pin `#1/#5/#7/#12/#15` theo bản rà 2026-09-27 (Product 3.4, SRS 1.4,
 VVP 2.5, Plan 59 và dòng register tương ứng) về chu kỳ, F20/F21/F22, target tin cậy
 và release plan. Đã đọc impact: không hạ risk, không thêm Test Result, không mở
@@ -60,7 +62,7 @@ chứng minh code, target, HIL hoặc release.
 | 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `749a61769bf0cc727d2cf810ae1c3f69cec08f3a6d9137a17a69069ee83495e5` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 8 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `9304ac10eff0a7a85c56c78a1ff5c752c111044f03d55464ef6aea8af33aba74` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `32dfe5d137bdd19545fed8262370cb19859a45d76546f5a4c3af1f5d670aee25` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
-| 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `8281dd0c8affda8d3b3f19a00b9559124522954cbcc4a675632e074fe50dbdea` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
+| 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `5a264006b136461275a07d9d404ac538cc623567fa6a85c99ac2f56ffd2bf202` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `7005aedc71671c956ed3a2bf2b63c321f38c7281abbe4b63824b418187f3ccaa` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `82b4dda0a5fde213c8904a8e813f10ec3d749dfebf0acac104a768fb2c1ff640` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `ff2db2ef027500485cf9a1f1cb13a351799a723e75d024e10e548bf8c5bd132c` | `4a66979db45aa89b561b3a7a449f8a4f2c91bdf1` |
@@ -102,6 +104,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.68 | 2026-09-28 | Re-pin `#10` (`PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` 1.2 → 1.3). §4.3 trước đây viết "tập nhãn bị chặn trên bởi `kMaxStatements`", đúng với parser cũ (bung dải thành từng giá trị) nhưng sai với U-11 đã merge ở PR #803 (`REC-DDC-FIELD-USE-20260927`): nhãn lưu dạng khoảng, trần đếm **số nhãn**, mỗi nhãn nở thành tối đa hai phép so biên. **Đánh giá impact:** chỉ làm rõ câu chữ cho khớp hành vi compiler đã merge và đã có test; luật WCET của ADR-054 (khử đường về `IF/ELSIF`, số nhánh hữu hạn biết lúc biên dịch) giữ nguyên; không đổi IR, diagnostic, contract; không đổi Product/SRS/Architecture/VVP/Trace/Risk/Plan. `RELEASE_READY` giữ NO-GO. |
 | 1.67 | 2026-09-27 | Re-pin `#1/#5/#7/#12/#15` theo bản rà 2026-09-27 của phiên rà Product/release: Product 3.4 (§8.1 quyết định cần ký trước RC, chính sách rút output khi thay package F20/F22, gói 30 s chỉ đọc để di trú, artifact 1 MiB), SRS 1.4 (tiêu chí di trú/đo target trong ID hiện có, vẫn 89), VVP 2.5 (fixture F19/F20, bo sạch; **giữ ngưỡng `VS-PROG-009` của 2.4** do chủ sở hữu chốt), Plan 59 (`REL-01..09`) và hai dòng register `CONTROL.md`. **Đánh giá impact:** không thêm/bỏ requirement hay scenario, không đổi verdict nào, không hạ risk; các quyết định mới ở trạng thái chờ ký, không mặc định approved. `RELEASE_READY` giữ NO-GO. |
 | 1.66 | 2026-09-27 | Re-pin `#1` (`CONTROL.md`) sau khi thêm dòng register cho release record `DDC24-RELEASE-RECORD-2026-09-27` (Draft chờ ký, verdict đề xuất NO-GO). **Đánh giá impact:** chỉ thêm một dòng mục lục trỏ tới bản ghi phát hành; không đổi authority Product/SRS/Architecture/DDD/VVP/Trace/Risk. `RELEASE_READY` giữ NO-GO. |
 | 1.65 | 2026-09-27 | Re-pin `#1/#2/#5/#7/#12`. Cổng `candidate-pin` đã đỏ từ 2026-09-09 mà không ai phát hành manifest (W7 trên RC `main@4b833b38` bắt được khi tổng hợp release 2026-09-27). **Đánh giá impact từng dòng:** `#1` CONTROL — chỉ thêm dòng register `WF-CLEAN-001` (2026-09-09) và cập nhật phiên bản Product/SRS; không đổi authority. `#2` DECISIONS — ADR-057..060 (phạm vi/catalog/thang bằng chứng BACnet, không chạm Programming); **ADR-061** (base step 10 ms, chu kỳ Program {10…50000} ms, C1–C4) và **ADR-062** (intent Enable đi cùng ACTIVATE) đổi hành vi Programming. Impact đã xử lý trong cùng change-set: `#5` Product 3.2→3.3 và `#7` SRS 1.2→1.3 đồng bộ hai ADR (`SYS-101/113`, `FE-106`, `CORE-102/108/115`, bảng quyết định) — trước đó hai hồ sơ này vẫn ghi `1/5/30 s` và "Program mới Disabled" không điều kiện, tức authority mâu thuẫn; không thêm/bỏ requirement, không đổi priority hay trạng thái verified. `#12` VVP 2.2→2.4 — `VS-PROG-009` theo ADR-061 (v2.3) rồi ngưỡng ≥ 10 chu kỳ mỗi lớp do chủ sở hữu chốt lại (v2.4); không đổi trạng thái PASS nào. DDD-CTRL (ngoài bảng ghim) đã đồng bộ ở v1.2–v1.4. Risk `#13` và Trace `#14` **không đổi**: `RSK-PROG-002` (Task dài lấn base step) vẫn đúng với lớp 50 s và giữ Open; cột `D/I/T/P/R` giữ nguyên. `RELEASE_READY` giữ NO-GO. |

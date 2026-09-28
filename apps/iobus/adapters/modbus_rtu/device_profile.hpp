@@ -109,6 +109,14 @@ struct DeviceProfile {
     std::string vendor;
     std::string description;
     uint32_t    default_baud = 19200;
+    /* U-07 (REC-DDC-FIELD-USE-20260927) — số coil tối đa gom vào MỘT FC15.
+     *
+     * `1` (mặc định, cũng là giá trị khi profile không khai) = TẮT: mỗi lệnh
+     * ghi coil là một giao dịch riêng, đúng hành vi trước bản này. Bật theo
+     * TỪNG thiết bị vì không phải slave nào cũng hỗ trợ FC15 — thiết bị không
+     * hỗ trợ sẽ trả exception ILLEGAL FUNCTION cho mọi lệnh ghi đã gom. Giá
+     * trị lớn hơn `kMaxCoilsPerWrite` (16) bị kẹp về 16. */
+    uint16_t    max_coils_per_write = 1;
     std::vector<ProfilePoint> points;
     bool loaded = false;
 };

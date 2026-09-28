@@ -5,7 +5,10 @@ import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
 import type { ModbusBusInfo, ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
 import { Field } from '../components/Field'
-import { NO_DATA, buttonClass, describeApiError, deviceLinkLabel, emptyDevice, inputClass, readOnlyHint } from '../shared'
+import {
+  DEFAULT_COIL_WRITE_BATCH, MAX_COIL_WRITE_BATCH, NO_DATA, buttonClass, coilBatchEnabled, coilBatchToggleOn,
+  describeApiError, deviceLinkLabel, emptyDevice, formDevice, inputClass, readOnlyHint
+} from '../shared'
 
 type PendingDelete = { id: string; label: string; extra?: number }
 
@@ -314,6 +317,50 @@ export function DevicesPage() {
               onChange={(e) => setDevice({ ...device, offline_after_errors: Number(e.target.value) })}
             />
           </Field>
+          {/* U-07 (REC-DDC-FIELD-USE-20260927): gom coil liền kề thành MỘT FC15.
+              Đo trên bo: 16 relay đổi cùng lúc = 16 lệnh FC05 trải gần nửa
+              giây. Mặc định TẮT và bật theo TỪNG thiết bị, vì thiết bị không hỗ
+              trợ FC15 sẽ từ chối mọi lệnh ghi đã gom — lời giải thích phải nằm
+              ngay cạnh ô, không nằm trong tài liệu. */}
+          <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3" data-testid="device-coil-batch">
+            <label className="flex min-h-10 items-center gap-2 text-xs font-semibold text-[var(--c-text)]">
+              <input
+                type="checkbox"
+                checked={coilBatchToggleOn(device)}
+                onChange={(e) => setDevice({
+                  ...device,
+                  coil_write_batch_max: e.target.checked ? DEFAULT_COIL_WRITE_BATCH : 0
+                })}
+              />
+              {pick('Ghi nhiều coil một lần (FC15)', 'Write multiple coils at once (FC15)')}
+            </label>
+            {coilBatchToggleOn(device) && (
+              <Field
+                label={pick('Tối đa coil mỗi lệnh', 'Max coils per command')}
+                hint={pick('2–16. Chỉ gom các coil có địa chỉ liền kề.', '2–16. Only coils with adjacent addresses are grouped.')}
+              >
+                <input
+                  required
+                  type="number"
+                  min={2}
+                  max={MAX_COIL_WRITE_BATCH}
+                  className={inputClass}
+                  aria-label={pick('Tối đa coil mỗi lệnh', 'Max coils per command')}
+                  value={Number.isFinite(device.coil_write_batch_max) ? device.coil_write_batch_max : ''}
+                  onChange={(e) => setDevice({
+                    ...device,
+                    coil_write_batch_max: e.target.value === '' ? Number.NaN : Number(e.target.value)
+                  })}
+                />
+              </Field>
+            )}
+            <p className="text-[11px] text-[var(--c-text-dim)]">
+              {pick(
+                'Các coil liền kề đổi cùng lúc được ghi bằng MỘT lệnh FC15 thay vì mỗi coil một lệnh FC05 — ví dụ 8 relay của một module thành 1 giao dịch. Chỉ bật khi datasheet thiết bị có FC15 (0x0F); thiết bị không hỗ trợ sẽ từ chối mọi lệnh ghi đã gom. Điểm bật xác nhận sau khi ghi vẫn được ghi riêng từng coil.',
+                'Adjacent coils that change together are written with ONE FC15 command instead of one FC05 per coil — e.g. the 8 relays of a module in 1 transaction. Enable only if the device datasheet lists FC15 (0x0F); a device without it will reject every grouped write. Points with verify-after-write are still written one coil at a time.'
+              )}
+            </p>
+          </div>
           {/* `offline_probe_ms` KHÔNG còn ở đây. Nó là thuộc tính của BUS (D-04:
               chu kỳ dò lại bảo vệ băng thông của SỢI DÂY, không của một thiết
               bị), và backend chưa bao giờ có trường đó trên Device — ô nhập cũ
@@ -438,6 +485,11 @@ export function DevicesPage() {
                     <td className="py-3 text-xs font-mono">{row.slave_id}</td>
                     <td className="py-3 text-xs font-mono">
                       {row.poll_ms}ms / {row.timeout_ms}ms / {row.retry}x
+                      {coilBatchEnabled(row) && (
+                        <span className="ml-1" title={pick('Gom coil liền kề thành một lệnh FC15', 'Adjacent coils grouped into one FC15 command')}>
+                          · FC15×{row.coil_write_batch_max}
+                        </span>
+                      )}
                     </td>
                     {/* `probe` thuộc về BUS, không phải thiết bị. Bản trước hiện
                         `row.offline_probe_ms ?? 10000` — mà backend không có
@@ -495,7 +547,7 @@ export function DevicesPage() {
                         disabled={!canEdit}
                         title={readOnlyHintText}
                         onClick={() => {
-                          setDevice(row)
+                          setDevice(formDevice(row))
                           setEditingDevice(true)
                         }}
                       >

@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 2.5 | 2026-09-11 (DD-10: loader safe-state trỏ `apps/core/adapters/config/`) · 2.4 | 2026-07-28 (ADR-017: Ethernet IPv4/DNS transaction authority, management hostname read-only) · 2.3 | 2026-07-22 (desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 2.6 | 2026-09-27 (U-07: `devices[].coil_write_batch_max` → profile `max_coils_per_write`) · 2.5 | 2026-09-11 (DD-10: loader safe-state trỏ `apps/core/adapters/config/`) · 2.4 | 2026-07-28 (ADR-017: Ethernet IPv4/DNS transaction authority, management hostname read-only) · 2.3 | 2026-07-22 (desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -522,6 +522,14 @@ cấu hình lần sau.
 | `timeout_ms` | không | `300` | 20..10000 |
 | `retry` | không | `1` | **Số lần PHÁT LẠI một giao dịch**, 0..3 (D-05). Không phải ngưỡng offline |
 | `offline_after_errors` | không | `2` | 1..10 lượt poll hỏng liên tiếp thì chuyển OFFLINE |
+
+**Gom coil thành FC15 (U-07, 2026-09-27).** `devices[].coil_write_batch_max`
+(0..16, mặc định 0; validator từ chối ngoài dải bằng `OUT_OF_RANGE`) KHÔNG đi vào
+`slaves[]` mà vào **profile** của thiết bị (`profiles/<device_id>.json`) dưới khoá
+cấp thiết bị `max_coils_per_write`, và chỉ khi giá trị lớn hơn 1. Vắng khoá ⇒ iobus
+ghi mỗi coil một giao dịch như trước. Profile sửa tay: giá trị nhỏ hơn 1 bị bỏ qua
+(giữ 1 = tắt) kèm WARN, giá trị lớn hơn 16 bị kẹp về 16 kèm WARN. Bằng chứng đo
+trên bo: [`EV-MB-FC15-20260927`](../../07_records/test-evidence/modbus/2026-09-27-fc15-coil-batch-target.md).
 
 ### 5b.4 Nạp lại cấu hình
 

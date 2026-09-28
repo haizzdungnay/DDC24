@@ -84,6 +84,78 @@ describe('DevicesPage', () => {
     }))
   })
 
+  /* U-07 (REC-DDC-FIELD-USE-20260927): gom coil liền kề thành một FC15 là tuỳ
+   * chọn THEO THIẾT BỊ, mặc định TẮT — thiết bị không hỗ trợ FC15 sẽ từ chối
+   * mọi lệnh ghi đã gom. Form mới phải gửi 0; bật thì gửi số coil mỗi lệnh. */
+  it('gom FC15 mặc định tắt, bật thì gửi số coil mỗi lệnh kèm giải thích', async () => {
+    const user = userEvent.setup()
+    renderAt()
+    await screen.findByText('ahu-1')
+    const toggle = screen.getByRole('checkbox', { name: 'Ghi nhiều coil một lần (FC15)' })
+    expect(toggle).not.toBeChecked()
+    expect(screen.queryByRole('spinbutton', { name: 'Tối đa coil mỗi lệnh' })).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('device-coil-batch')).getByText(/thiết bị không hỗ trợ sẽ từ chối/)).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: 'Tên thiết bị' }), 'CK508 04')
+    await user.click(screen.getByRole('button', { name: 'Thêm thiết bị mới' }))
+    expect(api.createModbusDevice).toHaveBeenLastCalledWith(expect.objectContaining({
+      display_name: 'CK508 04', coil_write_batch_max: 0
+    }))
+
+    /* Lưu xong thì form về trống — gõ lại tên cho thiết bị thứ hai. */
+    await user.type(screen.getByRole('textbox', { name: 'Tên thiết bị' }), 'CK508 05')
+    await user.click(toggle)
+    const limit = screen.getByRole('spinbutton', { name: 'Tối đa coil mỗi lệnh' })
+    expect(limit).toHaveValue(8)
+    await user.clear(limit)
+    await user.type(limit, '16')
+    await user.click(screen.getByRole('button', { name: 'Thêm thiết bị mới' }))
+    expect(api.createModbusDevice).toHaveBeenLastCalledWith(expect.objectContaining({
+      display_name: 'CK508 05', coil_write_batch_max: 16
+    }))
+
+    /* Lưu xong form về mặc định TẮT; bật rồi tắt thì ô số biến mất. */
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    expect(screen.getByRole('spinbutton', { name: 'Tối đa coil mỗi lệnh' })).toBeInTheDocument()
+    await user.click(toggle)
+    expect(screen.queryByRole('spinbutton', { name: 'Tối đa coil mỗi lệnh' })).not.toBeInTheDocument()
+  })
+
+  /* Sửa một thiết bị đã bật gom không được lặng lẽ tắt nó: form nạp đúng giá
+   * trị, và lưu gửi lại đúng giá trị. Giá trị 1 (cũng là "tắt") hiện là tắt. */
+  it('sửa thiết bị giữ nguyên cấu hình gom FC15', async () => {
+    const user = userEvent.setup()
+    api.updateModbusDevice.mockResolvedValue({})
+    api.getModbusDevices.mockResolvedValue([
+      { device_id: 'ck508-4', display_name: 'CK508 04', enabled: true, rs485_port: '/dev/rs485-1', baud: 9600, parity: 'N', stop_bits: 1, slave_id: 4, poll_ms: 1000, timeout_ms: 300, retry: 1, coil_write_batch_max: 8 },
+      { device_id: 'ck508-5', display_name: 'CK508 05', enabled: true, rs485_port: '/dev/rs485-1', baud: 9600, parity: 'N', stop_bits: 1, slave_id: 5, poll_ms: 1000, timeout_ms: 300, retry: 1, coil_write_batch_max: 1 }
+    ])
+    renderAt()
+    await screen.findByText('ck508-4')
+    const [editFirst, editSecond] = screen.getAllByRole('button', { name: 'Sửa' })
+    await user.click(editFirst)
+    expect(screen.getByRole('checkbox', { name: 'Ghi nhiều coil một lần (FC15)' })).toBeChecked()
+    expect(screen.getByRole('spinbutton', { name: 'Tối đa coil mỗi lệnh' })).toHaveValue(8)
+    await user.click(screen.getByRole('button', { name: 'Cập nhật thiết bị' }))
+    expect(api.updateModbusDevice).toHaveBeenLastCalledWith(expect.objectContaining({
+      device_id: 'ck508-4', coil_write_batch_max: 8
+    }))
+
+    await user.click(editSecond)
+    expect(screen.getByRole('checkbox', { name: 'Ghi nhiều coil một lần (FC15)' })).not.toBeChecked()
+  })
+
+  it('thiết bị đã bật gom FC15 hiện dấu trong bảng', async () => {
+    api.getModbusDevices.mockResolvedValue([
+      { device_id: 'ck508-4', display_name: 'CK508 04', enabled: true, rs485_port: '/dev/rs485-1', baud: 9600, parity: 'N', stop_bits: 1, slave_id: 4, poll_ms: 1000, timeout_ms: 300, retry: 1, coil_write_batch_max: 8 },
+      { device_id: 'meter-2', display_name: 'Meter 2', enabled: true, rs485_port: '/dev/rs485-2', baud: 9600, parity: 'N', stop_bits: 1, slave_id: 9, poll_ms: 2000, timeout_ms: 300, retry: 1 }
+    ])
+    renderAt()
+    expect(await screen.findByText(/FC15×8/)).toBeInTheDocument()
+    expect(screen.getAllByText(/FC15×/)).toHaveLength(1)
+  })
+
   /* OD-MBRTU-002 (CLOSED): tham số serial thuộc về DÂY, không thuộc thiết bị.
    *
    * Bản trước có ô nhập baud/parity/stop ngay trong form Thiết bị — tức mô hình

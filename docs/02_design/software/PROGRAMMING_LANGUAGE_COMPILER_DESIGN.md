@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Trạng thái | **Active — IMPLEMENT_READY; user POU/library semantics đã khóa** |
-| Ngày | 2026-08-31 |
+| Ngày | 2026-09-28 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -126,8 +126,12 @@ không được thay bằng unitless.
 - **Luật WCET của `CASE`** (`ADR-054`): compiler **khử đường** `CASE` về đúng cây
   `IF/ELSIF/ELSE` sẵn có (`st_parser.cpp` `parse_case()`), nên nó không thêm opcode
   IR nào và không mở một đường thực thi thứ hai. Số nhánh là hữu hạn và biết tại
-  compile time; tập nhãn bị chặn trên bởi `kMaxStatements` (§8) và compiler từ chối
-  nhãn trùng, dải rỗng, dải chồng nhau cùng nhãn không phải hằng nguyên. Vì vậy
+  compile time; **số nhãn** (mỗi nhãn là một giá trị hoặc một dải, nở thành tối đa
+  hai phép so biên) bị chặn trên bởi `kMaxStatements` (§8), nên độ rộng của một dải
+  không tốn thêm gì — dải rộng như `16..32767:` hợp lệ (U-11,
+  `REC-DDC-FIELD-USE-20260927`); vượt trần thì báo `CASE has too many labels`.
+  Compiler cũng từ chối nhãn trùng, dải rỗng, dải chồng nhau cùng nhãn không phải
+  hằng nguyên. Vì vậy
   `CASE` giữ nguyên tính chặn trên của một scan — khác `FOR`/`WHILE`/`REPEAT`, nơi
   số vòng phụ thuộc dữ liệu chạy.
 - Precedence và associativity được parser khóa; evaluation trái sang phải; không
@@ -444,6 +448,7 @@ không có semantic riêng ở FE.
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
+| 1.3 | 2026-09-28 | §4.3 làm rõ câu chữ luật WCET của `CASE` theo hành vi U-11 đã merge (PR #803, `REC-DDC-FIELD-USE-20260927`): trần `kMaxStatements` đếm **số nhãn**, mỗi nhãn (một giá trị hoặc một dải) nở thành tối đa hai phép so biên, nên dải rộng như `16..32767:` hợp lệ. Không đổi luật WCET, IR hay diagnostic; không đổi Product/SRS/VVP/Trace/Risk. | Compiler |
 | 1.1 | 2026-08-24 | Đồng bộ corrective As-Built: ba POU kind, CLI POU/library/signal manifests, IR `MKDDCIR1/schema 1`, signal opcode `0x71/0x72`, section `0x0009`, FBD lowerer 1.1.0 và ranh giới package `MKDDCIR2/layout 2`; giữ trạng thái chưa merge/full-gate/target. | Compiler + Core + System Engineering |
 | 0.1 | 2026-08-09 | Thiết kế ST/FBD, pipeline, diagnostics, determinism, limits và source mapping | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung EBNF implementable, conversion/unit matrix và diagnostic ownership; chuyển Detailed Draft chờ review | System Engineering |

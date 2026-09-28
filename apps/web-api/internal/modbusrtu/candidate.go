@@ -257,6 +257,7 @@ func deviceFields(d Device) map[string]string {
 		"timeout_ms":           fmt.Sprint(d.TimeoutMS),
 		"retry":                fmt.Sprint(d.Retry),
 		"offline_after_errors": fmt.Sprint(d.OfflineAfterErrors),
+		"coil_write_batch_max": fmt.Sprint(d.CoilWriteBatchMax),
 		"enabled":              fmt.Sprint(d.Enabled),
 	}
 }

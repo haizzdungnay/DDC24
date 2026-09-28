@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.45.0"
+  version: "1.46.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-09-27"
-  note: "v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  date: "2026-09-28"
+  note: "v1.46.0 (REC-DDC-FIELD-USE-20260927) thêm `ModbusRTUDevice.coil_write_batch_max` (U-07: gom coil liền kề thành FC15 theo thiết bị, 0..16, mặc định tắt) và `ModbusFrameRecord.values` (U-18: giá trị trên dây của khung ghi); cả hai không bắt buộc, không thêm operation; ADDITIVE. v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -6137,6 +6137,19 @@ components:
             ISS-PIO-22 — chu kỳ của nhóm poll `slow`. `0` = suy từ `poll_ms`
             (× 10). Suy chứ không ép một hằng số tuyệt đối, vì "chậm" chỉ có
             nghĩa tương đối với nhịp cơ sở của chính thiết bị.
+        coil_write_batch_max:
+          type: integer
+          minimum: 0
+          maximum: 16
+          default: 0
+          description: >
+            U-07 (REC-DDC-FIELD-USE-20260927) — số coil tối đa iobus gom vào MỘT
+            lệnh FC15 (Write Multiple Coils) cho thiết bị này. `0` hoặc `1` = TẮT
+            (mặc định): mỗi lệnh ghi coil là một giao dịch riêng như trước. `2..16`
+            = các coil LIỀN KỀ đổi cùng lúc lên dây thành một khung (8 relay của
+            một module thành một giao dịch thay vì tám). Chỉ bật khi thiết bị hỗ
+            trợ FC15; thiết bị không hỗ trợ sẽ từ chối mọi lệnh ghi đã gom. Lệnh
+            ghi vào điểm bật `verify_after_write` không bao giờ được gom.
         offline_probe_ms:
           type: integer
           minimum: 1000
@@ -7550,6 +7563,15 @@ components:
         reason: { type: string }
         elapsedUs: { type: integer }
         attempt: { type: integer }
+        values:
+          type: array
+          maxItems: 16
+          items: { type: integer, minimum: 0, maximum: 65535 }
+          description: >
+            U-18 (REC-DDC-FIELD-USE-20260927) — CHỈ có ở khung GHI: giá trị đã
+            phát trên dây. Coil là 0/1 từng bit (FC15 đủ `count` bit, phần tử đầu
+            ứng với `addr`); thanh ghi là word 16-bit như trên dây (FC16 32-bit là
+            hai word theo byte order của điểm). Khung đọc không có trường này.
     ModbusFrames:
       type: object
       required: [schemaVersion, bus, frames, volatile, rawBytes]
