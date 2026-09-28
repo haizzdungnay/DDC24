@@ -424,6 +424,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_pid_closed_loop.cpp
       application/programming/tests/test_program_candidate_registry.cpp
       application/programming/tests/test_programming_package_lifecycle.cpp
+      application/programming/tests/test_binary_provenance.cpp
       application/st/tests/test_st_program_lanes.cpp
       application/st/tests/test_st_value_trace.cpp
       application/st/tests/test_st_signal_bus.cpp
@@ -442,11 +443,14 @@ if(CORE_BUILD_TESTS)
       ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
       ST_PACKAGE_CLI_PATH="$<TARGET_FILE:mkddc-st-package>"
       ST_SIM_CLI_PATH="$<TARGET_FILE:mkddc-st-sim>"
+      PROGRAMMING_SIM_WORKER_PATH="$<TARGET_FILE:mkddc-programming-sim-worker>"
+      SCHEDULE_SIM_PATH="$<TARGET_FILE:mkddc-schedule-sim>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
       PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
       CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package mkddc-st-sim)
+  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package mkddc-st-sim
+                   mkddc-programming-sim-worker mkddc-schedule-sim)
   # ADR-061 4.10 bước 2 — đo WCET từng bước của ScanLoop dưới tải IPC web giống
   # web-api, để so trước/sau trên CÙNG một máy. Không vào ctest: số đo thời gian
   # trên máy dev là để so sánh, không phải cổng pass/fail.

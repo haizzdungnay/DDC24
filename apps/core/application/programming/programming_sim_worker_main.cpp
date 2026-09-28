@@ -535,6 +535,14 @@ int main(int argc, char** argv)
         } else if (argument == "--version") {
             std::printf("%s\n", kWorkerVersion);
             return 0;
+        } else if (argument == "--provenance") {
+            /* T63-002: `artifact_manifest.py` lấy commit từ chính binary. Không
+             * dòng nào dùng `MKDDC_GIT_COMMIT` thì compiler bỏ chuỗi và
+             * `record`/`deploy-record` từ chối worker. Cờ riêng, vì `--version`
+             * là `workerVersion` mà web đọc — đổi định dạng của nó là đổi hợp đồng. */
+            std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n",
+                        MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN);
+            return 0;
         }
     }
 
