@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/google/uuid"
 
 	"mkddc-web/internal/programming/coreipc"
@@ -40,13 +41,38 @@ type traceSessionPayload struct {
 	SessionID string
 }
 
-// traceReadPayload: `[sessionId, fromSequence]` cho TRACE_READ (F18).
-// `fromSequence` là số thứ tự tuyệt đối (từ 1) của mẫu đầu tiên BE CHƯA có.
+// traceReadPayload: `[sessionId, fromSequence, cellFormat]` cho TRACE_READ
+// (F18; `cellFormat` từ Issue #798). `fromSequence` là số thứ tự tuyệt đối (từ
+// 1) của mẫu đầu tiên BE CHƯA có; `cellFormat = 2` xin ô mang lý do, số release
+// và giá trị đọc lại.
 type traceReadPayload struct {
 	_            struct{} `cbor:",toarray"`
 	SessionID    string
 	FromSequence uint64
+	CellFormat   uint64
 }
+
+// traceReadPayloadLegacy — `[sessionId, fromSequence]` cho Core đời trước #798,
+// vốn từ chối payload ba phần tử bằng `IPC-PAYLOAD`.
+type traceReadPayloadLegacy struct {
+	_            struct{} `cbor:",toarray"`
+	SessionID    string
+	FromSequence uint64
+}
+
+// Issue #798 — dạng ô TRACE_READ và mã Core gửi trong ô dạng 2
+// (`StTraceCellReason`, `StTraceReadback` ở `st_value_trace.hpp`).
+const (
+	traceCellFormatRelease uint64 = 2
+
+	traceCellReasonOK          = 0
+	traceCellReasonUnresolved  = 1
+	traceCellReasonNotReleased = 2
+
+	traceReadbackNone        = 0
+	traceReadbackValid       = 1
+	traceReadbackUnavailable = 2
+)
 
 // traceReadReply là thân trả về của TRACE_READ (F18):
 // `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...], firstSequence, nextSequence]`.
@@ -74,10 +100,48 @@ type traceReadSample struct {
 	Values      []traceReadCell
 }
 
+// traceReadCell — một ô của mẫu Core. Dạng 1: `[valid, bits]`. Dạng 2 (Issue
+// #798): `[valid, bits, reason, releaseSeq, readbackState, readbackBits,
+// readbackAgeMs]`. Giải mã tay vì `toarray` đòi đúng số phần tử, trong khi Core
+// cũ vẫn gửi dạng 1.
 type traceReadCell struct {
-	_     struct{} `cbor:",toarray"`
 	Valid bool
 	Bits  uint64
+	// Extended — ô đến ở dạng 2; các trường dưới chỉ có nghĩa khi true.
+	Extended      bool
+	Reason        uint64
+	ReleaseSeq    uint64
+	ReadbackState uint64
+	ReadbackBits  uint64
+	ReadbackAgeMS uint64
+}
+
+func (c traceReadCell) MarshalCBOR() ([]byte, error) {
+	if !c.Extended {
+		return cbor.Marshal([]any{c.Valid, c.Bits})
+	}
+	return cbor.Marshal([]any{c.Valid, c.Bits, c.Reason, c.ReleaseSeq, c.ReadbackState, c.ReadbackBits, c.ReadbackAgeMS})
+}
+
+func (c *traceReadCell) UnmarshalCBOR(data []byte) error {
+	var raw []cbor.RawMessage
+	if err := cbor.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw) != 2 && len(raw) != 7 {
+		return fmt.Errorf("ô trace có %d phần tử, cần 2 hoặc 7", len(raw))
+	}
+	*c = traceReadCell{Extended: len(raw) == 7}
+	if err := cbor.Unmarshal(raw[0], &c.Valid); err != nil {
+		return err
+	}
+	fields := []*uint64{&c.Bits, &c.Reason, &c.ReleaseSeq, &c.ReadbackState, &c.ReadbackBits, &c.ReadbackAgeMS}
+	for index := 1; index < len(raw); index++ {
+		if err := cbor.Unmarshal(raw[index], fields[index-1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // F18 — nhịp đọc ring Core tối thiểu và cửa sổ lỗi đọc liên tiếp. Ring giữ
@@ -127,9 +191,23 @@ type TraceAccepted struct {
 }
 
 type TraceValueView struct {
-	VariableID        string  `json:"variableId"`
-	ProgramValue      any     `json:"programValue"`
-	ActualValue       any     `json:"actualValue"`
+	VariableID   string `json:"variableId"`
+	ProgramValue any    `json:"programValue"`
+	// ActualValue — deprecated (Issue #798): bằng `readbackValue`, KHÔNG còn chép
+	// `programValue`. Một trường tên "actual" mà chép lệnh làm người vận hành tin
+	// rằng đầu ra thật đã theo lệnh.
+	ActualValue any `json:"actualValue"`
+	// Issue #798 — lệnh Program ghi ra điểm (null khi biến không gắn điểm đầu
+	// ra), giá trị ĐỌC LẠI gần nhất của điểm đó và tuổi của nó.
+	CommandedValue any     `json:"commandedValue"`
+	ReadbackValue  any     `json:"readbackValue"`
+	ReadbackAgeMS  *uint64 `json:"readbackAgeMs"`
+	// ReleaseSeq — số lần chạy của Program nguồn tại mẫu; hai mẫu liền nhau cách
+	// nhau > 1 nghĩa là có lần chạy không được lấy mẫu.
+	ReleaseSeq *uint64 `json:"releaseSeq"`
+	// UnavailableReason — vì sao ô không có giá trị: `UNRESOLVED` (biến/Program
+	// không có) hoặc `NOT_RELEASED` (Program không chạy ở boundary của mẫu).
+	UnavailableReason *string `json:"unavailableReason"`
 	OverriddenBy      *string `json:"overriddenBy"`
 	EffectivePriority *int    `json:"effectivePriority"`
 	Quality           string  `json:"quality"`
@@ -208,6 +286,9 @@ type traceSession struct {
 	coreDataTypes map[string]string
 	// F18 — số thứ tự tuyệt đối của mẫu Core kế tiếp BE cần đọc (từ 1).
 	coreNextSequence uint64
+	// Issue #798 — Core đời trước từ chối payload ba phần tử: đọc tiếp bằng
+	// dạng cũ thay vì mất cả phiên.
+	coreLegacyCells bool
 	// F18 — mốc neo đổi CLOCK_MONOTONIC của Core sang giờ tường, chụp MỘT lần
 	// ở lần đọc đầu. Tính lại mỗi lô làm độ lệch nhảy theo khoảng giữa hai lần
 	// chụp `wallNow`/`monoNow`, và mẫu đầu của lô sau có thể đứng TRƯỚC mẫu cuối
@@ -366,12 +447,23 @@ func traceValuesEqual(left, right []TraceValueView) bool {
 	}
 	for index := range left {
 		a, b := left[index], right[index]
+		// `releaseSeq` và `readbackAgeMs` đổi ở MỌI mẫu nên không được so: so
+		// chúng thì `ON_CHANGE` không bao giờ bỏ được mẫu nào.
 		if a.VariableID != b.VariableID || a.Quality != b.Quality || a.Freshness != b.Freshness ||
-			a.ProgramValue != b.ProgramValue || a.ActualValue != b.ActualValue {
+			a.ProgramValue != b.ProgramValue || a.ActualValue != b.ActualValue ||
+			a.ReadbackValue != b.ReadbackValue || a.CommandedValue != b.CommandedValue ||
+			!equalStringPointer(a.UnavailableReason, b.UnavailableReason) {
 			return false
 		}
 	}
 	return true
+}
+
+func equalStringPointer(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 // Dải chu kỳ lấy mẫu Trace (ADR-061 mục 4.6): từ một base step 10 ms tới chu kỳ
@@ -658,15 +750,7 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 				// quét nên là LIVE; bản cũ gửi "FRESH" nằm ngoài hợp đồng.
 				Freshness: "LIVE",
 			}
-			if cell.Valid {
-				value.ProgramValue = traceCellValue(session.coreDataTypes[variableID], cell.Bits)
-			} else {
-				// "Không đo được" KHÁC "đo được giá trị 0": để giá trị rỗng và
-				// nói thẳng chất lượng, thay vì vẽ một điểm 0 lên đồ thị.
-				value.Quality = "BAD"
-				value.Freshness = "UNAVAILABLE"
-			}
-			value.ActualValue = value.ProgramValue
+			applyCoreTraceCell(&value, session.coreDataTypes[variableID], cell)
 			sample.Values = append(sample.Values, value)
 		}
 		// U-09: `ON_CHANGE` bỏ mẫu y hệt mẫu đã giữ. Không phải mẫu rơi: `cycle`
@@ -719,8 +803,12 @@ func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageV
 		if sample.ObservedAt == "" || item.ObservedAt < sample.ObservedAt {
 			sample.ObservedAt = item.ObservedAt
 		}
+		// Monitor đã tách lệnh (`programValue`) và số đọc lại của điểm
+		// (`actualValue`), nên đường poll công bố cả hai trường mới (Issue #798);
+		// không có số release vì snapshot monitor không gắn với lần chạy nào.
 		sample.Values = append(sample.Values, TraceValueView{
 			VariableID: item.VariableID, ProgramValue: item.ProgramValue, ActualValue: item.ActualValue,
+			CommandedValue: item.ProgramValue, ReadbackValue: item.ActualValue,
 			OverriddenBy: item.OverriddenBy, EffectivePriority: item.EffectivePriority,
 			Quality: item.Quality, Freshness: item.Freshness,
 		})
@@ -911,18 +999,38 @@ func (s *RuntimeService) readCoreTrace(ctx context.Context, traceID string) (tra
 	session := s.traces.sessions[traceID]
 	hasCore := session != nil && len(session.coreVariableIDs) > 0
 	from := uint64(1)
+	legacy := false
 	if session != nil && session.coreNextSequence > 0 {
 		from = session.coreNextSequence
+	}
+	if session != nil {
+		legacy = session.coreLegacyCells
 	}
 	s.traces.mu.RUnlock()
 	if !hasCore {
 		return traceReadReply{}, false
 	}
-	payload, err := coreipc.EncodePayload(traceReadPayload{SessionID: traceID, FromSequence: from})
+	var request any = traceReadPayload{SessionID: traceID, FromSequence: from, CellFormat: traceCellFormatRelease}
+	if legacy {
+		request = traceReadPayloadLegacy{SessionID: traceID, FromSequence: from}
+	}
+	payload, err := coreipc.EncodePayload(request)
 	if err != nil {
 		return traceReadReply{}, false
 	}
 	response, ok := s.callCoreTrace(ctx, traceID, coreipc.ActionTraceRead, payload)
+	if ok && !legacy && response.Result == coreipc.ResultRejected &&
+		response.DetailCode != nil && *response.DetailCode == "IPC-PAYLOAD" {
+		// Issue #798: Core đời trước #798 không biết `cellFormat`. Nhớ lại và
+		// đọc bằng dạng cũ — ô sẽ không có số release/đọc lại, nhưng phiên vẫn
+		// chạy thay vì rơi về poll monitor.
+		s.traces.mu.Lock()
+		if current := s.traces.sessions[traceID]; current != nil {
+			current.coreLegacyCells = true
+		}
+		s.traces.mu.Unlock()
+		return s.readCoreTrace(ctx, traceID)
+	}
 	if !ok || response.Result != coreipc.ResultOK {
 		return traceReadReply{}, false
 	}
@@ -931,6 +1039,49 @@ func (s *RuntimeService) readCoreTrace(ctx context.Context, traceID string) (tra
 		return traceReadReply{}, false
 	}
 	return reply, true
+}
+
+// applyCoreTraceCell dịch một ô Core sang giá trị công bố (Issue #798).
+//   - Ô không hợp lệ: giá trị rỗng. `NOT_RELEASED` (Program không chạy ở boundary
+//     của mẫu) là UNKNOWN chứ không phải BAD — dữ liệu không hỏng, chỉ là không
+//     có lần chạy nào để trình bày; `UNRESOLVED`/dạng cũ vẫn là BAD.
+//   - `actualValue` = số đọc lại (nếu có), KHÔNG chép lệnh. Ô dạng cũ không có
+//     kênh đọc lại nên để rỗng.
+func applyCoreTraceCell(value *TraceValueView, dataType string, cell traceReadCell) {
+	if cell.Valid {
+		value.ProgramValue = traceCellValue(dataType, cell.Bits)
+	} else {
+		// "Không đo được" KHÁC "đo được giá trị 0": để giá trị rỗng và
+		// nói thẳng chất lượng, thay vì vẽ một điểm 0 lên đồ thị.
+		value.Quality = "BAD"
+		value.Freshness = "UNAVAILABLE"
+	}
+	if !cell.Extended {
+		return
+	}
+	switch cell.Reason {
+	case traceCellReasonNotReleased:
+		reason := "NOT_RELEASED"
+		value.UnavailableReason = &reason
+		value.Quality = "UNKNOWN"
+	case traceCellReasonUnresolved:
+		reason := "UNRESOLVED"
+		value.UnavailableReason = &reason
+	}
+	if cell.Reason != traceCellReasonUnresolved {
+		releaseSeq := cell.ReleaseSeq
+		value.ReleaseSeq = &releaseSeq
+	}
+	if cell.ReadbackState == traceReadbackNone {
+		return
+	}
+	value.CommandedValue = value.ProgramValue
+	if cell.ReadbackState == traceReadbackValid {
+		value.ReadbackValue = traceCellValue(dataType, cell.ReadbackBits)
+		age := cell.ReadbackAgeMS
+		value.ReadbackAgeMS = &age
+		value.ActualValue = value.ReadbackValue
+	}
 }
 
 // traceCellValue diễn giải 8 byte thô của một ô theo kiểu đã khai trong package.
