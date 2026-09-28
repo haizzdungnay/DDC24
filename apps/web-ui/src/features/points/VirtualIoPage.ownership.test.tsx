@@ -162,6 +162,25 @@ describe('lý do chỉ đọc hiện trên màn hình', () => {
     expect(screen.queryByText(/chương trình ST sở hữu/)).not.toBeInTheDocument()
   })
 
+  /* U-05 (REC-DDC-FIELD-USE-20260927) — `writable` là quyền của người vận hành.
+   * Với VP do chương trình sở hữu, người vận hành không bao giờ ghi được, nên ô
+   * Writable khoá lại và nói nó không quyết định chương trình có ghi được hay
+   * không; điểm do WEB sở hữu thì ô vẫn bật tắt bình thường. */
+  it('ô Writable khoá kèm lời giải thích khi chương trình sở hữu', async () => {
+    api.getVirtualPoints.mockResolvedValue([vp({ writable: false, source: 'PROGRAM', boundPointId: 'AV-01' })])
+    renderPage()
+    const box = await screen.findByRole('checkbox', { name: 'Writable' })
+    expect(box).toBeDisabled()
+    expect(screen.getByText(/Không áp dụng khi chương trình sở hữu/)).toBeInTheDocument()
+  })
+
+  it('ô Writable bật tắt được khi WEB sở hữu', async () => {
+    api.getVirtualPoints.mockResolvedValue([vp({ writable: true, source: 'WEB' })])
+    renderPage()
+    expect(await screen.findByRole('checkbox', { name: 'Writable' })).toBeEnabled()
+    expect(screen.queryByText(/Không áp dụng khi chương trình sở hữu/)).not.toBeInTheDocument()
+  })
+
   it('điểm ghi được vẫn có nút Write', async () => {
     api.getVirtualPoints.mockResolvedValue([vp({ writable: true, source: 'WEB' })])
     renderPage()

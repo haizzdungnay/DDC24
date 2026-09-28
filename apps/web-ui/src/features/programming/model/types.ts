@@ -306,6 +306,9 @@ export interface ProgrammingTrace {
   startedAt: string
   updatedAt: string
   stopReason: 'DURATION_REACHED' | 'QUOTA_REACHED' | 'USER_STOPPED' | 'SOURCE_UNAVAILABLE' | null
+  /** U-02 — nguồn mẫu: `CORE` từng chu kỳ; `MONITOR_POLL` xấp xỉ (Core không
+   *  nhận phiên). Vắng khi Core chưa trả lời hoặc server đời cũ. */
+  source?: 'CORE' | 'MONITOR_POLL'
   droppedSamples: number
   samples: Array<{ sequence: number; observedAt: string; values: ProgrammingTraceValue[] }>
 }

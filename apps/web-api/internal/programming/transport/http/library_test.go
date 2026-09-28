@@ -410,6 +410,56 @@ func TestLibraryHandlerDoesNotStealOtherProjectRoutes(t *testing.T) {
 	}
 }
 
+// U-14 (REC-DDC-FIELD-USE-20260927) — gửi sai `baseRevisionId` khi PATCH Draft
+// vẫn là 409 `PRG-ERR-CONFLICT-001`, nhưng phải nói trường nào sai và giá trị
+// mong đợi. Bản cũ trả "conflict" trần giống hệt lỗi ETag; trên bo, người gọi
+// API gửi ID Draft thay cho base và không có manh mối nào để sửa.
+func TestSaveDraftSaiBaseRevisionNoiRoTruongVaGiaTriMongDoi(t *testing.T) {
+	mux, projectID, etag := newLibraryTestMux(t, auth.RoleAdmin)
+	readRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(readRecorder, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/projects/"+projectID, "", "", ""))
+	var project struct {
+		DraftRevisionID string `json:"draftRevisionId"`
+		BaseRevisionID  string `json:"baseRevisionId"`
+	}
+	if err := json.Unmarshal(readRecorder.Body.Bytes(), &project); err != nil {
+		t.Fatalf("đọc project: %v", err)
+	}
+	expected := project.BaseRevisionID
+	if expected == "" {
+		expected = project.DraftRevisionID
+	}
+	const wrong = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	body := `{"schemaVersion":"1.0","baseRevisionId":"` + wrong + `","operations":[{"op":"setFunctionalTags","tags":["ahu"]}]}`
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, libraryRequest(t, http.MethodPatch,
+		"/api/v1/programming/projects/"+projectID+"/draft", body, etag,
+		"10000000-0000-4000-8000-0000000000f2"))
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, mong đợi 409; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code  string         `json:"code"`
+			Field string         `json:"field"`
+			Args  map[string]any `json:"args"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if response.Error.Code != "PRG-ERR-CONFLICT-001" {
+		t.Fatalf("code = %q", response.Error.Code)
+	}
+	if response.Error.Field != "baseRevisionId" {
+		t.Fatalf("field = %q, mong đợi baseRevisionId", response.Error.Field)
+	}
+	if response.Error.Args["expected"] != expected || response.Error.Args["actual"] != wrong {
+		t.Fatalf("args = %v, mong đợi expected=%s actual=%s", response.Error.Args, expected, wrong)
+	}
+}
+
 // F-P59-DELETE-PROGRAM-001 — batch `PATCH .../draft` phải nói RÕ thao tác nào bị
 // từ chối.
 //

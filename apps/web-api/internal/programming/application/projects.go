@@ -252,7 +252,7 @@ func (s *ProjectService) SaveDraft(ctx context.Context, actor Actor, command Sav
 		expectedBase = snapshot.Draft.DraftID
 	}
 	if command.BaseRevisionID != expectedBase {
-		return MutationResult{}, programmingstore.ErrETagConflict
+		return MutationResult{}, &BaseRevisionMismatchError{Expected: expectedBase, Actual: command.BaseRevisionID}
 	}
 	content, err := applyDraftOperations(snapshot.Draft.ContentJSON, command.Operations)
 	if err != nil {
@@ -313,7 +313,7 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 		expectedBase = snapshot.Draft.DraftID
 	}
 	if command.BaseRevisionID != expectedBase {
-		return MutationResult{}, programmingstore.ErrETagConflict
+		return MutationResult{}, &BaseRevisionMismatchError{Expected: expectedBase, Actual: command.BaseRevisionID}
 	}
 	// Draft library được đóng băng CÙNG lúc với Revision. Pin một library còn
 	// DRAFT nghĩa là pin một thứ vẫn sửa được — mọi POU dependency sau đó trỏ
@@ -758,3 +758,20 @@ func isUUID(value string) bool {
 func formatTime(milliseconds int64) string {
 	return time.UnixMilli(milliseconds).UTC().Format(time.RFC3339Nano)
 }
+
+// BaseRevisionMismatchError — U-14 (REC-DDC-FIELD-USE-20260927). `baseRevisionId`
+// của request phải là BASE của Draft (Revision mà Draft dựa lên; Draft mới tinh
+// thì là chính `draftId`). Gửi nhầm, ví dụ gửi ID Draft của một Draft đã có base,
+// bản cũ chỉ trả `409 PRG-ERR-CONFLICT-001` trần — giống hệt lỗi ETag — nên người
+// gọi API không biết trường nào sai. Lỗi này vẫn là ETag conflict (`errors.Is`),
+// nhưng lớp HTTP gắn `field=baseRevisionId` và giá trị mong đợi.
+type BaseRevisionMismatchError struct {
+	Expected string
+	Actual   string
+}
+
+func (e *BaseRevisionMismatchError) Error() string {
+	return fmt.Sprintf("baseRevisionId=%q không phải base của Draft (mong đợi %q)", e.Actual, e.Expected)
+}
+
+func (e *BaseRevisionMismatchError) Unwrap() error { return programmingstore.ErrETagConflict }

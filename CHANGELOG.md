@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Fixed — Nhóm "Ngay" của báo cáo sử dụng thực tế: Trace trung thực, VP writable, lỗi 409 rõ trường, deploy helper, hướng dẫn FBD (2026-09-27)
+
+- Phạm vi: `apps/web-api/internal/programming/application/{trace.go,point_binding_facts.go,projects.go}`, `transport/http/projects.go`, `contracts/openapi/openapi.yaml` (1.43.0 → 1.44.0), `contracts/programming/{g1_contract_join_v1.json,pgm02_workspace_v1.json}` (re-pin `openapiSha256`), FE `runtime/WatchTab.tsx`, `points/VirtualIoPage.tsx`, `shared/components/Toast.tsx`, `platform/packaging/install.sh`, `docs/03_implementation/DEPLOY_FOXLINX.md`, `FBD_CREATION_AND_ACTIVATION_GUIDE.md` (1.1.0); `REC-DDC-FIELD-USE-20260927` lên 1.1. PR #797.
+- U-02: Trace thêm `source` (`CORE` / `MONITOR_POLL`). Phiên bị Core từ chối rơi về poll monitor; mọi chu kỳ lọt giữa hai snapshot nay được cộng vào `droppedSamples` (trên bo trước đây: 111 mẫu/55,5 s mà vẫn báo 0 mẫu rơi). FE cảnh báo "Dữ liệu xấp xỉ".
+- U-03: mẫu Core gửi `freshness = LIVE` thay cho `FRESH` nằm ngoài enum OpenAPI.
+- U-05: Check không đòi `writable` (quyền của người vận hành) cho VP do PROGRAM sở hữu; quyền ghi của chương trình đến từ `source`, khớp catalog. UI khoá ô Writable kèm giải thích.
+- U-14: sai `baseRevisionId` vẫn là `409 PRG-ERR-CONFLICT-001` nhưng có `field = baseRevisionId` và `args = {expected, actual}`.
+- U-17: hướng dẫn FBD theo ADR-061 (8 chu kỳ) và ADR-062; `acknowledgements` = mọi key `PRESENT`.
+- U-21: `install.sh` kiểm `(deleted)` cho cả hai helper chạy chung binary web; runbook deploy kiểm exe của cả ba unit.
+- Ngoài danh sách: `ToastProvider` huỷ timer khi unmount. Trước đây cả bộ vitest exit 1 vì lỗi unhandled "window is not defined" dù mọi test PASS.
+- Kiểm chứng: `go vet` exit 0; `go test ./... -count=1` 21 package ok; vitest 267 file / 3 476 test, exit 0; `npm run lint` và `npm run build` exit 0; `verify-project.sh --component layout` exit 0; guard packaging 14/14; `docs_iso_harness --expect` PASS; `candidate_pin_check` 17/17. Test đỏ → xanh: đếm chu kỳ rơi ở đường poll, guard U-21, `Toast.test.tsx`. Chưa deploy lên bo.
+
 ### Added — Báo cáo vấn đề cần nâng cấp mã nguồn DDC-24 qua sử dụng thực tế (2026-09-27)
 
 - Thêm `docs/07_records/reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md` (`REC-DDC-FIELD-USE-20260927`): 21 vấn đề rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo lab. Mỗi vấn đề có mức, kịch bản hỏng, dẫn chứng `file:dòng` và tiêu chí đóng; kèm lộ trình 4 đợt. Những vấn đề đáng chú ý:

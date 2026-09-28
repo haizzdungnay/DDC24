@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.43.0"
+  version: "1.44.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -19,7 +19,7 @@ info:
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
   date: "2026-09-27"
-  note: "v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  note: "v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -4386,6 +4386,12 @@ components:
         startedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         stopReason: { type: [string, "null"], enum: [DURATION_REACHED, QUOTA_REACHED, USER_STOPPED, SOURCE_UNAVAILABLE, null] }
+        # U-02: nguồn mẫu. CORE = Core lấy mẫu tại ranh giới quét, mỗi mẫu đúng
+        # một chu kỳ. MONITOR_POLL = Core không nhận phiên (thường vì đang phục vụ
+        # phiên khác), BE đọc snapshot monitor nên chỉ là dữ liệu xấp xỉ và mọi
+        # chu kỳ lọt giữa hai snapshot được cộng vào `droppedSamples`. Không bắt
+        # buộc: vắng trong khoảnh khắc trước khi Core trả lời, và ở server đời cũ.
+        source: { type: string, enum: [CORE, MONITOR_POLL] }
         droppedSamples: { type: integer, minimum: 0 }
         samples:
           type: array

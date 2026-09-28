@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { cn } from '../utils'
@@ -13,10 +13,26 @@ const icon = { success: CheckCircle2, error: XCircle, warn: AlertTriangle, info:
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
+  /* Timer tự ẩn phải bị huỷ khi provider gỡ khỏi cây. Bản cũ để timer chạy
+   * tiếp và `setItems` lên provider đã gỡ sau 3,6 s; trong test, lúc đó jsdom đã
+   * dỡ nên React ném `window is not defined` và cả bộ vitest exit 1 dù mọi test
+   * PASS (gặp khi chạy `InputsPage.test.tsx` trong cả bộ). */
+  const timers = useRef(new Set<number>())
+  useEffect(() => {
+    const pending = timers.current
+    return () => {
+      pending.forEach((timer) => window.clearTimeout(timer))
+      pending.clear()
+    }
+  }, [])
   const push = useCallback((kind: ToastKind, message: string) => {
     const id = Date.now() + Math.random()
     setItems((current) => [...current, { id, kind, message }])
-    window.setTimeout(() => setItems((current) => current.filter((item) => item.id !== id)), 3600)
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer)
+      setItems((current) => current.filter((item) => item.id !== id))
+    }, 3600)
+    timers.current.add(timer)
   }, [])
   const value = useMemo(() => ({ push }), [push])
 

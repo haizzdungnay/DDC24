@@ -359,6 +359,14 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	if errors.As(err, &periodError) && public.Code == domain.ErrRequest {
 		public.Args = map[string]any{"detailCode": periodError.DetailCode(), "actual": periodError.PeriodMs}
 	}
+	// U-14: sai `baseRevisionId` vẫn là 409 `PRG-ERR-CONFLICT-001`, nhưng nói
+	// trường nào sai và giá trị mong đợi — "conflict" trần giống hệt lỗi ETag,
+	// người gọi API không có cách nào biết phải sửa gì.
+	var baseMismatch *programmingapplication.BaseRevisionMismatchError
+	if errors.As(err, &baseMismatch) && public.Code == domain.ErrConflict {
+		public.Field = "baseRevisionId"
+		public.Args = map[string]any{"expected": baseMismatch.Expected, "actual": baseMismatch.Actual}
+	}
 	WriteProgrammingError(w, status, public, correlationID)
 }
 

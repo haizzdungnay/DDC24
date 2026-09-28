@@ -159,9 +159,13 @@ func checkVirtualBinding(snapshot *PointBindingSnapshot, pointID, direction, dat
 				"vòng đối chiếu sẽ kéo giá trị về cấu hình mỗi 10 giây và không bên nào thắng hẳn — "+
 				"đổi chủ sở hữu điểm sang PROGRAM rồi Check lại", pointID)
 		}
-		if !facts.Writable {
-			return fmt.Sprintf("điểm ảo %s khai chỉ đọc (writable=false) nhưng chương trình đang GHI vào nó", pointID)
-		}
+		/* U-05 (REC-DDC-FIELD-USE-20260927): KHÔNG đòi `writable` ở đây.
+		 * `writable` là trục operator ("người vận hành sửa được không"); với
+		 * VP do PROGRAM sở hữu, người vận hành vốn không ghi được (web-api từ
+		 * chối, UI khoá), còn quyền ghi của CHƯƠNG TRÌNH đến từ `source` —
+		 * đúng như catalog báo cho compiler (`pointCatalogDirection`). Bản cũ
+		 * đòi thêm `writable=true`, nên muốn khoá VP trạng thái khỏi người vận
+		 * hành thì Check FAILED; trên bo, 3 VP trạng thái bị chặn như vậy. */
 	}
 	if want, ok := virtualSTType(pointID, facts); ok &&
 		!strings.EqualFold(strings.TrimSpace(dataType), want) {

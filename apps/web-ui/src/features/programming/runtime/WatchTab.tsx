@@ -250,7 +250,23 @@ export function WatchTab() {
                 · {trace.droppedSamples} {pick('mẫu rơi', 'dropped samples')}
               </span>
               {trace.stopReason && <span>· {trace.stopReason}</span>}
+              {trace.source === 'CORE' && (
+                <span data-testid="trace-source">· {pick('nguồn Core, từng chu kỳ', 'Core source, every cycle')}</span>
+              )}
             </div>
+            {/* U-02 (REC-DDC-FIELD-USE-20260927): Core chỉ phục vụ một phiên Trace
+                tại một thời điểm. Phiên khác rơi về đọc snapshot monitor — dữ liệu
+                xấp xỉ, không phải từng chu kỳ. Trên bo, phiên như vậy nhận 1 mẫu mỗi
+                132–1 065 ms dù hiển thị "mỗi 100 ms". Phải nói ra, nếu không người
+                đọc sẽ chấm đồ thị như dữ liệu từng chu kỳ. */}
+            {trace.source === 'MONITOR_POLL' && (
+              <p role="status" data-testid="trace-source" className="mt-1 rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+                {pick(
+                  'Dữ liệu xấp xỉ: Core không nhận phiên này (thường vì đang có một phiên Trace khác), nên mẫu lấy từ snapshot monitor và KHÔNG đủ từng chu kỳ. Các chu kỳ không có mẫu được tính vào "mẫu rơi". Dừng phiên kia rồi tạo lại để có dữ liệu từng chu kỳ.',
+                  'Approximate data: Core did not accept this session (usually because another Trace is running), so samples come from monitor snapshots and do NOT cover every cycle. Cycles without a sample are counted as dropped. Stop the other session and start again for per-cycle data.',
+                )}
+              </p>
+            )}
             {/* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau:
                 mất nguồn, và nguồn ĐỔI THÀNH chương trình khác. Với phiên có
                 pin, nói rõ vế thứ hai — nếu không người đọc sẽ đi tìm một sự cố
