@@ -32,6 +32,7 @@ type App struct {
 	core                   CoreStatusClient
 	netcfg                 netcfgAuthority
 	os                     OSReader
+	osMetrics              *OSMetricsCollector // T63-103: handler đọc bản chụp, không gọi os.ReadMetrics
 	time                   TimeService
 	trends                 *TrendStore
 	historian              *HistorianPolicyService
@@ -103,7 +104,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		osReader = NewDefaultOSReader()
 	}
 	cfg.deriveProgrammingPaths()
-	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), os: osReader, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
+	osMetrics := NewOSMetricsCollector(osReader, osMetricsInterval, osMetricsStaleAfter)
+	osMetrics.logf = logger.Printf
+	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), os: osReader, osMetrics: osMetrics, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
 	if cfg.ProgrammingRevA {
 		store, openErr := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{Path: cfg.ProgrammingDBPath, BackupDir: cfg.ProgrammingBackupDir})
 		if openErr != nil {
@@ -538,6 +541,8 @@ func Main() {
 
 func (a *App) StartSampler(ctx context.Context) {
 	if a != nil {
+		// T63-103: huỷ `ctx` (SIGTERM) hoặc Close() dừng collector.
+		a.osMetrics.Start(ctx)
 		_ = a.StartLegacyHistorianWriters(ctx)
 	}
 	if a != nil {
@@ -568,6 +573,7 @@ func (a *App) Close() error {
 		return nil
 	}
 	var trendErr, historianErr, programmingErr error
+	a.osMetrics.Stop()
 	if a.legacyState == "running" || a.legacyState == "quiescing" {
 		quiesceCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = a.stopLegacyHistorianWriters(quiesceCtx)

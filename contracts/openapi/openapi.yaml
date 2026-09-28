@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.48.0"
+  version: "1.49.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -19,7 +19,7 @@ info:
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
   date: "2026-09-28"
-  note: "v1.48.0 (Plan 63 T63-101, PERF-API-01) thêm `SystemStatus.shm_reader` và schema `ShmSegmentReaderMetrics`: bộ đếm tích luỹ reads/retries/failures/max_wait_us của reader seqlock SHM trong tiến trình web (deadline 1 ms), không bắt buộc, vắng khi web không có core client thật; không thêm operation; ADDITIVE. v1.47.0 (Issue #798, U-04) `ProgrammingTraceValue` thêm `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` deprecated; ADDITIVE. v1.46.0 (REC-DDC-FIELD-USE-20260927) thêm `ModbusRTUDevice.coil_write_batch_max` (U-07: gom coil liền kề thành FC15 theo thiết bị, 0..16, mặc định tắt) và `ModbusFrameRecord.values` (U-18: giá trị trên dây của khung ghi); cả hai không bắt buộc, không thêm operation; ADDITIVE. v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  note: "v1.49.0 (Plan 63 T63-103, PERF-API-02) thêm schema `OsMetricsFreshness` và trường `osMetrics` ở `SystemStatus` và `Overview`: độ mới của số đo hệ điều hành do collector nền 1 s lấy mẫu; `state` unknown/stale ⇒ mọi trường số đo hệ điều hành vắng mặt, không bao giờ là 0; không bắt buộc, không thêm operation; ADDITIVE. v1.48.0 (Plan 63 T63-101, PERF-API-01) thêm `SystemStatus.shm_reader` và schema `ShmSegmentReaderMetrics`: bộ đếm tích luỹ reads/retries/failures/max_wait_us của reader seqlock SHM trong tiến trình web (deadline 1 ms), không bắt buộc, vắng khi web không có core client thật; không thêm operation; ADDITIVE. v1.47.0 (Issue #798, U-04) `ProgrammingTraceValue` thêm `commandedValue`, `readbackValue`, `readbackAgeMs`, `releaseSeq`, `unavailableReason`; `actualValue` deprecated; ADDITIVE. v1.46.0 (REC-DDC-FIELD-USE-20260927) thêm `ModbusRTUDevice.coil_write_batch_max` (U-07: gom coil liền kề thành FC15 theo thiết bị, 0..16, mặc định tắt) và `ModbusFrameRecord.values` (U-18: giá trị trên dây của khung ghi); cả hai không bắt buộc, không thêm operation; ADDITIVE. v1.45.0 thêm `ProgrammingTraceRequest.sampleMode` (EVERY_SAMPLE | ON_CHANGE, không bắt buộc), `ProgrammingTrace.sampleMode` và `ProgrammingTraceSample.cycle`: phiên ON_CHANGE chỉ giữ mẫu Core có ô đổi nên cùng trần 10 000 ô ghi được lâu hơn (U-09, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.44.0 thêm `ProgrammingTrace.source` (CORE | MONITOR_POLL, không bắt buộc) để phiên Trace chạy bằng đường poll monitor tự nói mình là dữ liệu xấp xỉ, và BE gửi `freshness=LIVE` thay cho `FRESH` nằm ngoài enum (U-02/U-03, REC-DDC-FIELD-USE-20260927); ADDITIVE. v1.43.0 khai kênh WebSocket chỉ đọc /ws/simulation (đã chạy từ PR #759 nhưng thiếu trong spec, làm TestRouteTableMatchesOpenAPI đỏ). v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -5176,7 +5176,8 @@ components:
             ip: { type: string }
             mac: { type: string }
             systemTime: { type: string, format: date-time }
-            uptimeS: { type: integer }
+            uptimeS: { type: integer, description: "Vắng khi osMetrics.state ≠ ok (T63-103)" }
+        osMetrics: { $ref: "#/components/schemas/OsMetricsFreshness" }
         connected: { type: boolean }
         lastDataAt:
           type: string
@@ -5546,9 +5547,10 @@ components:
     SystemStatus:
       type: object
       properties:
-        cpu_percent: { type: number }
-        ram_percent: { type: number }
-        uptime_s: { type: integer }
+        cpu_percent: { type: number, description: "Vắng khi osMetrics.state ≠ ok (T63-103) — không bao giờ là 0 thay cho không biết" }
+        ram_percent: { type: number, description: "Vắng khi osMetrics.state ≠ ok (T63-103)" }
+        uptime_s: { type: integer, description: "Vắng khi osMetrics.state ≠ ok (T63-103)" }
+        osMetrics: { $ref: "#/components/schemas/OsMetricsFreshness" }
         versions:
           type: object
           description: TÃ¡ch version tá»«ng thÃ nh pháº§n (Contract Freeze 2026-06-11)
@@ -5587,6 +5589,22 @@ components:
             since: { type: string, format: date-time, description: "Lúc web khởi động = mốc bắt đầu đếm" }
             io: { $ref: "#/components/schemas/ShmSegmentReaderMetrics" }
             plc: { $ref: "#/components/schemas/ShmSegmentReaderMetrics" }
+    OsMetricsFreshness:
+      type: object
+      required: [state, sampledAt, ageMs, intervalMs, staleAfterMs]
+      description: >
+        T63-103 (PERF-API-02) — độ mới của số đo hệ điều hành do collector nền 1 s lấy
+        mẫu, dùng chung cho /system/status và /overview. state=unknown (chưa có mẫu)
+        hoặc stale (mẫu cũ hơn staleAfterMs) ⇒ mọi trường số đo hệ điều hành
+        (cpu_percent, ram_percent, tempC, uptime_s, controller.uptimeS, …) VẮNG MẶT,
+        không bao giờ là 0.
+      properties:
+        state: { type: string, enum: [ok, unknown, stale] }
+        sampledAt: { type: [string, "null"], format: date-time, description: "Lúc lấy mẫu gần nhất thành công; null khi chưa từng có mẫu" }
+        ageMs: { type: [integer, "null"], minimum: 0, description: "Tuổi mẫu lúc trả response (đồng hồ đơn điệu); null khi chưa từng có mẫu" }
+        intervalMs: { type: integer, example: 1000 }
+        staleAfterMs: { type: integer, example: 2000 }
+        lastError: { type: string, description: "Lỗi của lần lấy mẫu gần nhất; vắng khi lần đó thành công" }
     ShmSegmentReaderMetrics:
       type: object
       required: [reads, retries, failures, max_wait_us]

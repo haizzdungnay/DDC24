@@ -59,6 +59,9 @@ type SystemStatus struct {
 	Versions         VersionStatus            `json:"versions"`
 	IOP              IOPStatus                `json:"iop"`
 	Scan             ScanStatus               `json:"scan"`
+	// OSMetrics nói số đo hệ điều hành ở trên cũ tới đâu (T63-103). Khi state là
+	// `unknown`/`stale`, mọi trường số đo ở trên VẮNG MẶT thay vì mang số 0.
+	OSMetrics OSMetricsFreshness `json:"osMetrics"`
 	// SHMReader chỉ có khi core client là CoreClient thật (T63-101).
 	SHMReader *SHMReaderMetrics `json:"shm_reader,omitempty"`
 }
@@ -91,12 +94,10 @@ func processAlive(pidPath string) bool {
 }
 
 func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
-	metrics, err := a.os.ReadMetrics(r.Context())
-	if err != nil {
-		a.logger.Printf("WARN os_metrics err=%v", err)
-	}
-	// `T57-3.4`: mẫu cho vòng nhớ 60 phút đi kèm chính lần đọc này — không dựng
-	// thêm một vòng lấy mẫu nền cho cùng một con số.
+	// T63-103: đọc bản chụp của collector nền, không chờ /proc trên đường request.
+	metrics, freshness := a.osMetrics.Snapshot()
+	// `T57-3.4`: vòng nhớ 60 phút vẫn lấy mẫu theo nhịp request này. Mẫu
+	// `unknown`/`stale` vào vòng nhớ dưới dạng null, không thành số 0.
 	a.systemHistory.Observe(time.Now(), metrics)
 	core, err := a.core.ReadStatus(r.Context())
 	if err != nil {
@@ -140,6 +141,7 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		Versions:         versions,
 		IOP:              core.IOP,
 		Scan:             core.Scan,
+		OSMetrics:        freshness,
 	}
 	// T63-101: counter retry/fail của reader SHM đi cùng endpoint metric sẵn có,
 	// để probe Plan 63 §6 lấy delta đầu/cuối cửa sổ đo mà không cần route mới.
@@ -252,20 +254,24 @@ func readCPUPercent(ctx context.Context, statPath string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cpuPercentBetween(first, second), nil
+	value, ok := cpuPercentBetween(first, second)
+	if !ok {
+		return 0, fmt.Errorf("%s: bộ đếm CPU không tăng giữa hai mẫu", statPath)
+	}
+	return value, nil
 }
 
-func cpuPercentBetween(first, second cpuSample) float64 {
+// cpuPercentBetween trả ok=false khi hai mẫu không cho ra con số có nghĩa (bộ đếm
+// không tăng hoặc lùi). T63-103: ca đó từng trả 0, tức báo "CPU 0 %" cho một lần
+// đo hỏng; nay caller nhận lỗi và trường CPU vắng mặt.
+func cpuPercentBetween(first, second cpuSample) (float64, bool) {
 	if second.total <= first.total || second.idle < first.idle {
-		return 0
+		return 0, false
 	}
 	deltaTotal := second.total - first.total
 	deltaIdle := second.idle - first.idle
-	if deltaTotal == 0 {
-		return 0
-	}
 	value := (1 - float64(deltaIdle)/float64(deltaTotal)) * 100
-	return round2(clamp(value, 0, 100))
+	return round2(clamp(value, 0, 100)), true
 }
 
 func readCPUSample(statPath string) (cpuSample, error) {
