@@ -887,6 +887,12 @@ void BusWorker::record_write_frame(uint8_t fc, uint16_t addr, uint16_t count, ui
     metrics.frames().record(frame);
 }
 
+#ifdef MKDDC_ENABLE_MODBUS
+/* Ba hàm tới `#endif` chỉ được gọi trong nhánh `MKDDC_ENABLE_MODBUS` của
+ * đường chọn lô/thực thi lệnh ghi. Build tắt Modbus (lane `e2e-real`, profile
+ * baseline) với `-Werror=unused-function` đỏ ngay ở đây nếu để chúng ngoài
+ * khối điều kiện. */
+
 /* Điểm profile mà một lệnh ghi nhắm tới.
  *
  * Khớp ĐÚNG địa chỉ trước — đúng như bản trước — rồi mới tới điểm có dải
@@ -929,6 +935,7 @@ static bool write_expired(const PendingWrite& w, uint64_t now_ms)
     const uint64_t deadline = (w.deadline_ms > 0) ? w.deadline_ms : (enqueued + kWriteTtlMs);
     return now_ms > deadline;
 }
+#endif  // MKDDC_ENABLE_MODBUS
 
 size_t BusWorker::oldest_pending_slave(const std::vector<bool>& visited) const
 {
