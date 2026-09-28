@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Fixed — Lane `e2e-real` xanh trở lại: ISS-PGM03-08 (#790), T59-505 (#786), build iobus tắt Modbus (2026-09-28)
+
+- **Phạm vi:** `apps/iobus/adapters/modbus_rtu/bus_worker.cpp`; `apps/web-ui/src/features/programming/api/queries.ts` + `queries.test.tsx`; `apps/web-ui/e2e/programming-real.spec.ts`.
+- **Build iobus (chặn cả lane):** `scripts/run_programming_real_e2e_stack.sh` dựng C++ với Modbus tắt; `find_write_target`, `write_needs_readback`, `write_expired` chỉ được gọi trong nhánh `MKDDC_ENABLE_MODBUS` nên `-Werror=unused-function` làm đỏ build trước khi chạy được test nào. Bọc ba hàm trong `#ifdef MKDDC_ENABLE_MODBUS`; build Modbus OFF và ON đều exit 0.
+- **#790 — triệu chứng:** ISS-PGM03-08 đỏ khi chạy cả lane (3 request `point-catalog` thay vì 2), xanh khi chạy riêng.
+- **#790 — nguyên nhân gốc (đo bằng trace, không phải giả thuyết remount của Issue):** request thứ ba là `GET /point-catalog` **không `limit`** của catalog nạp trễ trong `EditorPane` (`useLazyProgrammingPointCatalog`), tự nạp khi Draft có Binding. Draft seed chỉ có Binding sau khi ISS-PGM03-07 chạy trước, nên chỉ đỏ khi chạy cả lane. Kèm lỗi thật: hook đó đọc đúng một trang (máy chủ cắt 500) và bỏ `nextCursor`, nên canvas FBD/panel chèn nhanh không giải mã được điểm thứ 501 trở đi.
+- **#790 — cách sửa:** hook nạp trễ rút cạn mọi trang với `limit=500` và cùng chốt chặn của `useProgrammingPointCatalog` (cursor lặp, trang không tiến, quá số trang, trang hỏng), vẫn one-shot. Test e2e đo theo chuỗi phân trang của từng consumer: mỗi chuỗi đúng hai request (trang đầu + đúng cursor do trang đầu cấp), tối đa hai consumer, không cursor mồ côi.
+- **#786 — quyết định:** phương án 1 của Issue — giữ hợp đồng `4a2e7ead` (Seal chỉ ghim/phát hành thư viện PROJECT khi Program thật sự dùng). Fixture T59-505 nay có `AHU_MAIN` gọi `SCALE_LIN` (dependency được suy tự động khi Lưu, U-06); các test khác giữ `SOURCE_R1`.
+- **#786 — hai điểm lạc hậu lộ ra khi test lần đầu chạy qua bước Seal kể từ `4a2e7ead`:** helper `commission` chỉ liệt kê 8 khoá impact, thiếu `physicalMappingChanges`/`virtualPointChanges`/`modbusMappingChanges`/`writableOutputsAffected` (Commission nhận 422 `PRG-ERR-ACK-MISSING-001`) — nay theo đúng enum đóng `impactAckKeys`; nút "Thêm chương trình ST" đã được thay bằng menu "Mới" → "Program · ST" + hộp thoại đặt tên — cập nhật bước UI, payload wire giữ nguyên.
+- **Kiểm chứng:** `npm run test:e2e:programming-real` (lane đầy đủ, backend Go + compiler/packager + Core simulator thật): trước sửa **2 failed / 5 skipped / 8 passed**, sau sửa **14 passed / 1 skipped / 0 failed**, exit 0 (ca skip còn lại là điều kiện thiết kế: Check mới nhất khác Revision đang chạy); 2 test hook mới đỏ trên mã cũ, xanh sau sửa; vitest 267 file / 3495 test pass; `npm run lint`, `npm run build` exit 0; C++ `cmake --fresh` (Modbus+BACnet+HMI ON) configure/build exit 0, `ctest` 1658/1658 pass (1 skip memlock do môi trường). Không chạy trên bo.
+- **Refs:** Issue #790, Issue #786, `4a2e7ead`, `T61-202`, U-06.
+
 ### Fixed — Tạo/đổi tên Virtual Point giữ nhãn (Label) làm tên hiển thị (Issue #789, 2026-09-28)
 
 - **Phạm vi:** `apps/web-api/internal/app/{virtualpoint.go,pointtags.go}` + test (`virtualpoint_label_test.go` mới, `pointchannel_test.go`, `points_test.go`); `apps/web-ui/src/features/points/VirtualIoPage.tsx` + test; `docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md` §`name`.
