@@ -286,7 +286,7 @@ Task production được dựng với period 1.000 ms và budget 199 ms:
 
 Read-back live xác nhận Task period 1.000 ms/budget 199 ms; Task max execution
 111,714 µs, Program max 46,086 µs và không overrun. Ngược lại, source Active mô
-tả `Task = 50ms` và các bước 100/251/510 ms nhưng `programConfig.periodMs`
+tả `Task = 50ms` và các bước 100/250/500 ms nhưng `programConfig.periodMs`
 thực tế là 1.000 ms do profile. Hành vi relay vì vậy chậm hơn ý nghĩa comment
 khoảng 10–20 lần và phải được coi là sai lệch cấu hình/identity, không phải
 bằng chứng cycle 50 ms.
@@ -423,7 +423,7 @@ period, đối chiếu số lần execute với release lý thuyết và alarm/h
 ### `F-PRG-PERF-006` — P1: identity/cycle của Active Program không khớp ý nghĩa source
 
 **Kịch bản hỏng:** kỹ sư đọc source `RelayPattern32` thấy `Task = 50ms`, các
-step 100/251/510 ms và kỳ vọng output đổi ở tốc độ đó; Active Revision lại
+step 100/250/500 ms và kỳ vọng output đổi ở tốc độ đó; Active Revision lại
 cấu hình `periodMs=1000`, nên logic đếm step thực chạy chậm hơn comment khoảng
 10–20 lần. Tên project `AHU-MASTER-SEQUENCE` nhưng Active chỉ chứa fixture relay
 32 output, làm tăng nguy cơ vận hành nhầm chương trình dù runtime vẫn xanh.
