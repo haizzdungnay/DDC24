@@ -39,6 +39,13 @@
   - Program tự `RUNNING`, `faultCount` 0; ba VP về `good`; health 6/6; `READY`; Active không đổi.
   - Check lại **chính** revision `65b2b855…` lúc 03:38:07Z: **PASSED**, 0 diagnostic.
   - Bản sửa validator **chưa** lên bo, chờ merge.
+  - **Sau lượt này (03:44–03:45Z), máy LAN `192.168.1.42` deploy đè:**
+    - web `main@e1b2ac51` (`-trimpath`, `71a8e443…`);
+    - Core `64bfbd74…` nhúng **khoá TEST** (`CRITICAL core.st_public_key=TEST`);
+    - FE `7969eec2…`;
+    - không chạy `deploy-record`, không restart hai helper.
+
+    Readback lúc 03:50Z: 11 kiểm, 6 lệch. Program vẫn `RUNNING`. Lượt này không ghi đè; chi tiết và rủi ro Commission ở `EV-PROG-COMMISSION-CHECK-840-TARGET` §5.1.
 - **NOT_RUN:** kiểm bản sửa #840 trên bo (Disable Program rồi Check); Commission trên bo (không có nội dung mới).
 - **Refs:** Issue #840, #839, #827, `DDD-CTRL-PROG-001` §5, `EV-PROG-VP-MSV-RESTART-832-TARGET` §4.2, handoff `2026-09-16-fbd-port-mapping-properties-handoff.md` §E.
 
