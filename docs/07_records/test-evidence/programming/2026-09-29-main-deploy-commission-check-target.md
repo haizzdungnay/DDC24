@@ -6,7 +6,7 @@
 | Phiên bản | 1.0 |
 | Ngày | 2026-09-29 |
 | Issue | [#840](https://github.com/Mekong-HCM/MK-DDC-24/issues/840) (Check chặn binding đầu ra theo chất lượng live), [#839](https://github.com/Mekong-HCM/MK-DDC-24/issues/839) (FE của `main@e1b2ac51` không dựng được) |
-| Trạng thái | **Kết luận: lỗi do mã nguồn, không do người dùng.** Người dùng Check một revision giống hệt Active; Check FAILED vì validator áp cổng chất lượng live cho binding **đầu ra**, lệch `DDD-CTRL-PROG-001` §5. Yếu tố kích hoạt là Program `FAULTED` sau khi một Core không có bản sửa #827 được deploy lên bo. Sau khi deploy `main`, Program tự `RUNNING` và Check lại chính revision đó `PASSED`. Bản sửa validator đi kèm hồ sơ này, chưa lên bo |
+| Trạng thái | **Kết luận: lỗi do mã nguồn, không do người dùng.** Người dùng Check một revision giống hệt Active; Check FAILED vì validator áp cổng chất lượng live cho binding **đầu ra**, lệch `DDD-CTRL-PROG-001` §5. Yếu tố kích hoạt là Program `FAULTED` sau khi một Core không có bản sửa #827 được deploy lên bo. Sau khi deploy `main`, Program tự `RUNNING` và Check lại chính revision đó `PASSED`. Bản sửa validator đi kèm hồ sơ này, chưa lên bo. **Sau lượt này** (03:44–03:45Z), máy LAN `192.168.1.42` lại deploy đè web/Core/FE; Core của họ nhúng **khoá TEST** (§5.1) |
 | Đích | `OK1126B-buildroot` (Forlinx OK1126B-S, RV1126B), truy cập qua WAN `mekong-fac.ddns.net:2223` |
 | Lớp bằng chứng | TARGET (Core, web, FE thật trên bo) cho chẩn đoán và deploy; HOST (test Go/Vitest) cho bản sửa. Không phải HIL |
 
@@ -122,6 +122,30 @@ Bản sửa này **chưa lên bo**: bo đang chạy `main@e1b2ac51`. Nó lên bo
 
 Chi tiết: [`bo-deploy.txt`](fixtures/2026-09-29-main-deploy-commission-check-840/bo-deploy.txt), [`bo-sau-deploy-va-check-lai.txt`](fixtures/2026-09-29-main-deploy-commission-check-840/bo-sau-deploy-va-check-lai.txt), [`artifact-readback-sau-deploy.json`](fixtures/2026-09-29-main-deploy-commission-check-840/artifact-readback-sau-deploy.json).
 
+### 5.1 Lượt deploy song song sau khi kiểm xong (03:44–03:45Z)
+
+Readback lúc 03:50:12Z, chạy ngay trước khi báo cáo, trả **11 kiểm, 6 lệch**. Máy LAN `192.168.1.42` đã deploy lại mà không chạy `deploy-record`:
+
+| Mốc (UTC) | Việc | Ghi nhận |
+|---|---|---|
+| 03:44:31Z | Thay FE (`index.html` `7969eec2…`) | `web-ui` lệch manifest |
+| 03:44:47Z | Thay web (15,5 MB, sha `71a8e443…`) | Dựng từ `main@e1b2ac51`, `-trimpath`, `vcs.modified=false`: cùng mã nguồn với bản của lượt này, có #827/#832, chưa có bản sửa #840. Chỉ restart `mkddc-web-pi`; hai helper vẫn chạy binary `3e1ae85b…` đã bị xoá khỏi đĩa (`STALE_EXE`) |
+| 03:44:52Z → 03:45:02Z | Thay Core (sha `64bfbd74…`) rồi restart | Journal: `CRITICAL core.st_public_key=TEST fingerprint=99354613db15918a — build này KHÔNG dùng được cho phát hành (T59-602)`; `--st-key-info` trả `mode=TEST`. Core được dựng thiếu `-DMKDDC_ST_PUBLIC_KEY_HEX` (xem `DEPLOY_FOXLINX.md` bước 2b) |
+
+Lúc 03:50:14Z:
+- Program `RUNNING`, `faultCount` 0;
+- health 6/6, `READY`, Active `0c29f4f1…`;
+- `DO16_MODE` 0, 0/16 relay.
+
+Lượt này **không** ghi đè: người đó vẫn đang thao tác (SSH liên tục tới 03:45:26Z). **Rủi ro chưa kiểm:** gói Commission ký bằng khoá RELEASE có thể không qua được Core nhúng khoá TEST. Nếu lần Commission tới thất bại vì chữ ký, nguyên nhân là **bản Core dựng sai khoá**, không phải mã nguồn và không phải người dùng.
+
+Để đưa bo về bản đã kiểm, cần:
+- cài lại Core RELEASE `64212e17…` (còn trong `/tmp/deploy-20260929T033521Z/` trên bo, mất khi reboot, hoặc dựng lại theo bước 2b);
+- restart hai helper;
+- chạy `deploy-record` và `readback`.
+
+Chi tiết: [`bo-deploy-song-song-0344Z.txt`](fixtures/2026-09-29-main-deploy-commission-check-840/bo-deploy-song-song-0344Z.txt), [`artifact-readback-cuoi.json`](fixtures/2026-09-29-main-deploy-commission-check-840/artifact-readback-cuoi.json).
+
 ## 6. `main@e1b2ac51` không dựng được FE (Issue #839)
 
 `npm run build:release` dừng ở `tsc`:
@@ -150,4 +174,4 @@ Bản trước deploy nằm ở `/data/mkddc/deploy-backups/20260929T033521Z-mai
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 1.0 | 2026-09-29 | Bản đầu: deploy `main@e1b2ac51` (FE `c6748e9d`), readback 11/0; chẩn đoán Check FAILED là lỗi mã nguồn (#840) bị kích hoạt bởi Program FAULTED sau deploy song song; Check lại revision của người dùng `PASSED`; bản sửa validator + FE kèm test đỏ → xanh; #839 FE không dựng được |
+| 1.0 | 2026-09-29 | Bản đầu: deploy `main@e1b2ac51` (FE `c6748e9d`), readback 11/0; chẩn đoán Check FAILED là lỗi mã nguồn (#840) bị kích hoạt bởi Program FAULTED sau deploy song song; Check lại revision của người dùng `PASSED`; bản sửa validator + FE kèm test đỏ → xanh; #839 FE không dựng được; ghi lượt deploy song song 03:44–03:45Z với Core khoá TEST (§5.1) |

@@ -1,0 +1,58 @@
+# Lượt deploy song song của máy LAN 192.168.1.42 SAU khi deploy main (chỉ đọc, không ghi đè)
+# readback lúc 03:50:12Z: 11 kiểm, 6 lệch
+READBACK manifest=/usr/share/mkddc/artifact-manifest.json updated_at=2026-09-29T03:37:19Z
+  SHA_MISMATCH     unit:mkddc-core                mkddc-core                   sha=64bfbd74012829aa manifest=64212e175e766ef2 commit=e1b2ac5135f1 dirty=false
+  SHA_MISMATCH     unit:mkddc-web-pi              mkddc-web                    sha=71a8e44312ab8177 manifest=3e1ae85b00497024 commit=e1b2ac5135f1 dirty=false
+  STALE_EXE        unit:mkddc-reload-helper       mkddc-web                    sha=3e1ae85b00497024 manifest=3e1ae85b00497024 (tiến trình pid 6261 còn chạy binary đã bị thay: /opt/mkddc-web/mkddc-web (deleted)) commit=e1b2ac5135f1 dirty=false
+  STALE_EXE        unit:mkddc-time-helper         mkddc-web                    sha=3e1ae85b00497024 manifest=3e1ae85b00497024 (tiến trình pid 6262 còn chạy binary đã bị thay: /opt/mkddc-web/mkddc-web (deleted)) commit=e1b2ac5135f1 dirty=false
+  SHA_MISMATCH     served:index.html              web-ui                       sha=7969eec2a8b45303 manifest=876eb30779eb7b5b commit=c6748e9dfc2f dirty=false
+  HTTP_MISMATCH    http:127.0.0.1:8082/           web-ui                       sha=7969eec2a8b45303 manifest=876eb30779eb7b5b commit=c6748e9dfc2f dirty=false
+READBACK: 11 kiểm, 6 lệch
+
+Sep 29 03:44:23 OK1126B-buildroot sshd[6573]: Accepted publickey for root from 192.168.1.42 port 56843
+Sep 29 03:44:29 OK1126B-buildroot sshd[6577]: Accepted publickey for root from 192.168.1.42 port 56851
+Sep 29 03:44:36 OK1126B-buildroot sshd[6584]: Accepted publickey for root from 192.168.1.42 port 56859
+Sep 29 03:44:41 OK1126B-buildroot sshd[6591]: Accepted publickey for root from 192.168.1.42 port 58036
+Sep 29 03:44:52 OK1126B-buildroot sshd[6598]: Accepted publickey for root from 192.168.1.42 port 58053
+Sep 29 03:45:01 OK1126B-buildroot sshd[6605]: Accepted publickey for root from 192.168.1.42 port 58063
+Sep 29 03:45:02 OK1126B-buildroot systemd[1]: Stopping MK-DDC-24 core service (point table, priority, safe-state)...
+Sep 29 03:45:02 OK1126B-buildroot systemd[1]: Stopping MK-DDC-24 Web/API...
+Sep 29 03:45:02 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 03:45:02 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 core service (point table, priority, safe-state).
+Sep 29 03:45:02 OK1126B-buildroot systemd[1]: Starting MK-DDC-24 core service (point table, priority, safe-state)...
+Sep 29 03:45:03 OK1126B-buildroot mkddc-core[7188]: CRITICAL core.st_public_key=TEST fingerprint=99354613db15918a — build này KHÔNG dùng được cho phát hành (T59-602)
+Sep 29 03:45:03 OK1126B-buildroot systemd[1]: Started MK-DDC-24 core service (point table, priority, safe-state).
+Sep 29 03:45:03 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 03:45:03 OK1126B-buildroot mkddc-web[7193]: mkddc-web 2026/09/29 03:45:03 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 03:45:10 OK1126B-buildroot sshd[7204]: Accepted publickey for root from 192.168.1.42 port 58976
+Sep 29 03:45:16 OK1126B-buildroot sshd[7212]: Accepted publickey for root from 192.168.1.42 port 57278
+Sep 29 03:45:22 OK1126B-buildroot sshd[7216]: Accepted publickey for root from 192.168.1.42 port 56519
+Sep 29 03:45:26 OK1126B-buildroot sshd[7219]: Accepted publickey for root from 192.168.1.42 port 56526
+
+2026-09-29 03:44:47.150854373 +0000 15532194 /opt/mkddc-web/mkddc-web
+2026-09-29 03:44:52.627128162 +0000 1238448 /usr/sbin/mkddc-core
+2026-09-29 03:44:31.334063832 +0000 1117 /opt/mkddc-web/dist/index.html
+UNIT mkddc-core since=Tue_2026-09-29_03:45:03_UTC exe=/usr/sbin/mkddc-core sha=64bfbd74012829aa
+UNIT mkddc-web-pi since=Tue_2026-09-29_03:45:03_UTC exe=/opt/mkddc-web/mkddc-web sha=71a8e44312ab8177
+UNIT mkddc-reload-helper since=Tue_2026-09-29_03:35:59_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=3e1ae85b00497024
+UNIT mkddc-time-helper since=Tue_2026-09-29_03:35:59_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=3e1ae85b00497024
+st_public_key fingerprint=99354613db15918a mode=TEST
+
+# go version -m của bản sao /opt/mkddc-web/mkddc-web (sha 71a8e44312ab8177):
+	build	-trimpath=true
+	build	vcs.revision=e1b2ac5135f11c582a0c27807a58d8c7e427d7b8
+	build	vcs.time=2026-09-29T03:27:13Z
+	build	vcs.modified=false
+# git: e1b2ac51 = main; có 265f1a8b (#827) và e32c1ec6 (#832), chưa có bản sửa #840
+
+# Trạng thái 03:50:14Z:
+NOW 2026-09-29T03:50:14Z
+HEALTH ok 6/6 ok
+LIVE VP2 DO16_MODE value=0 quality=good
+LIVE VP10 DO16_STS_MODE value=0 quality=good
+LIVE VP11 DO16_STS_ON value=0 quality=good
+LIVE VP12 DO16_STS_TRIPS value=5 quality=good
+RELAY CK508-04/05: 16 diem, dong=0 []
+PROGRAMMING targetState=READY
+RUNTIME activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db producerState=READY taskState=RUNNING periodMs=10
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=RUNNING faultCount=0 missedReleaseCount=0 waitingReason=None health=HEALTHY
