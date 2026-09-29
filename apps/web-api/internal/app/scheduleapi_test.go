@@ -198,8 +198,8 @@ func TestScheduleRejectsMissingDefault(t *testing.T) {
 	}
 }
 
-func TestScheduleRejectsBinaryValueOnAnalogTarget(t *testing.T) {
-	// SCH-TARGET-003: BINARY không ghi được vào AO.
+func TestScheduleAcceptsBinaryValueOnAnalogTarget(t *testing.T) {
+	// Hỗ trợ phối hợp nhiều tác vụ: BINARY ghi được vào AO.
 	app, token := newScheduleTestApp(t)
 	body := scheduleJSON("SCH-001", map[string]any{
 		"target_objects": []any{map[string]any{
@@ -208,8 +208,8 @@ func TestScheduleRejectsBinaryValueOnAnalogTarget(t *testing.T) {
 		}},
 	})
 	w := doScheduleRequest(t, app, http.MethodPost, "/api/v1/schedules", body, token)
-	if !hasFindingCode(decodeFindings(t, w), errSchedTargetTypeBad) {
-		t.Fatalf("mong %s, nhận %s", errSchedTargetTypeBad, w.Body.String())
+	if hasFindingCode(decodeFindings(t, w), errSchedTargetTypeBad) {
+		t.Fatalf("không mong %s, nhận %s", errSchedTargetTypeBad, w.Body.String())
 	}
 }
 

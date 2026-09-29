@@ -34,12 +34,14 @@ var schedulePointKindLimits = map[string]int{
 }
 
 // Kiểu điểm nào chứa nổi kiểu giá trị nào (SCH-TARGET-003).
+var allSchedulePointKinds = []string{"DO", "AO", "BV", "AV", "MSV", "EXT"}
+
 var scheduleKindForValueType = map[string][]string{
-	"BINARY":     {"DO", "BV"},
-	"BOOLEAN":    {"DO", "BV"},
-	"REAL":       {"AO", "AV", "EXT"},
-	"UNSIGNED":   {"MSV", "AV", "EXT"},
-	"ENUMERATED": {"MSV", "AV", "EXT"},
+	"BINARY":     allSchedulePointKinds,
+	"BOOLEAN":    allSchedulePointKinds,
+	"REAL":       allSchedulePointKinds,
+	"UNSIGNED":   allSchedulePointKinds,
+	"ENUMERATED": allSchedulePointKinds,
 }
 
 type scheduleFindings struct {
