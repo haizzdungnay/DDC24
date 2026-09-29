@@ -367,8 +367,20 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	provenance := newDiagnosticProvenance(check.RevisionID, inputs)
 	results := make([]programmingcompiler.Result, 0, len(inputs))
 	symbols := make([]SymbolView, 0)
-	for _, input := range inputs {
-		result, err := s.runner.Compile(ctx, input)
+	/* T63-304 (F-PRG-PERF-004): biên dịch song song tối đa 2 Program (runner
+	 * có CompileBatch), nhưng GỘP KẾT QUẢ THEO ĐÚNG THỨ TỰ Program như vòng
+	 * tuần tự cũ: diagnostic, symbol, artifact và lỗi dừng-sớm đều xét theo chỉ
+	 * số, không theo thứ tự process nào xong trước. Nhờ vậy cùng một Revision
+	 * luôn cho cùng danh sách diagnostic và cùng package. */
+	outcomes := s.compileAll(ctx, inputs)
+	for index, input := range inputs {
+		outcome := outcomes[index]
+		if !outcome.Ran {
+			// Bất biến của CompileConcurrently: mọi Input trước lỗi đầu tiên đều
+			// đã chạy. Tới được đây là runner lô vi phạm hợp đồng.
+			return true, fmt.Errorf("compiler batch bỏ sót Program %s", input.SourceID)
+		}
+		result, err := outcome.Result, outcome.Err
 		if errors.Is(err, programmingcompiler.ErrTimeout) {
 			return true, s.complete(ctx, check, "TIMED_OUT", []DiagnosticView{workerDiagnostic("ST-WORKER-TIMEOUT")}, nil)
 		}
@@ -508,6 +520,24 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 type completion struct {
 	artifact *programmingstore.Artifact
 	manifest json.RawMessage
+}
+
+// compileAll biên dịch mọi Input. Runner lô (ProcessRunner) chạy song song có
+// trần; runner chỉ có Compile chạy tuần tự và dừng ở lỗi đầu tiên — cả hai trả
+// kết quả theo thứ tự Input với cùng ngữ nghĩa dừng sớm.
+func (s *CheckService) compileAll(ctx context.Context, inputs []programmingcompiler.Input) []programmingcompiler.CompileOutcome {
+	if batch, ok := s.runner.(programmingcompiler.BatchRunner); ok {
+		return batch.CompileBatch(ctx, inputs)
+	}
+	outcomes := make([]programmingcompiler.CompileOutcome, len(inputs))
+	for index, input := range inputs {
+		result, err := s.runner.Compile(ctx, input)
+		outcomes[index] = programmingcompiler.CompileOutcome{Result: result, Err: err, Ran: true}
+		if err != nil {
+			break
+		}
+	}
+	return outcomes
 }
 
 // failToolchain đóng Check FAILED ngay với `ST-WORKER-TOOLCHAIN` và nói rõ tool

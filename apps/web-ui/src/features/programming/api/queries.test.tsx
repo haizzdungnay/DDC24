@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  useProgrammingCapabilities,
   useLazyProgrammingLibraryCatalog,
   useLazyProgrammingPointCatalog,
   useProgrammingLibraryPaged,
@@ -136,6 +137,59 @@ describe('useProgrammingRuntimeMonitor — vòng đời LIVE T59-812', () => {
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
     /* Ba yêu cầu xen giữa chỉ sinh đúng một lượt kế, không ba request. */
     expect(client.request).toHaveBeenCalledTimes(2)
+    unmount()
+  })
+})
+
+/* T63-108 (PERF-API-03) — tab ẩn thì các vòng poll Programming đứng yên;
+ * hiện lại thì đọc bù ngay một lượt. */
+describe('Programming polling pauses while the tab is hidden (T63-108)', () => {
+  let visibility: DocumentVisibilityState = 'visible'
+  const setVisibility = (next: DocumentVisibilityState) => {
+    visibility = next
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+  beforeEach(() => {
+    client.request.mockReset()
+    visibility = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    visibility = 'visible'
+    vi.useRealTimers()
+  })
+
+  it('useProgrammingResource (capabilities, 5 s) does not poll while hidden', async () => {
+    client.request.mockResolvedValue({})
+    const { unmount } = renderHook(() => useProgrammingCapabilities())
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(client.request).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    expect(client.request).toHaveBeenCalledTimes(2)
+
+    act(() => setVisibility('hidden'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(client.request).toHaveBeenCalledTimes(2)
+
+    act(() => setVisibility('visible'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(client.request).toHaveBeenCalledTimes(3)
+    unmount()
+  })
+
+  it('runtime monitor (1 s) does not poll while hidden', async () => {
+    let stamp = 1000
+    client.request.mockImplementation(async () => snapshot(String(stamp++)))
+    const { unmount } = renderHook(() => useProgrammingRuntimeMonitor(true))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    const visibleCalls = client.request.mock.calls.length
+    expect(visibleCalls).toBeGreaterThanOrEqual(3)
+
+    act(() => setVisibility('hidden'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(client.request).toHaveBeenCalledTimes(visibleCalls)
     unmount()
   })
 })

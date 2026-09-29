@@ -1,0 +1,5 @@
+{
+  "note": "T63-304 HOST x86_64 — mkddc-st-compile build/fw (08:31 UTC, profile_sha256=25bc2a00…, LỆCH profile web a4396636… nên runner từ chối; chỉ dùng để đo thời gian process thật), chạy trực tiếp 30 lần, có --key và --sandbox",
+  "small_program": {"source_bytes": 62, "instructions": 2, "artifact_bytes": 504, "ms_p50": 3.62, "ms_min": 2.70, "ms_max": 5.16},
+  "large_program": {"source_bytes": 15357, "instructions": 1604, "artifact_bytes": 37864, "ms_p50": 32.40, "ms_min": 28.50, "ms_max": 43.03}
+}

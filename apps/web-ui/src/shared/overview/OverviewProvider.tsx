@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { OverviewSchemaError, fetchOverview } from '../api/overview'
+import { pageHidden } from '../hooks/useApi'
 import type { OverviewResponse } from '../types'
 
 /**
@@ -31,9 +32,13 @@ export interface OverviewContextValue {
 
 const OverviewContext = createContext<OverviewContextValue | null>(null)
 
-const DEFAULT_REFRESH_MS = 2000
+/* T63-108 (PERF-API-03): 2 s → 1 s. Chuông cảnh báo của shell nay đọc số đếm từ
+ * snapshot này thay cho vòng poll `/alarms` riêng mỗi 1 s (xem
+ * `useShellAlarms`). Giữ nhịp 1 s để độ tươi của chuông và annunciation KHÔNG
+ * tệ hơn trước; tổng cộng vẫn bớt một vòng poll (1 GET/s thay cho 1,5 GET/s). */
+export const DEFAULT_OVERVIEW_REFRESH_MS = 1000
 
-export function OverviewProvider({ children, refreshMs = DEFAULT_REFRESH_MS }: { children: ReactNode; refreshMs?: number }) {
+export function OverviewProvider({ children, refreshMs = DEFAULT_OVERVIEW_REFRESH_MS }: { children: ReactNode; refreshMs?: number }) {
   const [data, setData] = useState<OverviewResponse | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [status, setStatus] = useState<OverviewStatus>('loading')
@@ -81,7 +86,9 @@ export function OverviewProvider({ children, refreshMs = DEFAULT_REFRESH_MS }: {
 
   useEffect(() => {
     if (!refreshMs) return undefined
-    const timer = window.setInterval(() => { void load() }, refreshMs)
+    /* T63-108: tab ẩn thì không poll — không ai nhìn snapshot đó. Hiện lại thì
+       effect dưới nạp ngay. */
+    const timer = window.setInterval(() => { if (!pageHidden()) void load() }, refreshMs)
     return () => window.clearInterval(timer)
   }, [load, refreshMs])
 

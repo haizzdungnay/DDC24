@@ -1,0 +1,41 @@
+{
+  "label": "AFTER-30min",
+  "mode": "ws",
+  "baseURL": "http://127.0.0.1:18096",
+  "windowS": 1800,
+  "gets": 2280,
+  "getsPerS": 1.267,
+  "byRoute": {
+    "GET /api/v1/overview 200": 1800,
+    "GET /api/v1/activity 200": 180,
+    "GET /api/v1/points 200": 180,
+    "GET /api/v1/me 200": 60,
+    "GET /api/v1/system/status 200": 60
+  },
+  "status304": 0,
+  "conditionalRequests": 0,
+  "displayedValueAgeMs": {
+    "samples": 35990,
+    "unparsed": 0,
+    "p50": 102,
+    "p95": 191,
+    "max": 327
+  },
+  "wsOpened": 0,
+  "wsFrames": 9318,
+  "hidden": {
+    "seconds": 60,
+    "gets": 0,
+    "getsPerS": 0,
+    "byRoute": {}
+  },
+  "afterVisibleAgain": {
+    "GET /api/v1/overview 200": 3,
+    "GET /api/v1/points 200": 1,
+    "GET /api/v1/system/status 200": 1,
+    "GET /api/v1/me 200": 1,
+    "GET /api/v1/activity 200": 1
+  },
+  "consoleErrors": [],
+  "failed": []
+}

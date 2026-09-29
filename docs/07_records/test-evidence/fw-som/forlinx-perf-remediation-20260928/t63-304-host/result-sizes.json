@@ -1,0 +1,10 @@
+{
+  "note": "T63-304 leader, HOST x86_64, mkddc-st-compile build/fw tại HEAD 3896c9b7 (profile khớp web). Program = N câu lệnh `Acc := Acc + 1;`. Byte của từng phần Result; manifest nén bằng gzip mặc định (gzip -c).",
+  "rows": [
+    {"statements": 1, "instructions": 3, "artifact": 528, "manifest": 1309, "footprint_raw": 2412},
+    {"statements": 100, "instructions": 201, "artifact": 5280, "manifest": 36240, "footprint_raw": 42095},
+    {"statements": 801, "instructions": 1603, "artifact": 38928, "manifest": 287802, "manifest_gzip": 13673, "footprint_raw": 327305},
+    {"statements": 2047, "instructions": 4095, "artifact": 98736, "manifest": 740562, "manifest_gzip": 33503, "footprint_raw": 839873}
+  ],
+  "conclusion": "Trần 8 MiB với manifest thô giữ ≈25 Program 1.603 instruction ⇒ Check 32 Program lặp lại 0 hit. Manifest nén ≈22 lần ⇒ 32 × 4.095 instruction ≈ 4,3 MB."
+}

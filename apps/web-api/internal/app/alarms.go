@@ -15,7 +15,8 @@ func (a *App) handleAlarms(w http.ResponseWriter, r *http.Request) {
 	if !degraded {
 		a.recordAlarmSnapshot(r.Context(), alarms)
 	}
-	writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, degraded))
+	// T63-108: ETag theo nội dung + 304 — xem http_revalidate.go.
+	writeJSONRevalidated(w, r, a.mergeAlarmHistoryRows(r.Context(), alarms, degraded))
 }
 
 func (a *App) currentAlarms(ctx context.Context) ([]AlarmDTO, bool) {

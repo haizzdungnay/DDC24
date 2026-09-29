@@ -1,0 +1,51 @@
+[
+  {
+    "mutation": "F1 hook đọc total thay activeOrUnacked",
+    "exit": 1,
+    "summary": "2 failed | 12 passed (14)",
+    "failed": [
+      "shows activeOrUnacked, never total, on the bell",
+      "takes the bell count from the overview snapshot and does not poll /alarms"
+    ],
+    "red": true
+  },
+  {
+    "mutation": "F2 hook tin snapshot thiếu activeOrUnacked (lấy total thế)",
+    "exit": 1,
+    "summary": "2 failed | 12 passed (14)",
+    "failed": [
+      "falls back to /alarms when the server does not send activeOrUnacked (older server), instead of using total",
+      "treats a negative or non-finite activeOrUnacked as untrusted"
+    ],
+    "red": true
+  },
+  {
+    "mutation": "G4 overview dùng total làm activeOrUnacked",
+    "exit": 1,
+    "summary": "FAIL",
+    "failed": [
+      "TestOverviewActiveOrUnackedEqualsTheOldBellOverAlarmsBody"
+    ],
+    "red": true
+  },
+  {
+    "mutation": "G5 quy tắc \"Active || unack\" (bỏ nhánh status khi active vắng trên dây)",
+    "exit": 1,
+    "summary": "FAIL",
+    "failed": [
+      "TestOverviewActiveOrUnackedEqualsTheOldBellOverAlarmsBody",
+      "TestShellBellCountDiffersFromTotalOnlyWhereTheOldBellDid",
+      "TestShellBellCountMatchesTheWireRule"
+    ],
+    "red": true
+  },
+  {
+    "mutation": "G6 đếm trên danh sách thô, không theo góc nhìn /alarms",
+    "exit": 1,
+    "summary": "FAIL",
+    "failed": [
+      "TestOverviewActiveOrUnackedEqualsTheOldBellOverAlarmsBody"
+    ],
+    "red": true
+  }
+]

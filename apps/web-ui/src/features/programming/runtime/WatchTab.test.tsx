@@ -288,6 +288,53 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.samplePeriodMs).toBe(10)
   })
 
+  /* T63-108 (PERF-API-03): trace đang chạy được poll 500 ms một lần — tab ẩn
+   * thì dừng (bản ghi vẫn chạy phía server), hiện lại thì đọc bù ngay. */
+  it('trace RUNNING không poll khi tab ẩn và đọc bù ngay khi hiện lại', async () => {
+    let visibility: DocumentVisibilityState = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    state.monitor = ready(monitorPage([sample()]))
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999990', state: 'RUNNING',
+      variableIds: ['11111111-1111-4111-8111-111111111111'], durationMs: 60_000,
+      samplePeriodMs: 1000, effectiveSamplePeriodMs: 1000,
+      startedAt: '2026-09-28T01:02:03Z', updatedAt: '2026-09-28T01:02:04Z',
+      stopReason: null, droppedSamples: 0, samples: []
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0108' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+    const traceReads = () => state.request.mock.calls.filter(([operationId]) => operationId === 'getProgrammingTrace').length
+
+    vi.useFakeTimers()
+    try {
+      renderWatch()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1500)
+      const visibleReads = traceReads()
+      expect(visibleReads).toBeGreaterThanOrEqual(3)
+
+      visibility = 'hidden'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(traceReads()).toBe(visibleReads)
+
+      visibility = 'visible'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(traceReads()).toBe(visibleReads + 1)
+    } finally {
+      visibility = 'visible'
+      vi.useRealTimers()
+    }
+  })
+
   /* U-09 — chọn "Khi giá trị đổi" gửi `sampleMode: ON_CHANGE`; mặc định KHÔNG gửi
    * khoá (server cũ vẫn nhận request như trước). Phiên ON_CHANGE ghi chu kỳ Core
    * ở cột #, vì giữa hai mẫu có thể có nhiều chu kỳ bị bỏ. */

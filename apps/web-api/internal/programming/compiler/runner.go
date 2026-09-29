@@ -2,6 +2,8 @@ package compiler
 
 import (
 	"bytes"
+	"compress/gzip"
+	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -15,6 +17,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,7 +37,481 @@ var (
 	ErrTimeout       = errors.New("compiler timeout")
 	ErrCrashed       = errors.New("compiler crash")
 	ErrInvalidOutput = errors.New("compiler output không hợp lệ")
+	// ErrWorkerPoolBusy — T63-304: chờ slot compiler quá một `Timeout` mà không
+	// có slot nào trống. Luôn đi KÈM ErrTimeout (Check đóng TIMED_OUT với
+	// `ST-WORKER-TIMEOUT`, mã đã có trong catalog) để nơi gọi không phải biết
+	// thêm một nhánh lỗi mới, nhưng vẫn phân biệt được bằng errors.Is.
+	ErrWorkerPoolBusy = errors.New("compiler worker pool bận")
 )
+
+/* T63-304 (F-PRG-PERF-004) — cache kết quả compile và giới hạn song song.
+ *
+ * TRIỆU CHỨNG: Check biên dịch TUẦN TỰ từng Program; mỗi Program một thư mục
+ * tạm và một process `mkddc-st-compile`. Check lại CÙNG một Revision (người
+ * dùng bấm Check lần hai, hay Check lại sau khi chỉ sửa một Program trong 32)
+ * trả lại đúng chi phí đó cho mọi Program không đổi.
+ *
+ * CÁCH SỬA, ba phần, đều ở biên process này:
+ *
+ *  1. CACHE theo hash của MỌI thứ quyết định đầu ra: toàn bộ `Input` (nguồn,
+ *     POU liên kết, library lock, Published Signal, io_map, identity), nội
+ *     dung binary compiler (SHA-256, dò lại khi inode/mtime/size đổi), nội
+ *     dung khoá ký, và các hằng profile/ABI mà web đang chạy. Chỉ lưu kết quả
+ *     THÀNH CÔNG đã qua `validateSuccess`: lỗi biên dịch, timeout, crash, lệch
+ *     toolchain không bao giờ được cache, nên không kết quả cũ nào che được
+ *     một lỗi mới. Cache hit trả BẢN SAO (artifact trùng từng byte) và kiểm lại
+ *     digest artifact trước khi trả.
+ *  2. POOL tối đa `MaxConcurrentCompiles` process compiler trong CẢ tiến trình
+ *     web. Vượt pool thì xếp hàng, chờ tối đa một `Timeout` rồi trả
+ *     ErrTimeout+ErrWorkerPoolBusy; context bị huỷ thì trả ngay.
+ *  3. ƯU TIÊN CPU thấp: process compiler (cả process group) chạy `nice`
+ *     `compileWorkerNice`. Core chạy SCHED_FIFO 80 trên CPU3; IOBus và web
+ *     chạy nice 0 trên CPU0–2 và process con kế thừa CPUAffinity 0–2 của web,
+ *     nên compiler không bao giờ tranh CPU3 và nhường IOBus trên CPU0–2.
+ *
+ * Cache và pool là của CẢ TIẾN TRÌNH (biến gói), vì `ProcessRunner` được dựng
+ * theo giá trị ở `app/main.go`; test tiêm bản riêng qua `Cache`/`Pool`. */
+const (
+	// MaxConcurrentCompiles là trần process compiler chạy đồng thời (Plan 63 §4.3).
+	MaxConcurrentCompiles = 2
+	// compileWorkerNice: nice của process compiler; web/IOBus ở 0, Core là RT.
+	compileWorkerNice = 10
+	// Trần cache: 64 mục (hai lần 32 Program) và 8 MiB (artifact ≤ 1 MiB/Program
+	// theo profile). Trên bo 1 GB RAM đây là trần cứng, không tăng theo tải.
+	compileCacheMaxEntries = 64
+	compileCacheMaxBytes   = 8 << 20
+	// compileCacheKeySchema đổi khi đổi cách dựng khoá (vô hiệu hoá mục cũ).
+	compileCacheKeySchema = 1
+)
+
+var (
+	sharedCompileCache = NewCompileCache(compileCacheMaxEntries, compileCacheMaxBytes)
+	sharedWorkerPool   = NewWorkerPool(MaxConcurrentCompiles)
+	sharedFileDigests  = &fileDigestMemo{}
+)
+
+// CompileCache là cache LRU có trần số mục và trần byte cho kết quả compile
+// thành công. An toàn khi dùng từ nhiều goroutine.
+type CompileCache struct {
+	mu         sync.Mutex
+	maxEntries int
+	maxBytes   int64
+	bytes      int64
+	order      *list.List // phần tử đầu = dùng gần nhất
+	items      map[[32]byte]*list.Element
+	stats      CompileCacheStats
+}
+
+type compileCacheEntry struct {
+	key    [32]byte
+	result Result // Manifest luôn nil ở đây: manifest nằm nén trong manifestGz.
+	// manifestGz là manifest nén gzip. Manifest build chiếm phần lớn một kết quả
+	// (đo HOST với compiler thật: ≈180 B/instruction, 740 KB cho Program 4.095
+	// instruction, trong khi artifact chỉ 99 KB) và nén được ≈22 lần. Lưu thô thì
+	// trần 8 MiB chỉ giữ ≈25 Program 1.603 instruction: Check 32 Program duyệt
+	// tuần tự qua LRU nhỏ hơn tập làm việc nên KHÔNG trúng lần nào (đo: 0 hit,
+	// lần lặp 986 ms ≈ lần đầu). Nén thì dự án lớn nhất của profile
+	// (maxProgramsTotal = 32 × 4.096 instruction) ≈ 4,3 MB, vừa trần.
+	manifestGz     []byte
+	manifestNil    bool
+	manifestSHA256 [32]byte
+	size           int64
+}
+
+// CompileCacheStats là bộ đếm tích luỹ của cache.
+type CompileCacheStats struct {
+	Hits      uint64
+	Misses    uint64
+	Stores    uint64
+	Evictions uint64
+	Entries   int
+	Bytes     int64
+}
+
+// NewCompileCache dựng cache với trần cho trước; trần ≤ 0 nghĩa là không cache.
+func NewCompileCache(maxEntries int, maxBytes int64) *CompileCache {
+	return &CompileCache{maxEntries: maxEntries, maxBytes: maxBytes, order: list.New(),
+		items: make(map[[32]byte]*list.Element)}
+}
+
+func (c *CompileCache) get(key [32]byte) (Result, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	element, found := c.items[key]
+	if !found {
+		c.stats.Misses++
+		return Result{}, false
+	}
+	entry := element.Value.(*compileCacheEntry)
+	// Phòng thủ: bản trong bộ nhớ phải còn đúng digest đã kiểm lúc lưu. Lệch
+	// thì bỏ mục và biên dịch lại, không bao giờ trả artifact/manifest không
+	// khớp hash.
+	manifest, ok := entry.manifest()
+	if !ok || sha256.Sum256(entry.result.Artifact) != entry.result.ArtifactSHA256 {
+		c.removeLocked(element)
+		c.stats.Misses++
+		return Result{}, false
+	}
+	c.order.MoveToFront(element)
+	c.stats.Hits++
+	out := cloneResult(entry.result)
+	out.Manifest = manifest
+	return out, true
+}
+
+// manifest giải nén manifest và kiểm SHA-256 so với bản lúc lưu. Trả bản mới
+// cấp phát, nên nơi gọi không sửa được dữ liệu trong cache.
+func (e *compileCacheEntry) manifest() (json.RawMessage, bool) {
+	if e.manifestNil {
+		return nil, true
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(e.manifestGz))
+	if err != nil {
+		return nil, false
+	}
+	raw, err := io.ReadAll(reader)
+	if err != nil || sha256.Sum256(raw) != e.manifestSHA256 {
+		return nil, false
+	}
+	return json.RawMessage(raw), true
+}
+
+// gzipManifest nén manifest để lưu cache (xem compileCacheEntry.manifestGz).
+func gzipManifest(manifest []byte) ([]byte, error) {
+	var buffer bytes.Buffer
+	writer := gzip.NewWriter(&buffer)
+	if _, err := writer.Write(manifest); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func (c *CompileCache) put(key [32]byte, result Result) {
+	if !result.OK || c.maxEntries <= 0 || c.maxBytes <= 0 {
+		return
+	}
+	entry := &compileCacheEntry{key: key, result: cloneResult(result), manifestNil: result.Manifest == nil}
+	entry.result.Manifest = nil
+	if !entry.manifestNil {
+		compressed, err := gzipManifest(result.Manifest)
+		if err != nil {
+			return
+		}
+		entry.manifestGz = compressed
+		entry.manifestSHA256 = sha256.Sum256(result.Manifest)
+	}
+	size := resultFootprint(entry.result) + int64(len(entry.manifestGz))
+	if size > c.maxBytes {
+		return
+	}
+	entry.size = size
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if element, found := c.items[key]; found {
+		c.removeLocked(element)
+	}
+	element := c.order.PushFront(entry)
+	c.items[key] = element
+	c.bytes += size
+	c.stats.Stores++
+	for c.order.Len() > c.maxEntries || c.bytes > c.maxBytes {
+		c.removeLocked(c.order.Back())
+		c.stats.Evictions++
+	}
+}
+
+func (c *CompileCache) removeLocked(element *list.Element) {
+	entry := element.Value.(*compileCacheEntry)
+	c.order.Remove(element)
+	delete(c.items, entry.key)
+	c.bytes -= entry.size
+}
+
+// Stats trả ảnh chụp bộ đếm.
+func (c *CompileCache) Stats() CompileCacheStats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	stats := c.stats
+	stats.Entries = c.order.Len()
+	stats.Bytes = c.bytes
+	return stats
+}
+
+// resultFootprint ước lượng byte giữ trong bộ nhớ: artifact + manifest + phần
+// metadata (tính theo cỡ JSON) + phần cố định cho header struct.
+func resultFootprint(result Result) int64 {
+	meta, _ := json.Marshal(struct {
+		Diagnostics []Diagnostic
+		LinkedPOUs  []LinkedPOU
+		SignalRefs  []SignalRef
+		Symbols     []Symbol
+	}{result.Diagnostics, result.LinkedPOUs, result.SignalRefs, result.Symbols})
+	return int64(len(result.Artifact)+len(result.Manifest)+len(meta)) + 512
+}
+
+// cloneSlice sao chép slice và GIỮ phân biệt nil/rỗng: bản cache phải y hệt
+// bản vừa biên dịch, kể cả ở chỗ một nơi gọi có thể kiểm `== nil`.
+func cloneSlice[T any](values []T) []T {
+	if values == nil {
+		return nil
+	}
+	return append(make([]T, 0, len(values)), values...)
+}
+
+// cloneResult sao chép sâu: không nơi gọi nào sửa được bản trong cache.
+func cloneResult(result Result) Result {
+	out := result
+	out.Diagnostics = cloneSlice(result.Diagnostics)
+	out.Artifact = cloneSlice(result.Artifact)
+	out.Manifest = cloneSlice(result.Manifest)
+	out.Symbols = cloneSlice(result.Symbols)
+	if result.LinkedPOUs != nil {
+		out.LinkedPOUs = make([]LinkedPOU, len(result.LinkedPOUs))
+		for index, pou := range result.LinkedPOUs {
+			pou.InputNames = cloneSlice(pou.InputNames)
+			pou.InputTypes = cloneSlice(pou.InputTypes)
+			pou.OutputNames = cloneSlice(pou.OutputNames)
+			pou.OutputTypes = cloneSlice(pou.OutputTypes)
+			out.LinkedPOUs[index] = pou
+		}
+	}
+	if result.SignalRefs != nil {
+		out.SignalRefs = make([]SignalRef, len(result.SignalRefs))
+		for index, ref := range result.SignalRefs {
+			if ref.ReadLocation != nil {
+				location := *ref.ReadLocation
+				ref.ReadLocation = &location
+			}
+			if ref.PublishLocation != nil {
+				location := *ref.PublishLocation
+				ref.PublishLocation = &location
+			}
+			out.SignalRefs[index] = ref
+		}
+	}
+	return out
+}
+
+// fileDigestMemo nhớ SHA-256 nội dung file theo (inode, mtime, size): cài bản
+// mới (`install` tạo inode mới, `cp` đè đổi mtime) là lần sau băm lại.
+type fileDigestMemo struct {
+	mu      sync.Mutex
+	entries map[string]fileDigestEntry
+}
+
+type fileDigestEntry struct {
+	info   os.FileInfo
+	digest [32]byte
+}
+
+func (m *fileDigestMemo) digest(path string) ([32]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	m.mu.Lock()
+	if entry, found := m.entries[path]; found && os.SameFile(entry.info, info) &&
+		entry.info.ModTime().Equal(info.ModTime()) && entry.info.Size() == info.Size() {
+		m.mu.Unlock()
+		return entry.digest, nil
+	}
+	m.mu.Unlock()
+	file, err := os.Open(path)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	defer file.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return [32]byte{}, err
+	}
+	var digest [32]byte
+	copy(digest[:], hasher.Sum(nil))
+	m.mu.Lock()
+	if m.entries == nil {
+		m.entries = make(map[string]fileDigestEntry)
+	}
+	m.entries[path] = fileDigestEntry{info: info, digest: digest}
+	m.mu.Unlock()
+	return digest, nil
+}
+
+// compileCacheKey băm mọi thứ quyết định đầu ra. `false` = không dựng được khoá
+// (không đọc được binary/khoá ký) ⇒ bỏ qua cache, biên dịch như cũ.
+//
+// `Input` đi vào khoá NGUYÊN VẸN qua json.Marshal: thêm field mới cho Input là
+// tự động vào khoá (test `TestCompileCacheKeyCoversEveryInputField` canh việc
+// ai đó gắn `json:"-"`).
+func (r ProcessRunner) compileCacheKey(input Input, digests *fileDigestMemo) ([32]byte, bool) {
+	compilerDigest, err := digests.digest(r.BinaryPath)
+	if err != nil {
+		return [32]byte{}, false
+	}
+	signingKeyDigest := ""
+	if r.SigningKeyPath != "" {
+		keyDigest, err := digests.digest(r.SigningKeyPath)
+		if err != nil {
+			return [32]byte{}, false
+		}
+		signingKeyDigest = hex.EncodeToString(keyDigest[:])
+	}
+	payload, err := json.Marshal(struct {
+		KeySchema             int
+		CompilerSHA256        string
+		SigningKeySHA256      string
+		ProfileID             string
+		ProfileCode           int
+		ProfileSHA256         string
+		ProfileLibraryVersion string
+		ProfileIntegrityMode  string
+		TargetABI             int
+		MaxArtifactBytes      int
+		Input                 Input
+	}{compileCacheKeySchema, hex.EncodeToString(compilerDigest[:]), signingKeyDigest, domain.ProfileID,
+		domain.ProfileCode, domain.ProfileSHA256, domain.ProfileLibraryVersion, domain.ProfileIntegrityMode,
+		domain.ProfileTargetABI, MaxArtifactBytes, input})
+	if err != nil {
+		return [32]byte{}, false
+	}
+	return sha256.Sum256(payload), true
+}
+
+// WorkerPool giới hạn số process compiler chạy đồng thời.
+type WorkerPool struct {
+	slots  chan struct{}
+	active atomic.Int64
+	peak   atomic.Int64
+	// niceFailures đếm lần hạ ưu tiên process compiler thất bại (process vẫn
+	// chạy, nhưng AC "ưu tiên thấp hơn Core/IOBus" khi đó không được giữ).
+	niceFailures atomic.Uint64
+	busy         atomic.Uint64
+}
+
+// WorkerPoolStats là ảnh chụp bộ đếm của pool.
+type WorkerPoolStats struct {
+	Capacity     int
+	Active       int64
+	Peak         int64
+	Busy         uint64
+	NiceFailures uint64
+}
+
+// NewWorkerPool dựng pool `size` slot (tối thiểu 1).
+func NewWorkerPool(size int) *WorkerPool {
+	if size < 1 {
+		size = 1
+	}
+	return &WorkerPool{slots: make(chan struct{}, size)}
+}
+
+func (p *WorkerPool) acquire(ctx context.Context, maxWait time.Duration) (func(), error) {
+	timer := time.NewTimer(maxWait)
+	defer timer.Stop()
+	select {
+	case p.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %w: context kết thúc khi chờ slot compiler", ErrTimeout, ErrWorkerPoolBusy)
+	case <-timer.C:
+		p.busy.Add(1)
+		return nil, fmt.Errorf("%w: %w: chờ slot compiler quá %s (tối đa %d process)",
+			ErrTimeout, ErrWorkerPoolBusy, maxWait, cap(p.slots))
+	}
+	active := p.active.Add(1)
+	for {
+		peak := p.peak.Load()
+		if active <= peak || p.peak.CompareAndSwap(peak, active) {
+			break
+		}
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			p.active.Add(-1)
+			<-p.slots
+		})
+	}, nil
+}
+
+// Stats trả ảnh chụp bộ đếm.
+func (p *WorkerPool) Stats() WorkerPoolStats {
+	return WorkerPoolStats{Capacity: cap(p.slots), Active: p.active.Load(), Peak: p.peak.Load(),
+		Busy: p.busy.Load(), NiceFailures: p.niceFailures.Load()}
+}
+
+// CompileOutcome là kết quả của một Input trong một lô.
+type CompileOutcome struct {
+	Result Result
+	Err    error
+	// Ran = false: Input này không được biên dịch vì một Input ĐỨNG TRƯỚC nó
+	// trong lô đã lỗi (xem CompileConcurrently).
+	Ran bool
+}
+
+// BatchRunner là Runner biên dịch được cả lô song song. Check dùng nó khi
+// runner có; runner chỉ có Compile thì Check biên dịch tuần tự như cũ.
+type BatchRunner interface {
+	CompileBatch(context.Context, []Input) []CompileOutcome
+}
+
+// CompileBatch biên dịch lô với tối đa MaxConcurrentCompiles goroutine; kết
+// quả trả theo ĐÚNG thứ tự `inputs`.
+func (r ProcessRunner) CompileBatch(ctx context.Context, inputs []Input) []CompileOutcome {
+	return CompileConcurrently(ctx, inputs, MaxConcurrentCompiles, r.Compile)
+}
+
+/* CompileConcurrently chạy `compile` cho từng Input với tối đa `workers`
+ * goroutine và trả kết quả theo thứ tự Input, bất kể thứ tự hoàn thành.
+ *
+ * Tương đương NGỮ NGHĨA với vòng tuần tự "dừng ở lỗi đầu tiên": Input được
+ * phát theo chỉ số tăng dần, và khi một Input lỗi thì không phát thêm Input
+ * nào. Vì vậy mọi Input đứng trước lỗi có chỉ số nhỏ nhất đều ĐÃ chạy
+ * (`Ran = true`) — nơi gọi duyệt theo thứ tự và dừng ở lỗi đầu tiên sẽ thấy
+ * đúng kết quả mà vòng tuần tự cho, chỉ nhanh hơn. Không huỷ Input đang chạy:
+ * huỷ một Input chỉ số nhỏ hơn sẽ biến nó thành timeout giả và đổi kết quả. */
+func CompileConcurrently(ctx context.Context, inputs []Input, workers int,
+	compile func(context.Context, Input) (Result, error)) []CompileOutcome {
+	outcomes := make([]CompileOutcome, len(inputs))
+	if workers > len(inputs) {
+		workers = len(inputs)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	var (
+		mu      sync.Mutex
+		next    int
+		stopped bool
+		wg      sync.WaitGroup
+	)
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				mu.Lock()
+				if stopped || next >= len(inputs) {
+					mu.Unlock()
+					return
+				}
+				index := next
+				next++
+				mu.Unlock()
+				result, err := compile(ctx, inputs[index])
+				outcomes[index] = CompileOutcome{Result: result, Err: err, Ran: true}
+				if err != nil {
+					mu.Lock()
+					stopped = true
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	return outcomes
+}
 
 type Input struct {
 	SourceID string
@@ -222,6 +700,10 @@ type ProcessRunner struct {
 	BinaryPath  string
 	ScratchRoot string
 	Timeout     time.Duration
+	// Cache/Pool — T63-304. Nil ⇒ cache và pool dùng chung của tiến trình
+	// (đường production). Test tiêm bản riêng để cô lập bộ đếm.
+	Cache *CompileCache
+	Pool  *WorkerPool
 	// SigningKeyPath — khoá RIÊNG của chính bo, dùng để ký artifact do bo biên
 	// dịch (ADR-052 lớp khoá thiết bị). Bắt buộc khi profile contract đặt
 	// `SIGNATURE_REQUIRED`: thiếu nó thì compiler sinh artifact không ký, Core
@@ -307,6 +789,35 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 			return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
 		}
 	}
+	cache := r.Cache
+	if cache == nil {
+		cache = sharedCompileCache
+	}
+	cacheKey, cacheable := r.compileCacheKey(input, sharedFileDigests)
+	if cacheable {
+		if cached, hit := cache.get(cacheKey); hit {
+			return cached, nil
+		}
+	}
+	pool := r.Pool
+	if pool == nil {
+		pool = sharedWorkerPool
+	}
+	release, err := pool.acquire(ctx, r.Timeout)
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
+	result, err := r.compileProcess(ctx, input, pool)
+	if err == nil && result.OK && cacheable {
+		cache.put(cacheKey, result)
+	}
+	return result, err
+}
+
+// compileProcess là đường biên dịch bằng process (trước T63-304 là toàn bộ
+// thân Compile): scratch riêng, process group riêng, trần thời gian/đầu ra.
+func (r ProcessRunner) compileProcess(ctx context.Context, input Input, pool *WorkerPool) (Result, error) {
 	if err := ensurePrivateDirectory(r.ScratchRoot); err != nil {
 		return Result{}, err
 	}
@@ -426,7 +937,16 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 		return nil
 	}
 	cmd.WaitDelay = 500 * time.Millisecond
-	runErr := cmd.Run()
+	runErr := cmd.Start()
+	if runErr == nil {
+		// T63-304: hạ ưu tiên CẢ process group (Setpgid ⇒ pgid = pid) ngay sau
+		// khi tạo; process con sinh sau kế thừa nice. Lỗi không chặn biên dịch
+		// nhưng được đếm ở WorkerPoolStats.NiceFailures.
+		if err := syscall.Setpriority(syscall.PRIO_PGRP, cmd.Process.Pid, compileWorkerNice); err != nil {
+			pool.niceFailures.Add(1)
+		}
+		runErr = cmd.Wait()
+	}
 	if compileCtx.Err() != nil {
 		return Result{}, fmt.Errorf("%w: deadline", ErrTimeout)
 	}

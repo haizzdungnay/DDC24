@@ -88,7 +88,9 @@ func (a *App) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	// `T57-3.17` / ADR-047: `/me` là một trong hai endpoint mà phiên "phải đổi
 	// mật khẩu" còn gọi được, nên nó phải nói ra chính tình trạng đó — nếu
 	// không, giao diện chỉ thấy một chuỗi 403 mà không biết vì sao.
-	writeJSON(w, http.StatusOK, UserDTO{
+	// T63-108: ETag theo nội dung + 304 — xem http_revalidate.go. Băm chính
+	// thân nên hai người dùng khác nhau không bao giờ trùng ETag.
+	writeJSONRevalidated(w, r, UserDTO{
 		Username:           principal.Username,
 		Role:               principal.Role,
 		MustChangePassword: a.auth.MustChangePassword(principal.Username),

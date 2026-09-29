@@ -487,6 +487,10 @@ export interface OverviewAlarmCounts {
   info: number
   unacked: number
   total: number
+  /** T63-108 — số trên chuông shell: hàng đang hoạt động (hoặc, khi `/alarms`
+   *  không có cờ `active`, status `active`/`acked`) hoặc chưa xác nhận. KHÁC
+   *  `total`. Vắng ở server đời cũ ⇒ chuông quay về poll `/alarms`. */
+  activeOrUnacked?: number
 }
 
 export interface OverviewPointGroup {

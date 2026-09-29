@@ -72,15 +72,18 @@ function baseOverview(): OverviewResponse {
 vi.mock('../../shared/api/client', () => ({ apiClient: { getPoints: mocks.getPoints } }))
 vi.mock('../../shared/api/overview', () => ({ fetchActivity: mocks.fetchActivity }))
 
-vi.mock('../../shared/hooks/useApi', () => ({
-  useApi: (fetcher: unknown) => {
-    if (fetcher === mocks.getPoints) return { data: points, loading: false, error: null, refetch: mocks.refetch }
+/* T63-108: các khối Landing đọc bảng điểm qua `useLivePoints` (một vòng poll
+   dùng chung + kênh sống) và nhật ký qua `useSharedPoll`. Hợp đồng của hai hook
+   đó có test riêng (`shared/hooks/*.test.tsx`); ở đây chỉ cấp dữ liệu. */
+vi.mock('../../shared/hooks/useLivePoints', () => ({
+  useLivePoints: () => ({ points, live: false, polled: points, loading: false, error: null, refetch: mocks.refetch })
+}))
+vi.mock('../../shared/hooks/useSharedPoll', () => ({
+  useSharedPoll: () => {
     const activity: ActivityPage = { schemaVersion: 1, generatedAt: '2026-08-08T03:00:05Z', items: [], nextCursor: null, retained: 0, capacity: 100 }
-    return { data: activity, loading: false, error: null, refetch: mocks.refetch }
+    return { data: activity, loading: false, error: null, receivedAt: 0, refetch: mocks.refetch }
   }
 }))
-
-vi.mock('../../shared/realtime', () => ({ useRealtime: () => ({ allPoints: [], lastPointEventAt: null }) }))
 vi.mock('../auth', () => ({ useAuth: () => ({ session: { username: 'op1', role: 'operator' } }) }))
 vi.mock('../../shared/overview/OverviewProvider', () => ({ useOverview: () => overviewState }))
 

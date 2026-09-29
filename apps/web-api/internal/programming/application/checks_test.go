@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -440,5 +442,137 @@ func TestNormalizeSeverityDefaultsUnknownAndEmptyToError(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("normalizeSeverity(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+/* T63-304 (F-PRG-PERF-004) — Check biên dịch song song tối đa 2 Program nhưng
+ * gộp kết quả theo ĐÚNG thứ tự Program. `parallelBatchRunner` dùng chính
+ * `programmingcompiler.CompileConcurrently` (đường của ProcessRunner) và cho
+ * Program đứng trước chạy LÂU hơn, để thứ tự hoàn thành ngược thứ tự Program. */
+type parallelBatchRunner struct {
+	mu      sync.Mutex
+	active  int
+	peak    int
+	failed  map[string]bool
+	errs    map[string]error
+	delays  map[string]time.Duration
+	symbols bool
+}
+
+func (r *parallelBatchRunner) Compile(_ context.Context, input programmingcompiler.Input) (programmingcompiler.Result, error) {
+	r.mu.Lock()
+	r.active++
+	if r.active > r.peak {
+		r.peak = r.active
+	}
+	delay, failed, err := r.delays[input.SourceID], r.failed[input.SourceID], r.errs[input.SourceID]
+	r.mu.Unlock()
+	defer func() { r.mu.Lock(); r.active--; r.mu.Unlock() }()
+	time.Sleep(delay)
+	if err != nil {
+		return programmingcompiler.Result{}, err
+	}
+	if failed {
+		return programmingcompiler.Result{OK: false, Diagnostics: []programmingcompiler.Diagnostic{
+			{Code: "ST-SYN-001", Severity: "ERROR", Message: "lỗi của " + input.SourceID}}}, nil
+	}
+	artifact := []byte("artifact:" + input.SourceID)
+	return programmingcompiler.Result{OK: true, Artifact: artifact, ArtifactSHA256: sha256.Sum256(artifact),
+		Manifest: json.RawMessage(`{"manifestVersion":1}`), CompilerVersion: checkCompilerVersion,
+		ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30",
+		LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}, nil
+}
+
+func (r *parallelBatchRunner) CompileBatch(ctx context.Context, inputs []programmingcompiler.Input) []programmingcompiler.CompileOutcome {
+	return programmingcompiler.CompileConcurrently(ctx, inputs, programmingcompiler.MaxConcurrentCompiles, r.Compile)
+}
+
+// reverseDelays: Program đầu chạy lâu nhất ⇒ hoàn thành sau cùng.
+func reverseDelays(ids []string) map[string]time.Duration {
+	delays := make(map[string]time.Duration, len(ids))
+	for index, id := range ids {
+		delays[id] = time.Duration(len(ids)-index) * 30 * time.Millisecond
+	}
+	return delays
+}
+
+func TestCheckCompilesInParallelButReportsDiagnosticsInProgramOrder(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID, ids := packageRevisionFixture(t, projects, 4)
+	failed := map[string]bool{}
+	for _, id := range ids {
+		failed[id] = true
+	}
+	runner := &parallelBatchRunner{failed: failed, delays: reverseDelays(ids)}
+	view := runCheck(t, newCheckServiceForPackage(t, store, runner), revisionID, "33000000-0000-4000-8000-000000000001")
+	if view.State != "FAILED" || len(view.Diagnostics) != len(ids) {
+		t.Fatalf("state=%s diagnostics=%+v", view.State, view.Diagnostics)
+	}
+	for index, diagnostic := range view.Diagnostics {
+		// `programId` và NỘI DUNG phải cùng thuộc Program thứ `index`: ghép kết
+		// quả theo thứ tự hoàn thành sẽ gắn lỗi của Program này vào tên Program kia.
+		programID, _ := diagnostic.Location["programId"].(string)
+		if programID != ids[index] || diagnostic.Message != "lỗi của "+ids[index] {
+			t.Fatalf("diagnostic %d = %s/%q; muốn %s/%q — thứ tự theo process xong trước, không theo Program",
+				index, programID, diagnostic.Message, ids[index], "lỗi của "+ids[index])
+		}
+	}
+	if runner.peak != 2 {
+		t.Fatalf("biên dịch song song tối đa %d; muốn 2 (Plan 63 §4.3)", runner.peak)
+	}
+}
+
+// Cùng Revision: đường song song cho ĐÚNG cùng package (content + container hash)
+// với đường tuần tự.
+func TestCheckParallelCompileBuildsTheSamePackageAsSequential(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID, ids := packageRevisionFixture(t, projects, 4)
+	hashOf := func(view CheckView) string {
+		if view.State != "PASSED" {
+			t.Fatalf("state=%s diagnostics=%+v", view.State, view.Diagnostics)
+		}
+		stored, err := store.GetCheck(context.Background(), view.CheckID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document struct {
+			Manifest struct {
+				ContentSHA256   string `json:"contentSha256"`
+				ContainerSHA256 string `json:"containerSha256"`
+			} `json:"manifest"`
+		}
+		if err := json.Unmarshal(stored.ResultJSON, &document); err != nil {
+			t.Fatal(err)
+		}
+		return document.Manifest.ContentSHA256 + "/" + document.Manifest.ContainerSHA256
+	}
+	sequential := hashOf(runCheck(t, newCheckServiceForPackage(t, store, &perProgramRunner{failed: map[string]bool{}}),
+		revisionID, "33000000-0000-4000-8000-000000000002"))
+	parallelRunner := &parallelBatchRunner{delays: reverseDelays(ids)}
+	parallel := hashOf(runCheck(t, newCheckServiceForPackage(t, store, parallelRunner),
+		revisionID, "33000000-0000-4000-8000-000000000003"))
+	if sequential == "/" || sequential != parallel {
+		t.Fatalf("package song song %q khác tuần tự %q", parallel, sequential)
+	}
+	if parallelRunner.peak != 2 {
+		t.Fatalf("không chạy song song: peak=%d", parallelRunner.peak)
+	}
+}
+
+// Lỗi worker quyết định kết quả theo THỨ TỰ Program, như vòng tuần tự: Program 2
+// timeout (xong muộn) đứng trước Program 3 lệch toolchain (xong sớm) ⇒ TIMED_OUT.
+func TestCheckParallelFirstWorkerErrorFollowsProgramOrder(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID, ids := packageRevisionFixture(t, projects, 3)
+	runner := &parallelBatchRunner{
+		errs: map[string]error{
+			ids[1]: fmt.Errorf("%w: deadline", programmingcompiler.ErrTimeout),
+			ids[2]: fmt.Errorf("%w: lệch profile", programmingcompiler.ErrToolchainMismatch),
+		},
+		delays: map[string]time.Duration{ids[0]: 10 * time.Millisecond, ids[1]: 120 * time.Millisecond},
+	}
+	view := runCheck(t, newCheckServiceForPackage(t, store, runner), revisionID, "33000000-0000-4000-8000-000000000004")
+	if view.State != "TIMED_OUT" || len(view.Diagnostics) != 1 || view.Diagnostics[0].DetailCode != "ST-WORKER-TIMEOUT" {
+		t.Fatalf("state=%s diagnostics=%+v — lỗi của Program xong trước đã thắng lỗi của Program đứng trước", view.State, view.Diagnostics)
 	}
 }

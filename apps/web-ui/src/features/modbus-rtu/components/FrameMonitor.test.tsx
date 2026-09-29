@@ -129,4 +129,33 @@ describe('FrameMonitor', () => {
       vi.useRealTimers()
     }
   })
+
+  /* T63-108 (PERF-API-03): theo dõi liên tục KHÔNG poll khi tab ẩn — không ai
+   * nhìn bảng khung, mà mỗi lượt đọc vẫn chạm iobus. */
+  it('theo dõi liên tục dừng khi tab ẩn và đọc bù ngay khi hiện lại', async () => {
+    let visibility: DocumentVisibilityState = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    vi.useFakeTimers()
+    try {
+      render(<I18nProvider><FrameMonitor /></I18nProvider>)
+      await vi.advanceTimersByTimeAsync(0)
+      screen.getByRole('button', { name: 'Theo dõi liên tục' }).click()
+      await vi.advanceTimersByTimeAsync(4000)
+      const visibleCalls = api.getModbusFrames.mock.calls.length
+      expect(visibleCalls).toBeGreaterThanOrEqual(3)
+
+      visibility = 'hidden'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(api.getModbusFrames).toHaveBeenCalledTimes(visibleCalls)
+
+      visibility = 'visible'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(api.getModbusFrames).toHaveBeenCalledTimes(visibleCalls + 1)
+    } finally {
+      visibility = 'visible'
+      vi.useRealTimers()
+    }
+  })
 })

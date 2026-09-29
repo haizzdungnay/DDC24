@@ -1,0 +1,57 @@
+package compiler
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+)
+
+// Đo T63-304 trên HOST (chỉ chép vào bản sao scratch, không vào repo).
+// MKDDC_T304_SLEEP_MS: thời gian compile giả mỗi Program (32 ≈ Program 1 604
+// lệnh đo trực tiếp bằng compiler thật trên host).
+func TestMeasureT304(t *testing.T) {
+	if os.Getenv("MKDDC_T304_MEASURE") != "1" {
+		t.Skip("đo tay")
+	}
+	sleep, _ := strconv.Atoi(os.Getenv("MKDDC_T304_SLEEP_MS"))
+	const programs = 32
+	binary, logPath := writeFakeCompiler(t, t.TempDir(), fakeCompilerOptions{sleepMS: sleep})
+	inputs := make([]Input, programs)
+	for i := range inputs {
+		inputs[i] = fakeInput(1000 + i)
+	}
+	seqRunner := isolatedRunner(t, binary)
+	seqRunner.Cache = NewCompileCache(0, 0) // tuần tự, không cache = hành vi trước T63-304
+	started := time.Now()
+	for _, in := range inputs {
+		if _, err := seqRunner.Compile(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sequential := time.Since(started)
+	_ = os.Remove(logPath)
+	runner := isolatedRunner(t, binary)
+	run := func() time.Duration {
+		started := time.Now()
+		for i, o := range runner.CompileBatch(context.Background(), inputs) {
+			if o.Err != nil || !o.Result.OK {
+				t.Fatalf("%d: %v", i, o.Err)
+			}
+		}
+		return time.Since(started)
+	}
+	first := run()
+	firstRuns := readFakeCompilerLog(t, logPath)
+	second := run()
+	secondRuns := readFakeCompilerLog(t, logPath)
+	inputs[7].Source = append(append([]byte(nil), inputs[7].Source...), []byte("\n(* sửa *)\n")...)
+	oneChanged := run()
+	thirdRuns := readFakeCompilerLog(t, logPath)
+	fmt.Printf("T304 sleep_ms=%d programs=%d sequential_nocache=%v parallel2_first=%v (process=%d, max_overlap=%d, nice=%d) parallel2_repeat=%v (process mới=%d) one_changed=%v (process mới=%d) cache=%+v pool=%+v\n",
+		sleep, programs, sequential.Round(time.Millisecond), first.Round(time.Millisecond), len(firstRuns), maxOverlap(firstRuns), firstRuns[0].nice,
+		second.Round(time.Microsecond), len(secondRuns)-len(firstRuns), oneChanged.Round(time.Millisecond), len(thirdRuns)-len(secondRuns),
+		runner.Cache.Stats(), runner.Pool.Stats())
+}

@@ -1,0 +1,166 @@
+{
+  "results": [
+    {
+      "mutation": "R1 bỏ tra cache",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheHitReturnsIdenticalArtifactWithoutSpawning",
+        "TestCompileCacheReturnsIsolatedCopies"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R2 khoá không gồm hash binary compiler",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheMissesAfterToolchainOrSigningKeyChanges"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R3 khoá không gồm hash khoá ký",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheMissesAfterToolchainOrSigningKeyChanges"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R4 khoá chỉ gồm SourceID+Source",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheKeyCoversEveryInputField"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R5 cache cả kết quả lỗi (Compile + put)",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheIsBoundedLRU",
+        "TestCompileCacheNeverStoresFailures"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R5b put nhận kết quả lỗi",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheIsBoundedLRU"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R6 trả chung vùng nhớ với cache",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheReturnsIsolatedCopies"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R7 bỏ trần LRU",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileCacheIsBoundedLRU"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R8 bỏ pool (không giới hạn process)",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestWorkerPoolCapsConcurrentCompilerProcessesAtTwo",
+        "TestWorkerPoolWaitIsBoundedAndHonoursContext"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R9 chờ slot vô hạn (bỏ hẹn giờ)",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "<timeout: TestWorkerPoolWaitIsBoundedAndHonoursContext>"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R10 bỏ hạ ưu tiên CPU",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompilerProcessRunsAtLowerCPUPriority"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R11 không dừng phát Input sau lỗi",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestCompileConcurrentlyKeepsInputOrderAndStopsAfterError"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R12 trần song song 1",
+      "package": "./internal/programming/application/",
+      "exit": 1,
+      "failed": [
+        "TestCheckCompilesInParallelButReportsDiagnosticsInProgramOrder",
+        "TestCheckParallelCompileBuildsTheSamePackageAsSequential"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R12b trần song song 1 (gói compiler)",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestWorkerPoolCapsConcurrentCompilerProcessesAtTwo"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R12c trần song song 3",
+      "package": "./internal/programming/compiler/",
+      "exit": 1,
+      "failed": [
+        "TestWorkerPoolCapsConcurrentCompilerProcessesAtTwo"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R13 checks.go bỏ đường lô (luôn tuần tự)",
+      "package": "./internal/programming/application/",
+      "exit": 1,
+      "failed": [
+        "TestCheckCompilesInParallelButReportsDiagnosticsInProgramOrder",
+        "TestCheckParallelCompileBuildsTheSamePackageAsSequential"
+      ],
+      "red": true
+    },
+    {
+      "mutation": "R14 gộp kết quả theo thứ tự hoàn thành",
+      "package": "./internal/programming/application/",
+      "exit": 1,
+      "failed": [
+        "TestCheckCompilesInParallelButReportsDiagnosticsInProgramOrder",
+        "TestCheckParallelCompileBuildsTheSamePackageAsSequential",
+        "TestCheckParallelFirstWorkerErrorFollowsProgramOrder"
+      ],
+      "red": true
+    }
+  ],
+  "red": 17,
+  "total": 17
+}
