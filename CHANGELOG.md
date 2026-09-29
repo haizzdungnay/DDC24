@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — Review source giao diện và bảng đề xuất cải thiện DDC-24 (2026-09-29)
+
+- Phạm vi tài liệu: `REC-DDC-UI-REVIEW-20260929`, `REC-DDC-UI-PROPOSAL-20260929`, bằng chứng `REC-DDC-UI-EVIDENCE-20260929` và chỉ mục review. Rà source `origin/main@265f1a8b` trong worktree riêng; giữ nguyên source frontend và phần CHANGELOG đang sửa của checkout người dùng.
+- Xác nhận 5 finding: mobile bỏ `deviceId` trong bảng ánh xạ; panel lưu ở max làm tràn trang; focus thoát bảng lệnh nhanh; poll Commission tiếp tục sau unmount; thanh kéo panel chưa xử lý bàn phím. Ba finding tái hiện Chrome, một finding bằng test hook host, một finding qua source; chưa sửa frontend trong phiên review.
+- Tám đề xuất có lợi ích, ưu tiên, công dự kiến, source owner, rủi ro, nghiệm thu và quyết định Product còn mở. Không chuyển đề xuất thành requirement/DDD được duyệt hoặc kết luận release.
+- Kiểm chứng source baseline sau `npm ci` riêng: Vitest chọn lọc 5 file/44 test PASS, lint PASS, build PASS (Programming 76,83 KiB gzip/165 KiB); test tái hiện poll FAIL đúng lỗi 2 GET thay vì 1. Chrome DevTools MCP đã chạy desktop/mobile, lưu 5 ảnh và Console/Network; API/WS thiếu trong fixture được ghi rõ. Docs harness PASS (489 file, EXPECT khớp), candidate pin PASS 17/17, diff check PASS. E2E đầy đủ, backend thật, target/HIL NOT RUN.
+
 ### Added — Kiểm Issue #827 trên bo lab: Program tự chạy lại sau restart Core/reboot, không FAULT; mở #833 và #832 (U-22, 2026-09-28)
 
 - **Phạm vi:** chỉ tài liệu và bằng chứng, không đổi mã.
