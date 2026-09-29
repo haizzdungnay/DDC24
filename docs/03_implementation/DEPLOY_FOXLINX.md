@@ -321,7 +321,8 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
   tác tay**. Sau restart, Program đi qua `DISABLED` rồi `WAITING` ("Chờ đầu vào"),
   và tự `RUNNING` khi vòng đối chiếu VP của web đẩy VP xuống (≤ 10 s). Đo trên bo:
   Program chạy lại 3,6–10,6 s sau lệnh restart, `faultCount` không tăng
-  (`EV-PROG-STARTUP-WAIT-827-TARGET`). Chỉ khi Program `FAULTED ST-RT-008` thật (đầu
+  (`EV-PROG-STARTUP-WAIT-827-TARGET`). Kiểm sau restart: `GET …/programs` không còn
+  dòng nào `WAITING` quá 60 s. Chỉ khi Program `FAULTED ST-RT-008` thật (đầu
   vào xấu liên tục ≥ 60 s) mới cần `PUT …/programs/{programId}/runtime-intent`
   `{"schemaVersion":"1.0","desiredEnabled":false}` rồi `true`, mỗi lệnh một
   `X-Idempotency-Key` mới. Trong khoảng chờ, DO Modbus giữ nguyên trạng thái cuối,
