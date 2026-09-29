@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Fixed — `restartPolicy: initial` nay áp cho Virtual Point `multistate`: `DO16_MODE` về OFF khi web/bo khởi động (Issue #832, 2026-09-29)
+
+- **Phạm vi:** `apps/web-api/internal/app/virtualpoint_restart.go` (`sameVirtualPointValue`) và 3 test mới trong `virtualpoint_limits_test.go`. Tài liệu: hồ sơ mới `docs/07_records/test-evidence/programming/2026-09-29-vp-multistate-restart-policy-target.md` (`EV-PROG-VP-MSV-RESTART-832-TARGET` 1.0) kèm fixture `fixtures/2026-09-29-vp-multistate-restart-832/`; `GUIDE-PROG-ST-DO16-001` 1.14 §5.3; `EV-PROG-STARTUP-WAIT-827-TARGET` 1.1 §4.2; `REC-DDC-FIELD-USE-20260927` 2.4.
+- **Triệu chứng:** trên bo lab Foxlinx, VP2 `DO16_MODE` được cấu hình `multistate`, `restartPolicy: initial`, `initialValue` 0 (OFF). Nó vẫn là 10 (AUTO) qua **sáu** lần web khởi động: bốn lần ngày 2026-09-28 (gồm reboot bo), 02:09Z và 02:40Z ngày 2026-09-29. Journal không có dòng `restart policy`, `virtual_points.conf` không bị ghi lại. Sau mất điện, 16 relay của `PRG_DO16_MODBUS` tự chạy AUTO.
+- **Nguyên nhân gốc:** `sameVirtualPointValue` chỉ so số cho kiểu mà `virtualPointNumericSignalType` nhận (`integer`/`float`). `multistate` rơi xuống nhánh so chuỗi, nơi `virtualPointText` trả `""` cho mọi số, nên 10 và 0 bị coi là bằng nhau và `applyRestartPolicyOnBoot` bỏ qua điểm.
+- **Cách sửa:** nhánh so số áp cho `virtualPointNumericSignalType(t) || virtualPointMultistate(t)`.
+  - Không sửa `virtualPointNumericSignalType`: bốn nơi gọi còn lại (binding `AV`, alarm ngưỡng ×2, biên kỹ thuật) cố ý loại `multistate`.
+  - Giữ luật "kiểu số mà một vế không đọc được thành số ⇒ khác nhau".
+  - Không bump `generation`, không đụng vòng đối chiếu (`virtualPointMatchesSlot` vốn so số).
+- **Test đỏ trước khi sửa** (trên `main@101d1fdf`):
+  - `TestRestartPolicyInitialWorksOnMultistateSignalType` FAIL `số điểm đặt lại = 0; muốn 1`;
+  - `TestSameVirtualPointValueComparesMultistateAsNumber` FAIL 5/8 ca;
+  - `TestRestartPolicyMultistateIsIdempotent` PASS: đây là ca chặn chiều ngược, so nội dung và mtime tệp.
+
+  Sau sửa: 13/13 test restart-policy/so giá trị PASS.
+- **Kiểm chứng host:** `go vet ./...` exit 0; `go test ./... -count=1` exit 0, **21 package ok**, 0 FAIL.
+- **Trên bo lab** (WAN `mekong-fac.ddns.net:2223`; LAN không tới được):
+  - Deploy chỉ `mkddc-web` sha `cc5848d7…`, dựng từ clone thường (`vcs.revision=e32c1ec6`, `modified=false`). Cả ba unit (`mkddc-web-pi`, `mkddc-reload-helper`, `mkddc-time-helper`) chạy cùng binary. Sao lưu hậu tố `.bak-20260929T030958Z`.
+  - `deploy-record` ghi 1 mục, giữ 7. `readback` 11 kiểm, 2 lệch: cả hai là `web-ui` và có sẵn từ trước lượt này. `index.html` bị thay lúc 02:39:55Z bởi một lượt deploy FE song song không ghi manifest; lượt này không ghi đè.
+  - Web khởi động 03:10:25Z: journal có `INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo` và audit `items[VP2].value: 10 -> 0`. VP2 `value` 0, `generation` giữ 3. mtime `virtual_points.conf` đổi sang 2026-09-29 03:10:25Z.
+  - Relay CK508-04/05: 1 → 0 đóng.
+  - Restart lần hai 03:11:52Z: 0 điểm đặt lại, tệp giữ nguyên mtime và sha.
+  - Health 6/6, Programming `READY`, Active `0c29f4f1…` không đổi, Program `RUNNING` ở OFF, `faultCount` 0.
+  - **Hành vi đổi:** mỗi lần web/bo khởi động, `DO16_MODE` về OFF. Không tự đặt lại AUTO; chủ bo tự chọn chế độ.
+- **NOT_RUN:** reboot cả bo (cùng đường khởi động web đã kiểm); đo điện tại tiếp điểm relay.
+- **Refs:** Issue #832, #827, #401 (ISS-PIO-17), #398 (ISS-PIO-15), #397 (ISS-PIO-14), `EV-PROG-STARTUP-WAIT-827-TARGET` §4.2.
+
 ### Added — Review source giao diện và bảng đề xuất cải thiện DDC-24 (2026-09-29)
 
 - Phạm vi tài liệu: `REC-DDC-UI-REVIEW-20260929`, `REC-DDC-UI-PROPOSAL-20260929`, bằng chứng `REC-DDC-UI-EVIDENCE-20260929` và chỉ mục review. Rà source `origin/main@265f1a8b` trong worktree riêng; giữ nguyên source frontend và phần CHANGELOG đang sửa của checkout người dùng.
