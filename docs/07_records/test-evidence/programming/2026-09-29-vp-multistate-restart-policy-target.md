@@ -7,7 +7,7 @@
 | Ngày | 2026-09-29 |
 | Issue | [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832), phát hiện trong [`EV-PROG-STARTUP-WAIT-827-TARGET`](2026-09-28-startup-input-wait-target.md) §4.2 |
 | Bản sửa | commit `e32c1ec6` (`apps/web-api/internal/app/virtualpoint_restart.go`, hàm `sameVirtualPointValue`) |
-| Trạng thái | **PASS.** Test host đỏ trên mã cũ, xanh sau bản sửa. Trên bo: web khởi động thì `DO16_MODE` 10 → 0, journal có dòng `restart policy`, `virtual_points.conf` được ghi lại. Restart web lần hai thì 0 điểm bị đặt lại và tệp không đổi. Program `RUNNING` ở chế độ OFF |
+| Trạng thái | **PASS.** Test host đỏ trên mã cũ, xanh sau bản sửa. Trên bo: web khởi động thì `DO16_MODE` 10 → 0, journal có dòng `restart policy`, `virtual_points.conf` được ghi lại. Restart web lần hai thì 0 điểm bị đặt lại và tệp không đổi. Program `RUNNING` ở chế độ OFF. **Sau lượt kiểm** (03:16–03:17Z), máy LAN `192.168.1.42` đã thay web, Core và FE bằng bản **không có** bản sửa #827 và #832. Lúc 03:18Z, bo không còn chạy bản sửa này và Program `FAULTED ST-RT-008` (§4.2) |
 | Đích | `OK1126B-buildroot` (Forlinx OK1126B-S, RV1126B), truy cập qua WAN `mekong-fac.ddns.net:2223` (LAN `192.168.1.16` không tới được: `No route to host`) |
 | Lớp bằng chứng | HOST (test Go) và TARGET (web, Core, bus Modbus thật). Không phải HIL, chưa đo điện tại tiếp điểm relay |
 
@@ -69,11 +69,38 @@ Journal còn cho thấy lỗi xảy ra thêm **hai lần** trong sáng 2026-09-2
 
 ## 4. Lệch không thuộc lượt này (không ghi đè)
 
+### 4.1 FE đã bị thay trước lượt này
+
 `readback` trước và sau deploy đều báo `web-ui` lệch:
 - `index.html` đang phục vụ có sha `08808e44bf99b1f2`;
 - manifest ghi `3f77bcefc66e753c` (FE `main@265f1a8b`).
 
 Tệp `/opt/mkddc-web/dist/index.html` bị thay lúc **2026-09-29 02:39:55Z**, 18 s trước lần restart web 02:40:13Z, và không đi kèm `deploy-record`. Đây là một lượt deploy FE song song, nhiều khả năng từ máy LAN `192.168.1.42`. Lượt này không đụng `dist` và không ghi manifest cho `web-ui`. Chủ lượt deploy FE đó cần tự chạy `deploy-record --artifact web-ui=…` để manifest khớp lại.
+
+### 4.2 Lượt deploy song song sau khi kiểm xong (03:16–03:17Z)
+
+Readback cuối lúc 03:18:05Z, chạy ngay trước khi mở PR, báo **11 kiểm, 6 lệch**. Journal và mtime cho thấy máy LAN `192.168.1.42` đã deploy ba thứ ngay sau lượt kiểm:
+
+| Mốc (UTC) | Việc | Hệ quả |
+|---|---|---|
+| 03:16:18Z | Thay FE (`index.html` sha `2f578d5b…`) | `web-ui` lệch manifest |
+| 03:16:50Z | Thay `/opt/mkddc-web/mkddc-web` (15,5 MB, sha `475f4a4f…`) và chỉ restart `mkddc-web-pi` | Web dựng từ `bb4931e7`, `vcs.modified=true`, nhánh `origin/feat/scheduler-calendar-interactions`. Nhánh này **không** chứa `265f1a8b` (#827) lẫn `e32c1ec6` (#832). `mkddc-reload-helper` và `mkddc-time-helper` vẫn chạy binary của lượt này, đã bị xoá khỏi đĩa (`STALE_EXE`) |
+| 03:17:26Z | Thay `/usr/sbin/mkddc-core` (1,05 MB, sha `77a149e1…`) và restart Core | Core vào `safe_state` `no_ctrl=1`. Program `a153aa91…` `FAULTED ST-RT-008`, `faultCount` 1, Task `FAULT`: đúng triệu chứng #827 mà Core `265f1a8b` đã sửa |
+
+Không ai chạy `deploy-record`, nên manifest vẫn ghi web `e32c1ec6` và Core `265f1a8b`. Lúc 03:18:09Z:
+- `DO16_MODE` vẫn là 0, vì web cũ không đặt lại multistate;
+- 0/16 relay đóng;
+- health 6/6.
+
+Lượt này **không** khôi phục gì: bản của họ là việc đang làm của người khác. Chi tiết: [`bo-deploy-song-song-0316Z.txt`](fixtures/2026-09-29-vp-multistate-restart-832/bo-deploy-song-song-0316Z.txt), [`artifact-readback-cuoi.json`](fixtures/2026-09-29-vp-multistate-restart-832/artifact-readback-cuoi.json).
+
+Muốn bo lab quay lại bản đã kiểm, chủ bo có các nguồn sau:
+- **Core `265f1a8b`:** bản sao lưu do chính lượt deploy song song tạo, `/usr/sbin/mkddc-core.bak`, sha `3799ff33…`, khớp mục `mkddc-core` trong manifest. Thư mục `/data/mkddc/deploy-backups/20260928T120830Z-main-265f1a8b/` giữ Core **cũ hơn** (`5868aabd…`), không dùng.
+- **Web `e32c1ec6`:** trên bo không còn tệp nào, và `mkddc-web.bak-20260929T030958Z` là web `265f1a8b` cũ. Cách lấy lại:
+  - dựng lại từ nhánh của PR bằng bản clone thường;
+  - hoặc chép từ `/proc/<MainPID>/exe` của `mkddc-reload-helper` / `mkddc-time-helper`, chừng nào hai tiến trình này chưa restart.
+
+Sau đó chạy `deploy-record` rồi `readback`, và Disable → Enable Program nếu vẫn `FAULTED`.
 
 ## 5. Rà chỗ tương tự
 
@@ -89,7 +116,7 @@ Tệp `/opt/mkddc-web/dist/index.html` bị thay lúc **2026-09-29 02:39:55Z**, 
 ## 6. Thay đổi hành vi vận hành và trạng thái để chủ bo chọn
 
 - Từ bản này, **mỗi lần web hoặc bo khởi động**, `DO16_MODE` về 0 (OFF). `PRG_DO16_MODBUS` dừng vòng AUTO và 16 relay nhả. Đây đúng là cấu hình người dùng đã chọn (`restartPolicy: initial`, `GUIDE-PROG-ST-DO16-001` §5.3).
-- Trạng thái để lại lúc 03:12:28Z:
+- Trạng thái lúc lượt này kết thúc kiểm (03:12:28Z; sau đó bo đã bị thay bản, xem §4.2):
   - `DO16_MODE` = 0 (OFF), 0/16 relay đóng;
   - Program `RUNNING` ở chế độ OFF, Active `0c29f4f1…` không đổi.
 
@@ -116,4 +143,4 @@ Bản cấu hình VP trước lượt này (`DO16_MODE` = 10) nằm ở `/data/c
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 1.0 | 2026-09-29 | Bản đầu: sửa `sameVirtualPointValue` (commit `e32c1ec6`), 3 test mới đỏ → xanh, `go test` 21 package `ok`; deploy `mkddc-web` lên bo lab. `DO16_MODE` 10 → 0 khi web khởi động, restart lần hai 0 điểm; Program `RUNNING` ở OFF; ghi lệch `web-ui` của lượt deploy FE song song |
+| 1.0 | 2026-09-29 | Bản đầu: sửa `sameVirtualPointValue` (commit `e32c1ec6`), 3 test mới đỏ → xanh, `go test` 21 package `ok`; deploy `mkddc-web` lên bo lab. `DO16_MODE` 10 → 0 khi web khởi động, restart lần hai 0 điểm; Program `RUNNING` ở OFF; ghi lệch `web-ui` có sẵn (§4.1) và lượt deploy song song 03:16–03:17Z đưa web/Core/FE không có bản sửa #827/#832 lên bo, làm Program `FAULTED` (§4.2) |

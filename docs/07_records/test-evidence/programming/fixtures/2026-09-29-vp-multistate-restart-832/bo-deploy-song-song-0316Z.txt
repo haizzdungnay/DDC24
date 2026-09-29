@@ -1,0 +1,56 @@
+# Lượt deploy song song của máy LAN 192.168.1.42 SAU khi lượt #832 kiểm xong (chỉ đọc, không ghi đè)
+# readback lúc 03:18:05Z: 11 kiểm, 6 lệch — xem artifact-readback-cuoi.json
+Sep 29 03:13:08 OK1126B-buildroot sshd[4583]: Accepted publickey for root from 192.168.1.42 port 54505
+Sep 29 03:14:10 OK1126B-buildroot sshd[4597]: Accepted publickey for root from 192.168.1.42 port 51750
+Sep 29 03:16:15 OK1126B-buildroot sshd[4607]: Accepted publickey for root from 192.168.1.42 port 52845
+Sep 29 03:16:15 OK1126B-buildroot sshd[4610]: Accepted publickey for root from 192.168.1.42 port 52847
+Sep 29 03:16:29 OK1126B-buildroot sshd[4617]: Accepted publickey for root from 192.168.1.42 port 52860
+Sep 29 03:16:45 OK1126B-buildroot sshd[4624]: Accepted publickey for root from 192.168.1.42 port 52874
+Sep 29 03:16:50 OK1126B-buildroot sshd[4631]: Accepted publickey for root from 192.168.1.42 port 52879
+Sep 29 03:16:50 OK1126B-buildroot systemd[1]: Stopping MK-DDC-24 Web/API...
+Sep 29 03:16:50 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 03:16:50 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 03:16:50 OK1126B-buildroot mkddc-web[4640]: mkddc-web 2026/09/29 03:16:50 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 03:17:06 OK1126B-buildroot sshd[4654]: Accepted publickey for root from 192.168.1.42 port 62516
+Sep 29 03:17:25 OK1126B-buildroot sshd[4662]: Accepted publickey for root from 192.168.1.42 port 62532
+Sep 29 03:17:25 OK1126B-buildroot sshd[4665]: Accepted publickey for root from 192.168.1.42 port 62534
+Sep 29 03:17:26 OK1126B-buildroot sshd[4672]: Accepted publickey for root from 192.168.1.42 port 62535
+Sep 29 03:17:26 OK1126B-buildroot systemd[1]: Stopping MK-DDC-24 core service (point table, priority, safe-state)...
+Sep 29 03:17:26 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 core service (point table, priority, safe-state).
+Sep 29 03:17:26 OK1126B-buildroot systemd[1]: Starting MK-DDC-24 core service (point table, priority, safe-state)...
+Sep 29 03:17:28 OK1126B-buildroot mkddc-core[5251]: INFO  state_snapshot.load: no file /data/mkddc/state.snap (init default)
+Sep 29 03:17:28 OK1126B-buildroot mkddc-core[5251]: WARN  alarm_cfg.missing path=/data/config/alarm_settings.conf (alarms disabled)
+Sep 29 03:17:28 OK1126B-buildroot mkddc-core[5251]: INFO  state_snapshot.worker_started thread=core-snapshot
+Sep 29 03:17:28 OK1126B-buildroot mkddc-core[5251]: ERROR safe_state.enter fault=0 stale=0 graph_bad=0 no_ctrl=1 overrun=0 (AO->safe, DO->open)
+Sep 29 03:17:28 OK1126B-buildroot systemd[1]: Started MK-DDC-24 core service (point table, priority, safe-state).
+Sep 29 03:17:42 OK1126B-buildroot sshd[5256]: Accepted publickey for root from 192.168.1.42 port 55021
+
+# mtime:
+2026-09-29 03:16:50.153878856 +0000 15532194 /opt/mkddc-web/mkddc-web
+2026-09-29 03:17:26.323725562 +0000 1051128 /usr/sbin/mkddc-core
+2026-09-29 03:16:18.196247219 +0000 1117 /opt/mkddc-web/dist/index.html
+2026-09-29 03:10:25.438190856 +0000 6717 /data/config/virtual_points.conf
+UNIT mkddc-core since=Tue_2026-09-29_03:17:28_UTC exe=/usr/sbin/mkddc-core sha=77a149e1d9bd4cdf
+UNIT mkddc-web-pi since=Tue_2026-09-29_03:16:50_UTC exe=/opt/mkddc-web/mkddc-web sha=475f4a4feaf393de
+UNIT mkddc-reload-helper since=Tue_2026-09-29_03:10:25_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=cc5848d7e2632090
+UNIT mkddc-time-helper since=Tue_2026-09-29_03:10:25_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=cc5848d7e2632090
+
+# go version -m của bản sao /opt/mkddc-web/mkddc-web (sha 475f4a4feaf393de):
+	build	vcs.revision=bb4931e7879ff3ca4570c3ba26482aa8339c5066
+	build	vcs.time=2026-09-29T02:28:19Z
+	build	vcs.modified=true
+
+# git: bb4931e7 thuộc origin/feat/scheduler-calendar-interactions; KHÔNG chứa 265f1a8b (#827) và KHÔNG chứa e32c1ec6 (#832)
+
+# Trạng thái 03:18:09Z:
+NOW 2026-09-29T03:18:09Z
+HEALTH ok 6/6 ok
+VP_CFG VP2   DO16_MODE         multistate value=0 initialValue=0 restartPolicy=initial generation=3 slot=MSV-01
+LIVE VP2 DO16_MODE value=0 quality=good
+LIVE VP10 DO16_STS_MODE value=0 quality=bad
+LIVE VP11 DO16_STS_ON value=0 quality=bad
+LIVE VP12 DO16_STS_TRIPS value=0 quality=bad
+RELAY CK508-04/05: 16 diem, dong=0 []
+PROGRAMMING targetState=READY
+RUNTIME activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db producerState=READY taskState=FAULT safeState=True
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=FAULTED coreState=FAULTED faultCount=1 lastFaultCode=ST-RT-008 health=FAULT
