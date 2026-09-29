@@ -94,6 +94,7 @@ export interface PointMappingEligibility {
  * Kiểm tra tính tương thích giữa điểm và chân cổng:
  * 1. Chiều dữ liệu (INPUT cần READ / READ_WRITE; OUTPUT cần WRITE / READ_WRITE)
  * 2. Kiểu dữ liệu (BOOL vs BOOL, REAL vs REAL, v.v.)
+ * 3. Chất lượng live GOOD — chỉ với chân INPUT
  */
 export function checkPointEligibility(
   point: ProgrammingPointCatalogEntry,
@@ -141,8 +142,10 @@ export function checkPointEligibility(
     }
   }
 
-  // 3. Kiểm tra chất lượng điểm (Backend yêu cầu GOOD với chính sách REQUIRE_GOOD)
-  if (point.quality && point.quality.toUpperCase() !== 'GOOD') {
+  // 3. Chất lượng live — CHỈ với chân đầu vào (Issue #840, DDD-CTRL-PROG-001 §5).
+  // Backend chỉ áp quality policy cho binding đọc; đích ghi đang BAD (ví dụ VP
+  // do chính Program ghi khi Program không chạy) vẫn map được.
+  if (portDirection === 'INPUT' && point.quality && point.quality.toUpperCase() !== 'GOOD') {
     return {
       canMap: false,
       reason: pick(

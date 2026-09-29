@@ -32,8 +32,9 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net
 | `/opt/mkddc-web/mkddc-programming-sim-worker` | Simulation worker binary |
 | `/usr/sbin/mkddc-st-compile`, `/usr/sbin/mkddc-st-package`, `/usr/sbin/mkddc-st-validate` | Tool ST mà web gọi khi Check/Commission — **phải cùng profile với web** (bước 2b) |
 | `/data/config/` | Config dir (users.conf, fieldbus.conf) |
-| `/data/mkddc/state/` | State dir |
-| `/data/mkddc/state/programming/` | Programming state |
+| `/data/config/programming/programming-v1.sqlite` (+ `-wal`, `-shm`) | Store Programming (Project, Draft, Revision, Check, Commission, audit). Sao lưu khi web **đã dừng**, chép cả `-wal` |
+| `/data/mkddc/programming/` | Artifact, journal, retain, staging của Programming |
+| `/data/mkddc/deploy-backups/` | Bản sao lưu của từng lượt deploy (mỗi lượt một thư mục có mốc thời gian) |
 | `/run/mkddc/core.sock` | Core IPC socket |
 | `/run/mkddc/programming-v1.sock` | Programming IPC socket |
 | `/usr/share/mkddc/artifact-manifest.json` | Manifest provenance từng artifact (T63-002): tên, sha256, commit, dirty, thời điểm build, toolchain. `install.sh` cài; deploy một phần cập nhật bằng `scripts/artifact_manifest.py deploy-record` |

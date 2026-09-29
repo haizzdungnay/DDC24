@@ -1,0 +1,53 @@
+# Deploy main lên bo (Core e1b2ac51 RELEASE, web e1b2ac51, FE c6748e9d = main + #839)
+PRE 03:35:51Z active=0c29f4f1-377d-44ce-add0-2a0f5cad09db web=475f4a4feaf393de core=77a149e1d9bd4cdf index=2f578d5bd9ce305e
+STOP_WEB 03:35:51Z
+WEB_STOPPED
+sh: line 22: cd: /data/mkddc/state: No such file or directory
+total 19292
+drwxr-xr-x  2 root  root      4096 Sep 29 03:35 .
+drwxr-xr-x 10 root  root      4096 Sep 29 03:35 ..
+-rw-r--r--  1 root  root      4852 Sep 29 03:10 artifact-manifest.json.prev
+-rw-r--r--  1 root  root   3137746 Sep 29 03:35 dist.prev.tgz
+-rwxrwxrwx  1 root  root   1051128 Sep 29 03:17 mkddc-core.prev
+-rwxrwxrwx  1 root  root  15532194 Sep 29 03:16 mkddc-web.prev
+-rw-r--r--  1 mkddc mkddc     6717 Sep 29 03:10 virtual_points.conf.prev
+RESTART_CORE 03:35:54Z
+active
+START_WEB 03:35:59Z
+active
+SYSTEMD_OK
+UNIT mkddc-core active /usr/sbin/mkddc-core 64212e175e766ef2
+UNIT mkddc-iobus active /usr/sbin/mkddc-iobus d017f38a31fe9604
+UNIT mkddc-web-pi active /opt/mkddc-web/mkddc-web 3e1ae85b00497024
+UNIT mkddc-reload-helper active /opt/mkddc-web/mkddc-web 3e1ae85b00497024
+UNIT mkddc-time-helper active /opt/mkddc-web/mkddc-web 3e1ae85b00497024
+INDEX 876eb30779eb7b5b
+st_public_key fingerprint=2fb77aa42e7fe446 mode=RELEASE
+Sep 29 03:35:56 OK1126B-buildroot mkddc-core[6251]: INFO  core.st_public_key=RELEASE fingerprint=2fb77aa42e7fe446
+Sep 29 03:35:56 OK1126B-buildroot mkddc-core[6251]: INFO  safe_cfg.loaded path=/data/config/io_safe_state.conf ao=[0.0,0.0,0.0,0.0] (mode=[0-10V,0-10V,0-10V,0-10V]) do=[0,0,0,0]
+Sep 29 03:35:56 OK1126B-buildroot mkddc-core[6251]: ERROR safe_state.enter fault=0 stale=0 graph_bad=0 no_ctrl=1 overrun=0 (AO->safe, DO->open)
+Sep 29 03:35:59 OK1126B-buildroot mkddc-web[6263]: mkddc-web 2026/09/29 03:35:59 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+
+# deploy-record lần 1 (exit 2 — FE dựng trước commit HEAD, script từ chối đúng):
+LỖI: build/web-ui/dist/index.html dựng lúc 2026-09-29T03:34:12Z, trước commit HEAD (2026-09-29T03:34:58Z): dựng lại FE rồi ghi
+# Dựng lại FE từ c6748e9d sạch: index.html 876eb30779eb7b5b, so từng file với dist đã deploy: DIST_IDENTICAL
+# deploy-record lần 2 (exit 0):
+RECORD mkddc-core sha256=64212e175e766ef2 commit=e1b2ac5135f1 dirty=false source=embedded toolchain='GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0'
+RECORD mkddc-web sha256=3e1ae85b00497024 commit=e1b2ac5135f1 dirty=false source=go-buildinfo toolchain='go1.26.4'
+RECORD web-ui sha256=876eb30779eb7b5b commit=c6748e9dfc2f dirty=false source=git-worktree toolchain='node-v24.15.0 vite-8.2.0'
+KEPT mkddc-iobus mkddc-programming-sim-worker mkddc-st-compile mkddc-st-package mkddc-st-validate
+
+# readback (exit 0):
+READBACK manifest=/usr/share/mkddc/artifact-manifest.json updated_at=2026-09-29T03:37:19Z
+  OK               unit:mkddc-core                mkddc-core                   sha=64212e175e766ef2 commit=e1b2ac5135f1 dirty=false
+  OK               unit:mkddc-iobus               mkddc-iobus                  sha=d017f38a31fe9604 commit=4c49e78b970c dirty=false
+  OK               unit:mkddc-web-pi              mkddc-web                    sha=3e1ae85b00497024 commit=e1b2ac5135f1 dirty=false
+  OK               unit:mkddc-reload-helper       mkddc-web                    sha=3e1ae85b00497024 commit=e1b2ac5135f1 dirty=false
+  OK               unit:mkddc-time-helper         mkddc-web                    sha=3e1ae85b00497024 commit=e1b2ac5135f1 dirty=false
+  OK               served:index.html              web-ui                       sha=876eb30779eb7b5b commit=c6748e9dfc2f dirty=false
+  OK               http:127.0.0.1:8082/           web-ui                       sha=876eb30779eb7b5b commit=c6748e9dfc2f dirty=false
+  OK               file:/opt/mkddc-web/mkddc-programming-sim-worker mkddc-programming-sim-worker sha=60a300e4392c3898 commit=1602b2fd31f6 dirty=false
+  OK               file:/usr/sbin/mkddc-st-compile mkddc-st-compile             sha=389c99ff43e5496f commit=4c49e78b970c dirty=false
+  OK               file:/usr/sbin/mkddc-st-package mkddc-st-package             sha=939d51378207adb7 commit=4c49e78b970c dirty=false
+  OK               file:/usr/sbin/mkddc-st-validate mkddc-st-validate            sha=f1c7501ef1393253 commit=4c49e78b970c dirty=false
+READBACK: 11 kiểm, 0 lệch

@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — Check không còn chặn binding đầu ra theo chất lượng live của điểm đích; deploy `main` lên bo lab (Issue #840, 2026-09-29)
+
+- **Phạm vi:**
+  - BE `apps/web-api/internal/programming/application/binding_validation.go` (`ValidateBindingCandidate`);
+  - FE `features/programming/fbd/PortMappingPicker.tsx` và `features/programming/design/mapping/mappingViewModel.ts`;
+  - test ở cả ba nơi;
+  - hồ sơ mới `docs/07_records/test-evidence/programming/2026-09-29-main-deploy-commission-check-target.md` (`EV-PROG-COMMISSION-CHECK-840-TARGET` 1.0) kèm fixture `fixtures/2026-09-29-main-deploy-commission-check-840/`;
+  - `DEPLOY_FOXLINX.md`: sửa đường dẫn store Programming.
+- **Triệu chứng:** trên bo lab, người dùng Check revision `65b2b855…` và `32ed8a6b…`. Cả hai revision giống hệt Active `0c29f4f1…` (`changes: []`). Check FAILED với ba lỗi `PRG-ERR-MAP-003` / `PGM-MAP-QUALITY-001` ở ba binding **ghi** của `PRG_DO16_MODBUS`: `MSV-02`, `AV-06`, `AV-07`, là các VP do chính Program sở hữu. Cùng mẫu đã xảy ra lúc 09:30Z ngày 2026-09-28 và chỉ hết khi người dùng Disable → Enable Program.
+- **Nguyên nhân gốc:** validator báo `ERROR` khi chất lượng live của điểm khác `GOOD` cho **mọi** chiều binding. VP do Program ghi về BAD khi Program không chạy, nên muốn Commission để sửa một Program đang FAULT thì bị chặn chính vì nó đang FAULT. Hành vi này lệch `DDD-CTRL-PROG-001` §5, nơi quality policy chỉ áp cho đầu vào, còn đầu ra chỉ cần writable và range/unit/rate hợp lệ. FE chép cùng luật. Lần này Program FAULTED vì lúc 03:17Z một Core không có bản sửa #827 được deploy song song lên bo.
+- **Kết luận:** lỗi do **mã nguồn**, không do người dùng.
+- **Cách sửa:**
+  - BE: cổng chất lượng live chỉ áp khi chiều kỳ vọng là `READ`; enum `qualityPolicy` vẫn kiểm cho mọi chiều.
+  - FE: `PortMappingPicker` chỉ loại điểm không GOOD cho chân INPUT; `mappingViewModel` chỉ `QUALITY_BLOCKED` với biến không phải đầu ra.
+- **Test đỏ trước khi sửa** (trên `main@e1b2ac51`):
+  - `TestCheckDoesNotFailWhenOutputTargetIsBad` FAIL, `Check FAILED … PGM-MAP-QUALITY-001`;
+  - `TestBindingValidatorDoesNotGateOutputOnLiveTargetQuality` FAIL 5/5;
+  - Vitest `checkPointEligibility` và `mappingViewModel` FAIL ở ca đầu ra BAD;
+  - chốt chặn `TestBindingValidatorStillGatesInputOnLiveQuality` PASS 4/4.
+  - Test cũ `TestBindingValidatorReturnsStableWarningBlockAndCanonicalOwner` và ca DO-02/DO-03 của `mappingViewModel` đã được sửa kỳ vọng: chúng đang đóng băng hành vi lệch §5.
+- **Kiểm chứng host:**
+  - `go vet ./...` exit 0; `go test ./... -count=1` 21 package ok, 0 FAIL;
+  - vitest **278 file / 3594 test**; lint exit 0; `tsc --noEmit` exit 0;
+  - `build:release` (xếp chồng trên #839) exit 0, chunk `programming` 76,86 KiB gzip, budget PASS.
+- **Trên bo lab (deploy `main`):**
+  - Artifact: Core `e1b2ac51` khoá RELEASE (`64212e17…`), web `e1b2ac51` (`3e1ae85b…`, cả 3 unit), FE `c6748e9d` (`876eb307…`).
+  - Sao lưu ở `/data/mkddc/deploy-backups/20260929T033521Z-main-e1b2ac51/`.
+  - `deploy-record` lần đầu từ chối vì FE dựng trước commit. FE dựng lại giống hệt từng file. Lần hai ghi 3 mục, giữ 5; `readback` **11 kiểm, 0 lệch**.
+  - Program tự `RUNNING`, `faultCount` 0; ba VP về `good`; health 6/6; `READY`; Active không đổi.
+  - Check lại **chính** revision `65b2b855…` lúc 03:38:07Z: **PASSED**, 0 diagnostic.
+  - Bản sửa validator **chưa** lên bo, chờ merge.
+  - **Sau lượt này (03:44–03:45Z), máy LAN `192.168.1.42` deploy đè:**
+    - web `main@e1b2ac51` (`-trimpath`, `71a8e443…`);
+    - Core `64bfbd74…` nhúng **khoá TEST** (`CRITICAL core.st_public_key=TEST`);
+    - FE `7969eec2…`;
+    - không chạy `deploy-record`, không restart hai helper.
+
+    Readback lúc 03:50Z: 11 kiểm, 6 lệch. Program vẫn `RUNNING`. Lượt này không ghi đè; chi tiết và rủi ro Commission ở `EV-PROG-COMMISSION-CHECK-840-TARGET` §5.1.
+- **NOT_RUN:** kiểm bản sửa #840 trên bo (Disable Program rồi Check); Commission trên bo (không có nội dung mới).
+- **Refs:** Issue #840, #839, #827, `DDD-CTRL-PROG-001` §5, `EV-PROG-VP-MSV-RESTART-832-TARGET` §4.2, handoff `2026-09-16-fbd-port-mapping-properties-handoff.md` §E.
+
 ### Fixed — `main` dựng lại được FE: import `SchedulePointKind` trong `scheduler/shared.ts` (Issue #839, 2026-09-29)
 
 - **Phạm vi:** `apps/web-ui/src/features/scheduler/shared.ts`, một dòng import. Không đổi hành vi.
