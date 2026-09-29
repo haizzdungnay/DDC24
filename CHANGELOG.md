@@ -15,6 +15,12 @@
 - Tám đề xuất có lợi ích, ưu tiên, công dự kiến, source owner, rủi ro, nghiệm thu và quyết định Product còn mở. Không chuyển đề xuất thành requirement/DDD được duyệt hoặc kết luận release.
 - Kiểm chứng source baseline sau `npm ci` riêng: Vitest chọn lọc 5 file/44 test PASS, lint PASS, build PASS (Programming 76,83 KiB gzip/165 KiB); test tái hiện poll FAIL đúng lỗi 2 GET thay vì 1. Chrome DevTools MCP đã chạy desktop/mobile, lưu 5 ảnh và Console/Network; API/WS thiếu trong fixture được ghi rõ. Docs harness PASS (489 file, EXPECT khớp), candidate pin PASS 17/17, diff check PASS. E2E đầy đủ, backend thật, target/HIL NOT RUN.
 
+### Changed — Rà soát và đóng Issue đã hết hiệu lực theo mã nguồn (2026-09-28)
+
+- Một agent quản lý và hai sub-agent đối chiếu đủ 30 Issue mở với thân Issue/bình luận, source/test và PR; baseline `main@597616ca`, kiểm lại delta PR #806/#807 đến `cb690dfb`. Các file dẫn chứng cho kết luận không đổi; không coi PR chỉ nhắc finding là bản sửa hoàn tất.
+- Comment bằng chứng và đóng [#722](https://github.com/Mekong-HCM/MK-DDC-24/issues/722), [#734](https://github.com/Mekong-HCM/MK-DDC-24/issues/734) với lý do `completed`; đóng [#729](https://github.com/Mekong-HCM/MK-DDC-24/issues/729) vì helper trên PR không merge nên finding không còn áp dụng, [#719](https://github.com/Mekong-HCM/MK-DDC-24/issues/719) vì hợp nhất nợ lint/Vitest vào #722/#737, với lý do `not_planned`. Giữ 26 Issue còn thiếu mã, bằng chứng hoặc quyết định; không nâng cổng V&V, HIL hoặc release.
+- Kiểm chứng mới trên bản sao source `597616ca`: lint `src` và `check:ui-strings` PASS; `FbdCanvas.test.tsx` 14/14 PASS; tiêm lỗi bỏ pan và bỏ zoom đều làm test FAIL, khôi phục ca tập trung 1/1 PASS. Lint E2E còn 3 lỗi nên #712 giữ mở; typecheck E2E bị chặn bởi dependencies đã cài thiếu `@types/node`, không quy lỗi môi trường thành lỗi source. Đã comment đủ 30 Issue và đọc lại GitHub xác nhận 4 CLOSED đúng lý do, 26 OPEN; test/log lịch sử không được coi là số đo mới. Không sửa mã thực thi, không chạy browser/target/HIL mới trong lượt triage.
+
 ### Added — Kiểm Issue #827 trên bo lab: Program tự chạy lại sau restart Core/reboot, không FAULT; mở #833 và #832 (U-22, 2026-09-28)
 
 - **Phạm vi:** chỉ tài liệu và bằng chứng, không đổi mã.
