@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
-import { PortMappingPicker, type PortMappingPickerProps } from './PortMappingPicker'
+import { PortMappingPicker, checkPointEligibility, type PortMappingPickerProps } from './PortMappingPicker'
 import type { ProgrammingPointCatalogEntry } from '../model/types'
 
 const mockPoints: ProgrammingPointCatalogEntry[] = [
@@ -333,3 +333,32 @@ describe('PortMappingPicker — Comment 1 & 2', () => {
   })
 })
 
+/* Issue #840 — chất lượng live chỉ chặn chân ĐẦU VÀO.
+ *
+ * `DDD-CTRL-PROG-001` §5: binding đầu ra chỉ cần Point writable và
+ * range/unit/rate hợp lệ. VP do chính Program ghi về BAD khi Program không
+ * chạy; chặn map chân đầu ra vì thế là chặn đúng việc sửa Program đó. */
+describe('checkPointEligibility — chất lượng live theo chiều (Issue #840)', () => {
+  const pick = (vi: string) => vi
+  const programOwnedBad: ProgrammingPointCatalogEntry = {
+    category: 'VP', pointId: 'AV-06', displayId: 'AV-06', name: 'DO16_STS_ON',
+    dataType: 'REAL', direction: 'READ_WRITE', writable: true, quality: 'BAD', value: null,
+  }
+
+  it('chân OUTPUT map được vào điểm ghi đang BAD/OFFLINE', () => {
+    expect(checkPointEligibility(programOwnedBad, 'OUTPUT', 'REAL', pick)).toEqual({ canMap: true, reason: 'Có thể ánh xạ' })
+    const offlineRelay = mockPoints.find((point) => point.pointId === 'MB-01')!
+    expect(checkPointEligibility(offlineRelay, 'OUTPUT', 'BOOL', pick).canMap).toBe(true)
+  })
+
+  it('chân INPUT vẫn không map được vào điểm không GOOD', () => {
+    const result = checkPointEligibility(programOwnedBad, 'INPUT', 'REAL', pick)
+    expect(result.canMap).toBe(false)
+    expect(result.reason).toContain('Chất lượng điểm không đạt (BAD)')
+  })
+
+  it('chân OUTPUT vẫn bị chặn khi điểm không ghi được, bất kể chất lượng', () => {
+    const readOnly = mockPoints.find((point) => point.pointId === 'VP-01')!
+    expect(checkPointEligibility(readOnly, 'OUTPUT', 'REAL', pick).canMap).toBe(false)
+  })
+})

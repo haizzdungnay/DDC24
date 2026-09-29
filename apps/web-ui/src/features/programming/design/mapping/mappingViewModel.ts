@@ -216,8 +216,11 @@ function compatibilityFor(
   if (!isOutput(direction) && !['READ', 'READ_WRITE'].includes(entry.direction)) reasons.push(codeReason('NOT_READABLE'))
   const unitWarning = Boolean(unit && entry.unit && unit !== entry.unit)
   if (unitWarning) reasons.push(codeReason('UNIT_MISMATCH'))
-  if (entry.quality !== 'GOOD') reasons.push(codeReason('QUALITY_NOT_GOOD', entry.quality))
-  const qualityBlocked = entry.quality !== 'GOOD'
+  /* Issue #840 — chất lượng live chỉ chặn chiều ĐỌC (`DDD-CTRL-PROG-001` §5),
+     khớp validator máy chủ. Đích ghi đang BAD (ví dụ VP do chính Program ghi
+     khi Program không chạy) vẫn gán được. */
+  const qualityBlocked = !isOutput(direction) && entry.quality !== 'GOOD'
+  if (qualityBlocked) reasons.push(codeReason('QUALITY_NOT_GOOD', entry.quality))
   const assignable = reasons.length === 0
   return { assignable, unitWarning, reasons, eligibility: qualityBlocked ? 'QUALITY_BLOCKED' : assignable ? 'SUPPORTED' : 'INCOMPATIBLE' }
 }

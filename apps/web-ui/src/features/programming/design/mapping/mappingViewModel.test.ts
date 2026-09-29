@@ -131,8 +131,24 @@ describe('mappingViewModel — Phase 1A truth model', () => {
     expect(rows.find((row) => row.category === 'MB_RTU')?.compatibilityReasons).toEqual([
       { kind: 'server', text: 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU' },
     ])
-    expect(rows.find((row) => row.pointId === 'DO-02')?.eligibility).toBe('QUALITY_BLOCKED')
-    expect(rows.find((row) => row.pointId === 'DO-03')?.eligibility).toBe('QUALITY_BLOCKED')
+    /* Issue #840 — đích GHI không bị chặn theo chất lượng live
+       (`DDD-CTRL-PROG-001` §5 chỉ áp quality policy cho đầu vào). Một DO/VP về
+       BAD khi Program ghi nó không chạy; chặn ở đây là chặn đúng việc sửa
+       Program đó. */
+    expect(rows.find((row) => row.pointId === 'DO-02')?.eligibility).toBe('SUPPORTED')
+    expect(rows.find((row) => row.pointId === 'DO-03')?.eligibility).toBe('SUPPORTED')
+    expect(rows.find((row) => row.pointId === 'DO-02')?.compatibilityReasons).toEqual([])
+
+    /* Chiều ĐỌC vẫn chịu quality policy như cũ. */
+    const input: ProgrammingVariable = {
+      variableId: 'var-input', programId: 'program-1', name: 'FanFb', type: 'BOOL', class: 'INPUT', initialValue: null, retain: false,
+    }
+    const inputRows = buildPointRows([
+      point({ pointId: 'DI-02', name: 'Bad input', dataType: 'BOOL', unit: undefined, direction: 'READ', writable: false, quality: 'BAD', value: null }),
+      point({ pointId: 'DI-03', name: 'Good input', dataType: 'BOOL', unit: undefined, direction: 'READ', writable: false, value: true }),
+    ], { ...input, direction: 'INPUT' }, { status: 'ready', lastSuccessAt: 100 })
+    expect(inputRows.find((row) => row.pointId === 'DI-02')?.eligibility).toBe('QUALITY_BLOCKED')
+    expect(inputRows.find((row) => row.pointId === 'DI-03')?.eligibility).toBe('SUPPORTED')
   })
 
   /* Điều kiện đóng thứ ba của ISS-PIO-32: Core mở một năng lực mới ⇒ FE tự
