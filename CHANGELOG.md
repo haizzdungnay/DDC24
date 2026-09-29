@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Changed — Deploy PR #844 lên bo lab: Core khoá RELEASE, schedule-sim, sim-worker, web, FE (2026-09-29)
+
+- **Phạm vi:** bo `OK1126B-buildroot`, qua WAN `:2223`. Hồ sơ mới `docs/07_records/test-evidence/fw-som/2026-09-29-foxlinx-deploy-pr844-schedule-ao.md` (`EV-FWSOM-DEPLOY-844-TARGET` 1.0), log gốc ở `deploy-pr844-20260929/`.
+- **Trước deploy (13:27Z):** Core `e1b2ac51-dirty` nhúng **khoá TEST**, web `3806d22e…` từ mã chưa merge (trả `RELINQUISHED` cho AO của `SCH-001`). Cả hai do một lượt deploy tay lúc 09:45Z, không kèm `deploy-record`. Hai helper còn chạy binary đã xoá.
+- **Artifact:** dựng từ bản clone sạch `a4c31b53`, không dirty:
+  - Core `f5ccb315…` khoá RELEASE `2fb77aa42e7fe446`, `GLIBCXX` ≤ 3.4.29;
+  - schedule-sim `d0d8dc97…`, sim-worker `2fe3b4ad…`;
+  - web `cdcc6df8…` (cả 3 unit), FE `f9d49d42…` (budget PASS).
+  - iobus và tool ST giữ nguyên: không đổi mã, profile trùng.
+- **Kiểm chứng trên bo:**
+  - `deploy-record` ghi 5 mục; `readback` **12 kiểm, 0 lệch**.
+  - Health 6/6, `READY`, Active `20507c0e…` không đổi, Program `RUNNING` với `faultCount` 0.
+  - `SCH-001` (BINARY → DO1 + AO1): cả hai target `OK` INACTIVE; AO-01 = 0 V ở mức `schedule`.
+  - Mô phỏng 7 ngày chạy bằng schedule-sim mới: 3 chuyển trạng thái, 0 gap, 0 xung đột.
+- **Sao lưu:** `/data/mkddc/deploy-backups/20260929T132908Z-pr844-a4c31b53/`, gồm `programming-v1.sqlite` chép khi web đã dừng.
+- **NOT_RUN:**
+  - nhánh ACTIVE → AO 100 % trên bo (lịch ACTIVE lúc 03:30 giờ VN ngày 2026-09-30; không sửa lịch người dùng);
+  - lịch REAL trên bo (bo không có lịch REAL);
+  - đo điện, HIL.
+
 ### Fixed — Lịch BINARY ghi AO quy 100 % theo `value_type` thay vì so giá trị với 1.0; `core_tests` biên dịch lại được; IntelliSense C++ có include path (2026-09-29)
 
 - **Phạm vi:** `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`), `apps/core/application/schedule/tests/test_schedule_runtime.cpp`, `CMakeLists.txt` gốc.

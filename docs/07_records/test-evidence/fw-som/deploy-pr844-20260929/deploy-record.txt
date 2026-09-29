@@ -1,0 +1,6 @@
+RECORD mkddc-core sha256=f5ccb3158ff9b8c9 commit=a4c31b539d74 dirty=false source=embedded toolchain='GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0'
+RECORD mkddc-programming-sim-worker sha256=2fe3b4adf8615ea0 commit=a4c31b539d74 dirty=false source=embedded toolchain='GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0'
+RECORD mkddc-schedule-sim sha256=d0d8dc979a5cd117 commit=a4c31b539d74 dirty=false source=embedded toolchain='GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0'
+RECORD mkddc-web sha256=cdcc6df87b18a931 commit=a4c31b539d74 dirty=false source=go-buildinfo toolchain='go1.26.4'
+RECORD web-ui sha256=f9d49d42ce2ea036 commit=a4c31b539d74 dirty=false source=git-worktree toolchain='node-v24.15.0 vite-8.2.0'
+KEPT mkddc-iobus mkddc-st-compile mkddc-st-package mkddc-st-validate

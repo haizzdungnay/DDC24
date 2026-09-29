@@ -1,0 +1,14 @@
+READBACK manifest=/usr/share/mkddc/artifact-manifest.json updated_at=2026-09-29T13:29:56Z
+  OK               unit:mkddc-core                mkddc-core                   sha=f5ccb3158ff9b8c9 commit=a4c31b539d74 dirty=false
+  OK               unit:mkddc-iobus               mkddc-iobus                  sha=d017f38a31fe9604 commit=4c49e78b970c dirty=false
+  OK               unit:mkddc-web-pi              mkddc-web                    sha=cdcc6df87b18a931 commit=a4c31b539d74 dirty=false
+  OK               unit:mkddc-reload-helper       mkddc-web                    sha=cdcc6df87b18a931 commit=a4c31b539d74 dirty=false
+  OK               unit:mkddc-time-helper         mkddc-web                    sha=cdcc6df87b18a931 commit=a4c31b539d74 dirty=false
+  OK               served:index.html              web-ui                       sha=f9d49d42ce2ea036 commit=a4c31b539d74 dirty=false
+  OK               http:127.0.0.1:8082/           web-ui                       sha=f9d49d42ce2ea036 commit=a4c31b539d74 dirty=false
+  OK               file:/opt/mkddc-web/mkddc-programming-sim-worker mkddc-programming-sim-worker sha=2fe3b4adf8615ea0 commit=a4c31b539d74 dirty=false
+  OK               file:/opt/mkddc-web/mkddc-schedule-sim mkddc-schedule-sim           sha=d0d8dc979a5cd117 commit=a4c31b539d74 dirty=false
+  OK               file:/usr/sbin/mkddc-st-compile mkddc-st-compile             sha=389c99ff43e5496f commit=4c49e78b970c dirty=false
+  OK               file:/usr/sbin/mkddc-st-package mkddc-st-package             sha=939d51378207adb7 commit=4c49e78b970c dirty=false
+  OK               file:/usr/sbin/mkddc-st-validate mkddc-st-validate            sha=f1c7501ef1393253 commit=4c49e78b970c dirty=false
+READBACK: 12 kiểm, 0 lệch

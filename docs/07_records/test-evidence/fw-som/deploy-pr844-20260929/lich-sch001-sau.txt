@@ -1,0 +1,10 @@
+@@NOW 2026-09-29T13:30:15Z
+@@GET schedules/SCH-001/runtime
+{"effective_value":"INACTIVE","value_source":"WEEKLY","source_exception_id":null,"next_transition_at":"2026-09-30T03:15:00+07:00","applied_revision":18,"last_evaluated_at":"2026-09-29T13:30:15Z","error_code":null,"targets":[{"target_id":"TGT-001","write_result":"OK","written_value":"INACTIVE","actual_value":null,"overridden_by":null,"error_code":null,"last_write_at":"2026-09-29T13:30:15Z"},{"target_id":"TGT-002","write_result":"OK","written_value":"INACTIVE","actual_value":null,"overridden_by":null,"error_code":null,"last_write_at":"2026-09-29T13:30:15Z"}]}
+
+@@GET points/AO-01
+{"id":"AO-01","channel":17,"tag":"AO-01","name":"AO-01","kind":"AO","value":0,"raw":0,"rawUnit":"V","quality":"good","source":"core","priority":"schedule","updatedAt":"2026-09-29T13:30:15.84095086Z","enabled":true,"point_id":"AO-01","tag_name":"AO-01","display_name":"AO-01","data_type":"float32","timestamp":"2026-09-29T13:30:15.84095086Z","read_write":"read_write","default_value":0,"safe_value":0}
+
+@@GET points/DO-01
+{"id":"DO-01","channel":21,"tag":"DO-01","name":"DO-01","kind":"DO","value":false,"quality":"good","source":"core","priority":"schedule","updatedAt":"2026-09-29T13:30:15.860962836Z","enabled":true,"point_id":"DO-01","tag_name":"DO-01","display_name":"DO-01","data_type":"bool","timestamp":"2026-09-29T13:30:15.860962836Z","read_write":"read_write","default_value":false,"safe_value":false}
+
