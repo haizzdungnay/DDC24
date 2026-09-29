@@ -1,0 +1,26 @@
+
+ RUN  v4.1.10 /tmp/ddc-ui-review-20260929/apps/web-ui
+
+ ❯ src/features/programming/commission/audit-polling.test.tsx (1 test | 1 failed) 46ms
+   × review: không GET operation thêm sau khi component đã unmount 43ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/programming/commission/audit-polling.test.tsx > review: không GET operation thêm sau khi component đã unmount
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/features/programming/commission/audit-polling.test.tsx:16:22
+     14|  hook.unmount()
+     15|  await act(async()=>{await vi.advanceTimersByTimeAsync(1600)})
+     16|  expect(api.request).toHaveBeenCalledTimes(1)
+       |                      ^
+     17| })
+     18|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  09:39:43
+   Duration  1.35s (transform 185ms, setup 0ms, import 317ms, tests 46ms, environment 775ms)
+

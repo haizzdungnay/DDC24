@@ -1,9 +1,9 @@
 # Hồ sơ rà soát — chỉ mục
 
 **ID:** REC-REVIEW-INDEX-001
-**Phiên bản:** 1.32
+**Phiên bản:** 1.33
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-28 (đăng ký báo cáo riêng `REC-FORLINX-PERF-PM-20260928` cho PM quyết định và bổ sung audit Forlinx vào `REC-PROG-RUNTIME-PERF-COMP-001` v1.2; trước đó cập nhật dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.4)
+**Cập nhật:** 2026-09-29 (đăng ký review source giao diện, bằng chứng Chrome/host và bảng đề xuất cải thiện; giữ trạng thái Đề xuất và không thay release gate)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -31,6 +31,8 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
+| [Review giao diện và source frontend DDC-24](DDC24_UI_SOURCE_REVIEW_2026-09-29.md) | 2026-09-29 | In Review; source tại `265f1a8b`, host và Chrome fixture (`REC-DDC-UI-REVIEW-20260929`) | 5 finding: định danh Mapping mobile, tổng chiều rộng panel, modal focus, vòng poll Commission và bàn phím thanh kéo; source frontend chưa sửa; không đánh giá release. |
+| [Bảng đề xuất cải thiện giao diện DDC-24](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md) | 2026-09-29 | 8 đề xuất chờ Product review (`REC-DDC-UI-PROPOSAL-20260929`) | Lợi ích, ưu tiên, công, rủi ro, source owner, nghiệm thu và thứ tự triển khai; kèm [ảnh/log bằng chứng](assets/ui-review-2026-09-29/EVIDENCE.md), chưa là design authority. |
 | [Rà soát kiến trúc, lời giải và đối chiếu DDC-24](DDC24_ARCHITECTURE_SOLUTION_COMPARATIVE_REVIEW_2026-09-26.md) | 2026-09-26; bổ sung 27/09 | Record source + nguồn chuẩn/hãng; release `NO-GO` (`REC-DDC-ARCH-COMP-20260926`) | Sơ đồ POU/Commission/output, so sánh hãng và **§9: chín đề xuất `CP-01..09` để Product review**, có lợi ích, phần nền hiện có, phép thử pilot và quyết định cần ký. |
 | [Finding và đề xuất kiến trúc DDC-24](DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md) | 2026-09-26 | 7 finding có trạng thái và gate; record, chưa phải design authority (`REC-DDC-ARCH-GAP-20260926`) | Hồ sơ chu kỳ lệch profile; BACnet object thiếu nguồn; safe output khi đổi package; soak/HIL; 70 ms Commission; Modbus write result; ma trận audit trộn thời điểm. |
 | [Đánh giá mã nguồn DDC-24 qua sử dụng thực tế](DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md) | 2026-09-27; cập nhật 28/09 | 21 vấn đề cần nâng cấp/cải tiến; bản 1.4: PR #795, #797, #803, #804 đã merge và bo lab chạy `main@e3072983`; các mục còn lại chờ thiết kế/quyết định (#798–#802, #384); record, chưa phải design authority (`REC-DDC-FIELD-USE-20260927`) | Rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo: kiểu VP lệch 3 lớp, Trace báo sai nguồn/chu kỳ, Modbus không gộp FC15, trần slot, ngôn ngữ ST thiếu ARRAY/bit/hằng, thư viện thiếu khối DDC, PID bị chặn; kèm lộ trình |
@@ -202,3 +204,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.30 | 2026-09-28 | Cập nhật dòng `REC-DDC-FIELD-USE-20260927` theo bản 1.4 (PR #804 đã merge, bo lab lên `main@e3072983`); không đổi authority, runtime hoặc release gate |
 | 1.31 | 2026-09-28 | Nâng record hiệu năng v1.2 bằng audit OS/Core, API/Modbus và browser trên target; giữ riêng snapshot 04/09, chưa deploy phương án tối ưu hoặc nâng release gate |
 | 1.32 | 2026-09-28 | Đăng ký báo cáo riêng trình PM review/quyết định cải thiện hiệu năng Forlinx; giữ trạng thái In Review và D01–D07 chưa phê duyệt |
+| 1.33 | 2026-09-29 | Đăng ký review source giao diện, 5 finding với lớp bằng chứng và 8 đề xuất cải thiện để Product review; không sửa FE hay nâng release gate |

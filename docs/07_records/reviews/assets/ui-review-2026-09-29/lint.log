@@ -1,0 +1,9 @@
+
+> mk-ddc-24-frontend@0.1.0 lint
+> eslint src --max-warnings=0 && npm run check:ui-strings
+
+
+> mk-ddc-24-frontend@0.1.0 check:ui-strings
+> python3 ../../scripts/check_ui_strings.py
+
+OK — không có chuỗi giao diện tiếng Việt nào bị viết thiếu dấu.

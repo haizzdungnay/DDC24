@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /tmp/ddc-ui-review-20260929/apps/web-ui
+
+
+ Test Files  5 passed (5)
+      Tests  44 passed (44)
+   Start at  09:38:21
+   Duration  4.52s (transform 4.17s, setup 0ms, import 6.70s, tests 4.86s, environment 4.08s)
+
