@@ -39,6 +39,10 @@
   - Đã bình luận số đo vào #830 (mốc "trước" cho Q6) và #384.
 - **Sau lượt đo:** Active `0c29f4f1…` không đổi, `PRG_DO16_MODBUS` `RUNNING`, health 6/6, Programming `READY`, cấu hình 12 VP không đổi. Task: 0 overrun, 0 lỡ release, jitter tối đa 28 µs. Không phải Disable → Enable lần nào.
 - **Kiểm chứng tài liệu:** `docs_iso_harness --expect` và `verify-project.sh --component layout` (số đo ở PR).
+- **Sửa sau review PR #834:**
+  - bảng DO §3.5 ghi đúng `8 / 1 / 8` kênh đóng lúc Core dừng ở T1; kênh `CK50805-DO8` của T1-2 không còn đóng trong khoảng chờ;
+  - thêm fixture `trich-so-do-phu.txt` để các số phụ truy được về dữ liệu gốc: lần đẩy VP, HTTP listen, REST T3, chỉ số Task, test host 8/8 chạy lại ở 731 ms;
+  - `DEPLOY_FOXLINX.md` giữ lại câu kiểm "không còn `WAITING` quá 60 s".
 - **Refs:** Issue #827, #831, #832, #833, #830, #384, `REC-DDC-FIELD-USE-20260927` U-22.
 
 ### Fixed — Core khởi động không còn làm Program có đầu vào Virtual Point FAULTED `ST-RT-008`: chờ đầu vào có ngưỡng 60 s (Issue #827, U-22, 2026-09-28)
