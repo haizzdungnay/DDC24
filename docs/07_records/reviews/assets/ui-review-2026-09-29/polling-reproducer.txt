@@ -1,0 +1,17 @@
+import {act, renderHook} from '@testing-library/react'
+import {afterEach, expect, it, vi} from 'vitest'
+import {useCommissionWorkflow} from './useCommissionWorkflow'
+const api=vi.hoisted(()=>({request:vi.fn()}))
+vi.mock('../api/authClient',()=>({useProgrammingApiClient:()=>api}))
+vi.mock('../../../shared/i18n',()=>({useI18n:()=>({pick:(viText:string)=>viText})}))
+vi.mock('../../auth',()=>({useAuth:()=>({session:{username:'audit'},login:vi.fn()})}))
+afterEach(()=>vi.useRealTimers())
+it('review: không GET operation thêm sau khi component đã unmount',async()=>{
+ vi.useFakeTimers(); api.request.mockResolvedValue({state:'VERIFYING',operationId:'audit-op'})
+ const hook=renderHook(()=>useCommissionWorkflow())
+ await act(async()=>{hook.result.current.recheckStatus('audit-op'); await Promise.resolve()})
+ expect(api.request).toHaveBeenCalledTimes(1)
+ hook.unmount()
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1600)})
+ expect(api.request).toHaveBeenCalledTimes(1)
+})

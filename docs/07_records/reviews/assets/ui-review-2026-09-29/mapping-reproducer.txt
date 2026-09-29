@@ -1,0 +1,7 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {I18nProvider} from './src/shared/i18n';
+import {AssignedMappingsTable} from './src/features/programming/design/mapping/AssignedMappingsTable';
+import './src/shared/styles.css';
+const rows=['ahu-a','ahu-b'].map((deviceId,i)=>({id:'v'+i,programId:'p',programName:'AHU',name:'SupplyTemp_'+deviceId,type:'REAL',direction:'INPUT',bindingId:'b'+i,point:{category:'MB_RTU',deviceId,pointId:'TEMP'},pointName:'Temperature',liveValue:22+i,liveQuality:'STALE',freshness:'STALE',observedAt:'2026-09-29T00:00:00Z',bindingStatus:'MAPPED',eligibility:'SUPPORTED',compatibility:{assignable:true,unitWarning:false,reasons:[]}}));
+createRoot(document.getElementById('root')!).render(<I18nProvider><p>MINH HỌA KIỂM COMPONENT — hai thiết bị, cùng pointId TEMP; không có backend hay ghi I/O.</p><AssignedMappingsTable rows={rows as any} onSelect={()=>{}} canMutate={false} mutationDisabled={true} onChange={()=>{}} onRemove={()=>{}}/></I18nProvider>);
