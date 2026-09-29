@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Fixed — Lịch BINARY ghi AO quy 100 % theo `value_type` thay vì so giá trị với 1.0; `core_tests` biên dịch lại được; IntelliSense C++ có include path (2026-09-29)
+
+- **Phạm vi:** `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`), `apps/core/application/schedule/tests/test_schedule_runtime.cpp`, `CMakeLists.txt` gốc.
+- **Triệu chứng:**
+  - `main@895444be` không build được `core_tests`: `test_schedule_runtime.cpp:680` viết `EXPECT_TRUE(config(...))`, gtest báo `cannot convert 'const std::string' to 'bool'`. Khi build dở, `ctest` chạy lại binary cũ và báo 9 test ST FAIL giả (`StProfile…`, `StLibraryConformance…`, …).
+  - Commit `45e31285` (cho phép lịch gán mọi loại điểm) quy đổi AO bằng `(c.value == 1.0) ? 100.0 : c.value`: lịch **REAL** đặt 1 % bật AO lên hết thang (10 V / 20 mA).
+  - VS Code báo `cannot open source file "graph/graph_runtime.hpp"` (và 5 include khác) ở `apps/core/domain/safety/safe_state.hpp`.
+- **Nguyên nhân gốc:**
+  - Test đổi từ `expect_rejected(...)` sang `EXPECT_TRUE(config(...))`, nhưng `config()` chỉ ghép chuỗi JSON, không nạp cấu hình. Dù có biên dịch được, test cũng không kiểm gì.
+  - Quy đổi ACTIVE → 100 % dựa vào giá trị số chứ không dựa vào kiểu lịch.
+  - CMake gốc không xuất `compile_commands.json`. `build/` (thư mục mặc định của CMake Tools) còn cache trỏ `services/` đã xoá, nên cpptools không có include path cho header include theo gốc module (`graph/…`, `ports/…`).
+- **Cách sửa:**
+  - Runtime: chỉ lịch `BINARY`/`BOOLEAN` mới quy ACTIVE → 100 %, INACTIVE → 0 %; lịch `REAL`/`UNSIGNED`/`ENUMERATED` giữ nguyên giá trị phần trăm.
+  - Test: thêm `expect_accepted` gọi thật `load_schedule_config`; thêm `BinaryScheduleDrivesAoFullScale` (0-10 V: ACTIVE 10 V, INACTIVE 0 V) và `RealScheduleOnePercentIsNotFullScale` (REAL 1 % → 0,1 V).
+  - `CMakeLists.txt` gốc: `set(CMAKE_EXPORT_COMPILE_COMMANDS ON)`. Chỉ sinh thêm file trong thư mục build, không đổi cờ biên dịch hay binary.
+  - Máy dev (không commit, `.vscode/` bị ignore): `.vscode/settings.json` trỏ `C_Cpp.default.compileCommands` và `cmake.buildDirectory` vào `build/fw`; loại `.claude/worktrees` khỏi explorer/watcher/search/cpptools — lỗi `Cannot read file …/.claude/worktrees/agent-ae18187f70ce4e268/apps/web-ui/tsconfig.json` là của worktree agent đã bị xoá.
+- **Kiểm chứng (host):**
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `build/fw/compile_commands.json` 743 TU, `safe_state.cpp` mang `-I apps/core` và `-I apps/core/domain` (đủ cho cả 6 include bị báo).
+  - `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw` **1751/1751 PASS**; `ScheduleV31*` 70/70.
+  - Kiểm đột biến: đưa lại dòng `(c.value == 1.0)` → `RealScheduleOnePercentIsNotFullScale` FAIL; khôi phục bản sửa → PASS.
+  - Go và FE không đổi trong mục này, không chạy lại.
+- **Refs:** commit `45e31285`, `PLAN-ARCH-RESTRUCT-002` (xoá `services/`).
+
 ### Fixed — Check không còn chặn binding đầu ra theo chất lượng live của điểm đích; deploy `main` lên bo lab (Issue #840, 2026-09-29)
 
 - **Phạm vi:**
