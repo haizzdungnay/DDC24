@@ -174,17 +174,11 @@ std::string format_point_id(PointKind k, int channel)
  * BV/DO là nhị phân; AV/AO/EXT là liên tục; MSV là đa trạng thái. */
 bool target_kind_matches_value_type(PointKind k, ValueType t)
 {
-    switch (t) {
-    case ValueType::Binary:
-    case ValueType::Boolean:
-        return k == PointKind::BO || k == PointKind::BV;
-    case ValueType::Real:
-        return k == PointKind::AO || k == PointKind::AV || k == PointKind::EXT;
-    case ValueType::Unsigned:
-    case ValueType::Enumerated:
-        return k == PointKind::MSV || k == PointKind::AV || k == PointKind::EXT;
-    }
-    return false;
+    (void)t;
+    /* Hỗ trợ phối hợp nhiều tác vụ: mọi loại điểm ghi được đều gán được vào lịch. */
+    return k == PointKind::BO || k == PointKind::BV ||
+           k == PointKind::AO || k == PointKind::AV ||
+           k == PointKind::MSV || k == PointKind::EXT;
 }
 
 bool parse_time_values(const json::Value* arr, ValueType t, std::vector<TimeValue>* out,
@@ -995,7 +989,8 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
-            ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(c.value, mode));
+            const double pct = (c.value == 1.0) ? 100.0 : c.value;
+            ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(pct, mode));
         } else if (tr.kind == PointKind::BO) {
             ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);
         } else {

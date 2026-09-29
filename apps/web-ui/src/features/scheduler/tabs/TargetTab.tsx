@@ -4,7 +4,7 @@ import { Button } from '../../../shared/components/Button'
 import type { ScheduleObject, ScheduleTargetObject, SchedulePointKind } from '../../../shared/types'
 import { cn } from '../../../shared/utils'
 import {
-  EM_DASH, ERROR_CODE_HINTS, KIND_FOR_VALUE_TYPE, MAX_TARGETS_PER_SCHEDULE,
+  ALL_TARGET_KINDS, EM_DASH, ERROR_CODE_HINTS, MAX_TARGETS_PER_SCHEDULE,
   POINT_KIND_LIMITS, formatValue, overrideSourceLabel
 } from '../shared'
 
@@ -26,7 +26,7 @@ export function TargetTab({
   canEdit: boolean
   onChange: (changes: Partial<ScheduleObject>) => void
 }) {
-  const allowedKinds = KIND_FOR_VALUE_TYPE[draft.value_type] ?? []
+  const allowedKinds = ALL_TARGET_KINDS
   const used = useMemo(
     () => new Set(draft.target_objects.map((t) => `${t.point_kind}-${t.channel}`)),
     [draft.target_objects]
@@ -39,19 +39,32 @@ export function TargetTab({
   }, [saved.runtime])
 
   function add() {
-    const kind = (allowedKinds[0] ?? 'DO') as SchedulePointKind
-    const limit = POINT_KIND_LIMITS[kind] ?? 1
-    let channel = 1
-    while (channel <= limit && used.has(`${kind}-${channel}`)) channel++
-    if (channel > limit) return
+    let chosenKind: SchedulePointKind = 'DO'
+    let chosenChannel = 1
+    let found = false
+
+    for (const k of ALL_TARGET_KINDS) {
+      const limit = POINT_KIND_LIMITS[k] ?? 1
+      for (let ch = 1; ch <= limit; ch++) {
+        if (!used.has(k + '-' + ch)) {
+          chosenKind = k
+          chosenChannel = ch
+          found = true
+          break
+        }
+      }
+      if (found) break
+    }
+    if (!found) return
+
     const n = draft.target_objects.length + 1
     onChange({
       target_objects: [...draft.target_objects, {
-        target_id: `TGT-${String(n).padStart(3, '0')}`,
+        target_id: 'TGT-' + String(n).padStart(3, '0'),
         target_type: 'INTERNAL_POINT',
-        point_kind: kind,
-        channel,
-        point_id: `${kind}-${String(channel).padStart(2, '0')}`
+        point_kind: chosenKind,
+        channel: chosenChannel,
+        point_id: chosenKind + '-' + String(chosenChannel).padStart(2, '0')
       }]
     })
   }
@@ -77,9 +90,7 @@ export function TargetTab({
       <h2 className="sr-only">Điểm đích</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-[var(--c-text-dim)]">
-          Chỉ điểm ghi được và tương thích <strong>{draft.value_type}</strong> mới hiện trong danh sách:{' '}
-          {allowedKinds.join(', ') || EM_DASH}
-        </p>
+          Danh sách loại điểm điều khiển: {ALL_TARGET_KINDS.join(', ')}</p>
         <Button
           size="sm"
           icon={<Plus className="h-4 w-4" />}

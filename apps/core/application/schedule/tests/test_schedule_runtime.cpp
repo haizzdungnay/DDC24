@@ -674,13 +674,12 @@ TEST(ScheduleV31Reject, TargetChannelOutOfRange)
         "kênh DO 99 vượt phần cứng");
 }
 
-TEST(ScheduleV31Reject, TargetKindIncompatibleWithValueType)
+TEST(ScheduleV31Accept, TargetKindAcceptedRegardlessOfValueType)
 {
-    /* SCH-TARGET-003: BINARY không ghi được vào AO. */
-    expect_rejected(config({schedule_json(
+    /* Hỗ trợ phối hợp nhiều tác vụ: BINARY ghi được vào AO. */
+    EXPECT_TRUE(config({schedule_json(
         "SCH-001", weekly_mon_only(), "[]",
-        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])")}),
-        "BINARY ghi vào AO phải bị từ chối");
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])")}));
 }
 
 TEST(ScheduleV31Reject, DuplicateTargetInSameSchedule)

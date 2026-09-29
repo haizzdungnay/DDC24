@@ -34,12 +34,14 @@ export const INTERNAL_WRITABLE_POINTS =
   POINT_KIND_LIMITS.BV + POINT_KIND_LIMITS.MSV
 
 /** Kiểu điểm nào chứa nổi kiểu giá trị nào (SCH-TARGET-003). */
+export const ALL_TARGET_KINDS: SchedulePointKind[] = ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT']
+
 export const KIND_FOR_VALUE_TYPE: Record<ScheduleValueType, string[]> = {
-  BINARY: ['DO', 'BV'],
-  BOOLEAN: ['DO', 'BV'],
-  REAL: ['AO', 'AV', 'EXT'],
-  UNSIGNED: ['MSV', 'AV', 'EXT'],
-  ENUMERATED: ['MSV', 'AV', 'EXT']
+  BINARY: ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT'],
+  BOOLEAN: ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT'],
+  REAL: ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT'],
+  UNSIGNED: ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT'],
+  ENUMERATED: ['DO', 'AO', 'BV', 'AV', 'MSV', 'EXT']
 }
 
 export const DAY_KEYS: ScheduleDayKey[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']

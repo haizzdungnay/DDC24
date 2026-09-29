@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Lock, Save, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Save, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
@@ -6,7 +6,7 @@ import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
-import type { ScheduleObject, ScheduleValidationFinding, ScheduleValueType } from '../../shared/types'
+import type { ScheduleObject, ScheduleValidationFinding } from '../../shared/types'
 import { cn } from '../../shared/utils'
 import { roleAtLeast, useAuth } from '../auth'
 import { RuntimeStrip, StatusDot } from './components/StatusDot'
@@ -17,7 +17,7 @@ import { SimulateTab } from './tabs/SimulateTab'
 import { TargetTab } from './tabs/TargetTab'
 import { WeeklyTab } from './tabs/WeeklyTab'
 import { PublishDialog } from './components/PublishDialog'
-import { EM_DASH, ERROR_CODE_HINTS, formatValue, restingValue } from './shared'
+import { EM_DASH, ERROR_CODE_HINTS, formatValue } from './shared'
 import { useScheduler } from './useScheduler'
 
 type TabKey = 'weekly' | 'exceptions' | 'targets' | 'simulate' | 'effective' | 'revisions' | 'audit'
@@ -140,7 +140,6 @@ export function ScheduleEditorPage() {
     }
   }
 
-  const valueTypeLocked = draft.target_objects.length > 0
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
     { key: 'weekly', label: 'Tuần' },
     { key: 'exceptions', label: 'Ngoại lệ', badge: draft.exception_schedule.length },
@@ -201,7 +200,6 @@ export function ScheduleEditorPage() {
       <ScheduleBasics
         draft={draft}
         canEdit={canEdit}
-        valueTypeLocked={valueTypeLocked}
         onChange={patch}
       />
 
@@ -278,15 +276,14 @@ export function ScheduleEditorPage() {
 }
 
 function ScheduleBasics({
-  draft, canEdit, valueTypeLocked, onChange
+  draft, canEdit, onChange
 }: {
   draft: ScheduleObject
   canEdit: boolean
-  valueTypeLocked: boolean
   onChange: (changes: Partial<ScheduleObject>) => void
 }) {
   return (
-    <section className="grid gap-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 md:grid-cols-2 lg:grid-cols-4">
+    <section className="grid gap-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1">
         <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tên lịch</span>
         <input
@@ -296,36 +293,6 @@ function ScheduleBasics({
           maxLength={64}
           onChange={(e) => onChange({ schedule_name: e.target.value })}
         />
-      </label>
-
-      <label className="space-y-1">
-        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
-          Kiểu giá trị
-          {valueTypeLocked && <Lock className="h-3 w-3" aria-label="Đã khoá" />}
-        </span>
-        <select
-          className={inputClass}
-          value={draft.value_type}
-          disabled={!canEdit || valueTypeLocked}
-          title={valueTypeLocked
-            ? 'Đã có điểm điều khiển nên không đổi được kiểu giá trị. Gỡ hết điểm ở tab Điểm điều khiển rồi mới đổi được.'
-            : undefined}
-          onChange={(e) => {
-            const vt = e.target.value as ScheduleValueType
-            // Đổi kiểu thì giá trị mặc định cũ không còn hợp lệ.
-            onChange({ value_type: vt, schedule_default: { value: restingValue(vt) } })
-          }}
-        >
-          {(['BINARY', 'BOOLEAN', 'REAL', 'UNSIGNED', 'ENUMERATED'] as ScheduleValueType[]).map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="space-y-1">
-        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Giá trị mặc định</span>
-        <DefaultValueInput draft={draft} canEdit={canEdit} onChange={onChange} />
-        <span className="block text-xs text-[var(--c-text-dim)]">Dùng khi không sự kiện nào đang hiệu lực</span>
       </label>
 
       <label className="space-y-1">
@@ -402,38 +369,6 @@ function ScheduleBasics({
         />
       </label>
     </section>
-  )
-}
-
-function DefaultValueInput({
-  draft, canEdit, onChange
-}: { draft: ScheduleObject; canEdit: boolean; onChange: (c: Partial<ScheduleObject>) => void }) {
-  const v = draft.schedule_default.value
-  if (draft.value_type === 'BINARY' || draft.value_type === 'BOOLEAN') {
-    const on = draft.value_type === 'BINARY' ? v === 'ACTIVE' : v === true
-    return (
-      <select
-        className={inputClass}
-        value={on ? 'on' : 'off'}
-        disabled={!canEdit}
-        onChange={(e) => {
-          const next = e.target.value === 'on'
-          onChange({ schedule_default: { value: draft.value_type === 'BINARY' ? (next ? 'ACTIVE' : 'INACTIVE') : next } })
-        }}
-      >
-        <option value="off">TẮT</option>
-        <option value="on">BẬT</option>
-      </select>
-    )
-  }
-  return (
-    <input
-      type="number"
-      className={inputClass}
-      value={Number(v)}
-      disabled={!canEdit}
-      onChange={(e) => onChange({ schedule_default: { value: Number(e.target.value) } })}
-    />
   )
 }
 
