@@ -7,6 +7,12 @@ project(mkddc-services CXX C)
 enable_testing()
 include(${CMAKE_CURRENT_SOURCE_DIR}/platform/cmake/RepositoryPaths.cmake)
 
+# IntelliSense (cpptools/clangd) lấy include path từ `compile_commands.json`.
+# Header trong `apps/core` include theo gốc module (`graph/...`, `ports/...`),
+# nên không có file này IDE báo "cannot open source file" dù build vẫn qua.
+# Chỉ sinh thêm file trong thư mục build, không đổi cờ biên dịch hay binary.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # T59-606 — build tái lập được: xoá đường dẫn tuyệt đối khỏi binary.
 #
 # Lỗi thật tìm ra khi build hai lần vào hai thư mục khác nhau: `mkddc-iobus` cho
