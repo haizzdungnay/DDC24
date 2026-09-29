@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Fixed — `main` dựng lại được FE: import `SchedulePointKind` trong `scheduler/shared.ts` (Issue #839, 2026-09-29)
+
+- **Phạm vi:** `apps/web-ui/src/features/scheduler/shared.ts`, một dòng import. Không đổi hành vi.
+- **Triệu chứng:** trên `main@e1b2ac51` (sau merge PR #838), `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release` dừng ở `tsc` với exit 2: `src/features/scheduler/shared.ts(37,32): error TS2304: Cannot find name 'SchedulePointKind'`. Không dựng được FE phát hành, nên không deploy được `main` lên bo.
+- **Nguyên nhân gốc:** commit `45e31285` thêm `ALL_TARGET_KINDS: SchedulePointKind[]` mà không thêm kiểu vào `import type` từ `../../shared/types`. Vitest chỉ transpile, không typecheck, nên 3591 test vẫn xanh và lỗi lọt qua.
+- **Cách sửa:** thêm `SchedulePointKind` vào `import type`.
+- **Kiểm chứng:** `npx tsc --noEmit -p .` exit 0; vitest 278 file / 3591 test PASS; `npm run lint` exit 0; `build:release` exit 0, bundle budget PASS. FE dựng từ commit này (`index.html` `876eb307…`) đang chạy trên bo lab từ 2026-09-29 03:35Z (`EV-PROG-COMMISSION-CHECK-840-TARGET`).
+- **Refs:** Issue #839, PR #838.
+
 ### Fixed — `restartPolicy: initial` nay áp cho Virtual Point `multistate`: `DO16_MODE` về OFF khi web/bo khởi động (Issue #832, 2026-09-29)
 
 - **Phạm vi:** `apps/web-api/internal/app/virtualpoint_restart.go` (`sameVirtualPointValue`) và 3 test mới trong `virtualpoint_limits_test.go`. Tài liệu: hồ sơ mới `docs/07_records/test-evidence/programming/2026-09-29-vp-multistate-restart-policy-target.md` (`EV-PROG-VP-MSV-RESTART-832-TARGET` 1.0) kèm fixture `fixtures/2026-09-29-vp-multistate-restart-832/`; `GUIDE-PROG-ST-DO16-001` 1.14 §5.3; `EV-PROG-STARTUP-WAIT-827-TARGET` 1.1 §4.2; `REC-DDC-FIELD-USE-20260927` 2.4.
