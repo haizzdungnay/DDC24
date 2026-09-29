@@ -32,6 +32,12 @@
   - Restart lần hai 03:11:52Z: 0 điểm đặt lại, tệp giữ nguyên mtime và sha.
   - Health 6/6, Programming `READY`, Active `0c29f4f1…` không đổi, Program `RUNNING` ở OFF, `faultCount` 0.
   - **Hành vi đổi:** mỗi lần web/bo khởi động, `DO16_MODE` về OFF. Không tự đặt lại AUTO; chủ bo tự chọn chế độ.
+  - **Sau lượt kiểm (03:16–03:17Z), máy LAN `192.168.1.42` deploy song song:**
+    - web `bb4931e7` (nhánh `feat/scheduler-calendar-interactions`, `modified=true`, không có #827/#832);
+    - Core sha `77a149e1…` và FE `2f578d5b…`;
+    - không chạy `deploy-record`, không restart hai helper.
+
+    Readback cuối lúc 03:18:05Z: 11 kiểm, 6 lệch. Program `FAULTED ST-RT-008` (hồi quy #827). Lượt này không ghi đè; chi tiết ở `EV-PROG-VP-MSV-RESTART-832-TARGET` §4.2.
 - **NOT_RUN:** reboot cả bo (cùng đường khởi động web đã kiểm); đo điện tại tiếp điểm relay.
 - **Refs:** Issue #832, #827, #401 (ISS-PIO-17), #398 (ISS-PIO-15), #397 (ISS-PIO-14), `EV-PROG-STARTUP-WAIT-827-TARGET` §4.2.
 
