@@ -989,7 +989,11 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
-            const double pct = (c.value == 1.0) ? 100.0 : c.value;
+            /* Lịch nhị phân ghi AO: ACTIVE = 100 %, INACTIVE = 0 %. Quyết theo
+             * value_type của lịch chứ không theo giá trị: lịch REAL 1.0 là 1 %. */
+            const ValueType vt = schedules_[c.schedule_index].value_type;
+            const bool binary = vt == ValueType::Binary || vt == ValueType::Boolean;
+            const double pct = binary ? (c.value != 0.0 ? 100.0 : 0.0) : c.value;
             ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(pct, mode));
         } else if (tr.kind == PointKind::BO) {
             ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);

@@ -585,6 +585,41 @@ TEST(ScheduleV31Target, AnalogPercentIsConvertedByAoMode)
     EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 12.0f) << "50% của 4-20mA là 12mA";
 }
 
+TEST(ScheduleV31Target, BinaryScheduleDrivesAoFullScale)
+{
+    /* Phối hợp nhiều tác vụ: lịch BINARY gán vào AO thì ACTIVE = 100 %, INACTIVE = 0 %. */
+    Fixture f;
+    f.io.ao_mode[0] = 0;   /* 0-10 V */
+    f.resolver.set_ao_modes(f.io.ao_mode);
+    ASSERT_TRUE(f.load(config({schedule_json(
+        "SCH-001", weekly_mon_only(), "[]",
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])")})));
+
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 10.0f) << "ACTIVE → 100% của 0-10V";
+
+    f.runtime.evaluate_at(at(2026, 8, 10, 19, 0), f.io, f.writer, f.resolver);
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 0.0f) << "INACTIVE → 0%";
+}
+
+TEST(ScheduleV31Target, RealScheduleOnePercentIsNotFullScale)
+{
+    /* Hồi quy: quy đổi ACTIVE → 100 % từng dựa vào `value == 1.0`, làm lịch REAL
+     * đặt 1 % bật AO lên hết thang. */
+    const std::string weekly_on =
+        R"({"MON":[{"time":"00:00:00","value":1.0}],"TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    Fixture f;
+    f.io.ao_mode[0] = 0;   /* 0-10 V */
+    f.resolver.set_ao_modes(f.io.ao_mode);
+    ASSERT_TRUE(f.load(config({schedule_json(
+        "SCH-001", weekly_on, "[]",
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])",
+        "REAL", R"({"value":0.0})")})));
+
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 0.1f) << "1% của 0-10V là 0.1V";
+}
+
 TEST(ScheduleV31Target, ReleasesTargetWhenNoLongerClaimed)
 {
     Fixture f;
@@ -621,6 +656,13 @@ void expect_rejected(const std::string& json, const char* why)
     TempFile f(json);
     std::vector<ScheduleObject> out;
     EXPECT_FALSE(load_schedule_config(f.path(), true, &out)) << why;
+}
+
+void expect_accepted(const std::string& json, const char* why)
+{
+    TempFile f(json);
+    std::vector<ScheduleObject> out;
+    EXPECT_TRUE(load_schedule_config(f.path(), true, &out)) << why;
 }
 } // namespace
 
@@ -677,9 +719,10 @@ TEST(ScheduleV31Reject, TargetChannelOutOfRange)
 TEST(ScheduleV31Accept, TargetKindAcceptedRegardlessOfValueType)
 {
     /* Hỗ trợ phối hợp nhiều tác vụ: BINARY ghi được vào AO. */
-    EXPECT_TRUE(config({schedule_json(
+    expect_accepted(config({schedule_json(
         "SCH-001", weekly_mon_only(), "[]",
-        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])")}));
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])")}),
+        "BINARY ghi vào AO phải được nhận");
 }
 
 TEST(ScheduleV31Reject, DuplicateTargetInSameSchedule)
