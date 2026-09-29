@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 /* ISS-PIO-15 — biên kỹ thuật cho VP (F-PIO-016).
@@ -318,5 +321,93 @@ func TestRestartPolicyInitialWorksOnIntegerSignalType(t *testing.T) {
 	cfg := readVPConfig(t, path)
 	if got, ok := virtualPointFloat(cfg.Items[0].Value); !ok || got != 0 {
 		t.Fatalf("value = %v; muốn 0", cfg.Items[0].Value)
+	}
+}
+
+/* Issue #832 — VP kiểu `multistate` khai `restartPolicy: initial` PHẢI quay về
+ * giá trị khởi tạo.
+ *
+ * Cùng lớp lỗi với ca `integer` ngay trên, nhưng ở tầng khác: bộ đọc số đã đúng,
+ * còn `sameVirtualPointValue` chỉ so theo số cho kiểu mà
+ * `virtualPointNumericSignalType` nhận — `integer`/`float`. `multistate` (thêm
+ * sau, ISS-PIO-17) rơi xuống nhánh so chuỗi, nơi `10` và `0` cùng thành `""`,
+ * nên điểm bị coi là "đã đúng giá trị". Trên bo lab, `DO16_MODE` giữ AUTO (10)
+ * qua bốn lần khởi động dù người dùng đã chọn về OFF (0). */
+func TestRestartPolicyInitialWorksOnMultistateSignalType(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	path := seedVPConfig(t, app, `{"items":[{"id":"VP2","tag":"DO16_MODE","signalType":"multistate","enabled":true,"writable":true,"value":10,"initialValue":0,"restartPolicy":"initial","states":[{"value":0,"label":"OFF"},{"value":1,"label":"MANUAL"},{"value":10,"label":"AUTO"}]}]}`)
+
+	if reset := app.applyRestartPolicyOnBoot(t.Context()); reset != 1 {
+		t.Fatalf("số điểm đặt lại = %d; muốn 1 — VP multistate cũng phải theo chính sách khởi động", reset)
+	}
+	cfg := readVPConfig(t, path)
+	if got, ok := virtualPointFloat(cfg.Items[0].Value); !ok || got != 0 {
+		t.Fatalf("value = %v; muốn 0 (OFF) — điểm khai `initial` mà vẫn giữ AUTO", cfg.Items[0].Value)
+	}
+	if got, ok := virtualPointFloat(cfg.Items[0].InitialValue); !ok || got != 0 {
+		t.Fatalf("initialValue = %v; phải còn nguyên 0 sau khi áp chính sách", cfg.Items[0].InitialValue)
+	}
+}
+
+/* Multistate đã đúng giá trị khởi tạo ⇒ KHÔNG ghi lại tệp.
+ *
+ * Chặn chiều ngược của bản vá: so theo số mà đọc lệch kiểu (`json.Number` từ
+ * tệp với `int64` từ `normalizeVirtualPointValue`) sẽ ghi lại
+ * `virtual_points.conf` trên eMMC ở MỌI lần khởi động và sinh vết audit cho một
+ * việc không xảy ra. So cả nội dung lẫn mtime, không chỉ số điểm trả về. */
+func TestRestartPolicyMultistateIsIdempotent(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	path := seedVPConfig(t, app, `{"items":[{"id":"VP2","tag":"DO16_MODE","signalType":"multistate","enabled":true,"writable":true,"value":0,"initialValue":0,"restartPolicy":"initial","states":[{"value":0,"label":"OFF"},{"value":1,"label":"MANUAL"},{"value":10,"label":"AUTO"}]}]}`)
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(path, past, past); err != nil {
+		t.Fatalf("đặt mtime: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("đọc config: %v", err)
+	}
+
+	for round := 1; round <= 2; round++ {
+		if reset := app.applyRestartPolicyOnBoot(t.Context()); reset != 0 {
+			t.Fatalf("lần %d đặt lại %d điểm; giá trị đã đúng thì không được ghi gì", round, reset)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("đọc config: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("tệp cấu hình bị ghi lại dù giá trị đã đúng:\ntrước=%s\nsau=%s", before, after)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+	if !info.ModTime().Equal(past) {
+		t.Fatalf("mtime đổi %v → %v; tệp bị ghi lại dù giá trị đã đúng", past, info.ModTime())
+	}
+}
+
+// So giá trị multistate phải theo SỐ — state là chỉ số nguyên, không phải chuỗi.
+func TestSameVirtualPointValueComparesMultistateAsNumber(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		left, right any
+		want        bool
+	}{
+		{"10 và 0 là hai state khác nhau", float64(10), float64(0), false},
+		{"int64 10 từ normalize với 0 từ JSON", int64(10), json.Number("0"), false},
+		{"3 và 3.0 là cùng một state", int64(3), float64(3), true},
+		{"json.Number và int64 cùng giá trị", json.Number("10"), int64(10), true},
+		{"một vế không phải số ⇒ khác nhau", int64(10), struct{}{}, false},
+		{"chuỗi số không phải giá trị multistate hợp lệ", "10", int64(10), false},
+		{"hai vế đều không phải số ⇒ khác nhau", "AUTO", "AUTO", false},
+		{"nil ⇒ khác nhau", nil, int64(0), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sameVirtualPointValue(tc.left, tc.right, virtualPointSignalMultistate); got != tc.want {
+				t.Fatalf("sameVirtualPointValue(%#v, %#v, multistate) = %v; muốn %v", tc.left, tc.right, got, tc.want)
+			}
+		})
 	}
 }
