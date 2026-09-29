@@ -1,0 +1,21 @@
+# Trạng thái bo SAU deploy main
+NOW 2026-09-29T03:37:30Z
+HEALTH ok 6/6 ok
+VP_CFG VP2   DO16_MODE         multistate value=0 initialValue=0 restartPolicy=initial generation=3 slot=MSV-01
+VP_CFG VP10  DO16_STS_MODE     multistate value=0 initialValue=0 restartPolicy=retain generation=1 slot=MSV-02
+VP_CFG VP11  DO16_STS_ON       float      value=0 initialValue=0 restartPolicy=retain generation=1 slot=AV-06
+VP_CFG VP12  DO16_STS_TRIPS    float      value=0 initialValue=0 restartPolicy=retain generation=1 slot=AV-07
+LIVE VP2 DO16_MODE value=0 quality=good
+LIVE VP10 DO16_STS_MODE value=0 quality=good
+LIVE VP11 DO16_STS_ON value=0 quality=good
+LIVE VP12 DO16_STS_TRIPS value=5 quality=good
+RELAY CK508-04/05: 16 diem, dong=0 []
+PROGRAMMING targetState=READY
+RUNTIME activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db producerState=READY taskState=RUNNING periodMs=10
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=RUNNING faultCount=0 missedReleaseCount=0 waitingReason=None health=HEALTHY
+
+# Check lại CHÍNH revision 65b2b855 (POST …/revisions/65b2b855…/checks), Active đọc ngay trước và sau:
+PRE 03:38:07Z active=0c29f4f1-377d-44ce-add0-2a0f5cad09db
+ACCEPTED checkId=d3c3edb4-f461-475f-ac46-fc7c99ba0e6c state=QUEUED acceptedAt=2026-09-29T03:38:07.364Z
+CHECK d3c3edb4-f461-475f-ac46-fc7c99ba0e6c revision=65b2b855-ef61-4e46-9beb-89e29a05a9f4 state=PASSED diagnostics=0 createdAt=2026-09-29T03:38:07.364Z
+POST 03:38:10Z active=0c29f4f1-377d-44ce-add0-2a0f5cad09db

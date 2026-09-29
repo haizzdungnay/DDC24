@@ -1,0 +1,42 @@
+# Các lần Check của project CHUONG CONTROLLER (GET /api/v1/programming/checks/{id}) — chỉ đọc
+CHECK 479e6083-78c9-4665-aec2-3953bea24445 revision=42d1418b-c88c-4bb8-a951-835fd70006c1 state=FAILED createdAt=2026-09-28T09:30:59.136Z
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=MSV-02 bindingId=34962090-1ee8-491d-9c03-7ff473a5a994
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-06 bindingId=3cef0302-e5c8-4071-8625-4a944d08849d
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-07 bindingId=cb40b0fa-f8f5-42b7-b3d6-72b09448c514
+CHECK b6c95261-822a-444b-bf6c-6505a39ced5d revision=927b264b-70ff-464a-aeb5-65b59cee7d80 state=FAILED createdAt=2026-09-28T09:31:25.551Z
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=MSV-02 bindingId=34962090-1ee8-491d-9c03-7ff473a5a994
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-06 bindingId=3cef0302-e5c8-4071-8625-4a944d08849d
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-07 bindingId=cb40b0fa-f8f5-42b7-b3d6-72b09448c514
+CHECK 1fd75f99-42e8-429f-b915-bd2119dabb9e revision=095bd348-53b6-4862-a228-45f66f4e4465 state=PASSED createdAt=2026-09-28T09:38:14.578Z
+CHECK 4651d72c-5c58-425e-9067-a008ab479bb3 revision=32ed8a6b-27bd-403a-87b2-544ae57ea1d2 state=FAILED createdAt=2026-09-29T03:21:35.809Z
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=MSV-02 bindingId=34962090-1ee8-491d-9c03-7ff473a5a994
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-06 bindingId=3cef0302-e5c8-4071-8625-4a944d08849d
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-07 bindingId=cb40b0fa-f8f5-42b7-b3d6-72b09448c514
+CHECK ecba7068-058f-4dd8-9068-04184c572978 revision=65b2b855-ef61-4e46-9beb-89e29a05a9f4 state=FAILED createdAt=2026-09-29T03:24:45.511Z
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=MSV-02 bindingId=34962090-1ee8-491d-9c03-7ff473a5a994
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-06 bindingId=3cef0302-e5c8-4071-8625-4a944d08849d
+  PRG-ERR-MAP-003 PGM-MAP-QUALITY-001 ERROR field=binding.qualityPolicy pointId=AV-07 bindingId=cb40b0fa-f8f5-42b7-b3d6-72b09448c514
+
+# GET /api/v1/programming/revisions/0c29f4f1…(Active)/changes/65b2b855…(revision người dùng Check)
+{"fromRevisionId": "0c29f4f1-377d-44ce-add0-2a0f5cad09db", "toRevisionId": "65b2b855-ef61-4e46-9beb-89e29a05a9f4", "impact": {"impactRef": "411441aadc8b2fd0240b67366f538e4fc80edb9f54c483452cd663ae9d061611", "retain": {"status": "NONE", "items": []}, "activeOverrides": {"status": "NONE", "items": []}, "cutover": {"status": "NONE", "items": []}, "outputMappingChanges": {"status": "NONE", "items": []}, "physicalMappingChanges": {"status": "NONE", "items": []}, "virtualPointChanges": {"status": "NONE", "items": []}, "modbusMappingChanges": {"status": "NONE", "items": []}, "writableOutputsAffected": {"status": "NONE", "items": []}, "publishedSignals": {"status": "NONE", "items": []}, "controlLibrary": {"status": "NONE", "items": []}, "programSet": {"status": "NONE", "items": []}, "enableIntent": {"status": "NONE", "items": []}}, "changes": [], "stHunks": [], "fbdChanges": [], "truncated": false, "nextCursor": null}
+
+# Audit Programming (mới nhất trước), 2026-09-28 09:30Z → 2026-09-29 03:25Z
+AUDIT 2026-09-29T03:24:45.583Z CHECK_COMPLETE actor=admin target=ecba7068-058f-4dd8-9068-04184c572978 revision=65b2b855-ef61-4e46-9beb-89e29a05a9f4 result=FAILED
+AUDIT 2026-09-29T03:24:45.511Z CHECK_REQUEST actor=admin target=ecba7068-058f-4dd8-9068-04184c572978 revision=65b2b855-ef61-4e46-9beb-89e29a05a9f4 result=QUEUED
+AUDIT 2026-09-29T03:24:45.417Z REVISION_CREATE actor=admin target=65b2b855-ef61-4e46-9beb-89e29a05a9f4 revision=65b2b855-ef61-4e46-9beb-89e29a05a9f4 result=OK
+AUDIT 2026-09-29T03:21:35.896Z CHECK_COMPLETE actor=admin target=4651d72c-5c58-425e-9067-a008ab479bb3 revision=32ed8a6b-27bd-403a-87b2-544ae57ea1d2 result=FAILED
+AUDIT 2026-09-29T03:21:35.809Z CHECK_REQUEST actor=admin target=4651d72c-5c58-425e-9067-a008ab479bb3 revision=32ed8a6b-27bd-403a-87b2-544ae57ea1d2 result=QUEUED
+AUDIT 2026-09-29T03:21:35.699Z REVISION_CREATE actor=admin target=32ed8a6b-27bd-403a-87b2-544ae57ea1d2 revision=32ed8a6b-27bd-403a-87b2-544ae57ea1d2 result=OK
+AUDIT 2026-09-28T09:46:05.081Z PROGRAM_ENABLE actor=admin target=a153aa91-f0e9-4b60-8741-3cadcfb7f579 revision=None result=OK
+AUDIT 2026-09-28T09:46:01.507Z PROGRAM_DISABLE actor=admin target=a153aa91-f0e9-4b60-8741-3cadcfb7f579 revision=None result=OK
+AUDIT 2026-09-28T09:38:15.606Z CHECK_COMPLETE actor=admin target=1fd75f99-42e8-429f-b915-bd2119dabb9e revision=095bd348-53b6-4862-a228-45f66f4e4465 result=PASSED
+AUDIT 2026-09-28T09:38:14.578Z CHECK_REQUEST actor=admin target=1fd75f99-42e8-429f-b915-bd2119dabb9e revision=095bd348-53b6-4862-a228-45f66f4e4465 result=QUEUED
+AUDIT 2026-09-28T09:38:14.487Z REVISION_CREATE actor=admin target=095bd348-53b6-4862-a228-45f66f4e4465 revision=095bd348-53b6-4862-a228-45f66f4e4465 result=OK
+AUDIT 2026-09-28T09:34:56.374Z PROGRAM_ENABLE actor=admin target=a153aa91-f0e9-4b60-8741-3cadcfb7f579 revision=None result=OK
+AUDIT 2026-09-28T09:34:52.292Z PROGRAM_DISABLE actor=admin target=a153aa91-f0e9-4b60-8741-3cadcfb7f579 revision=None result=OK
+AUDIT 2026-09-28T09:31:25.626Z CHECK_COMPLETE actor=admin target=b6c95261-822a-444b-bf6c-6505a39ced5d revision=927b264b-70ff-464a-aeb5-65b59cee7d80 result=FAILED
+AUDIT 2026-09-28T09:31:25.551Z CHECK_REQUEST actor=admin target=b6c95261-822a-444b-bf6c-6505a39ced5d revision=927b264b-70ff-464a-aeb5-65b59cee7d80 result=QUEUED
+AUDIT 2026-09-28T09:31:25.452Z REVISION_CREATE actor=admin target=927b264b-70ff-464a-aeb5-65b59cee7d80 revision=927b264b-70ff-464a-aeb5-65b59cee7d80 result=OK
+AUDIT 2026-09-28T09:30:59.211Z CHECK_COMPLETE actor=admin target=479e6083-78c9-4665-aec2-3953bea24445 revision=42d1418b-c88c-4bb8-a951-835fd70006c1 result=FAILED
+AUDIT 2026-09-28T09:30:59.136Z CHECK_REQUEST actor=admin target=479e6083-78c9-4665-aec2-3953bea24445 revision=42d1418b-c88c-4bb8-a951-835fd70006c1 result=QUEUED
+AUDIT 2026-09-28T09:30:59.036Z REVISION_CREATE actor=admin target=42d1418b-c88c-4bb8-a951-835fd70006c1 revision=42d1418b-c88c-4bb8-a951-835fd70006c1 result=OK
