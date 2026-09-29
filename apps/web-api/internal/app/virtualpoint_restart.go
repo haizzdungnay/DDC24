@@ -161,7 +161,20 @@ func sameVirtualPointValue(left, right any, signalType string) bool {
 		rightBool, okRight := virtualPointBool(right)
 		return okLeft && okRight && leftBool == rightBool
 	}
-	if virtualPointNumericSignalType(signalType) {
+	/* Issue #832 — `multistate` cũng phải so theo SỐ.
+	 *
+	 * Giá trị multistate là chỉ số state nguyên (`normalizeVirtualPointValue`
+	 * trả `int64`), nhãn chỉ nằm trong `states`. Bản cũ chỉ hỏi
+	 * `virtualPointNumericSignalType`, vốn cố ý loại `multistate` (đó là câu hỏi
+	 * "có phải đại lượng đo được không" cho biên kỹ thuật, alarm, tiền tố AV), nên
+	 * multistate rơi xuống nhánh so chuỗi dưới cùng: `10` và `0` cùng thành `""`
+	 * ⇒ "bằng nhau" ⇒ `applyRestartPolicyOnBoot` bỏ qua điểm. Trên bo lab,
+	 * `DO16_MODE` giữ AUTO qua bốn lần khởi động dù người dùng chọn về OFF.
+	 *
+	 * Không thêm `multistate` vào `virtualPointNumericSignalType`: làm vậy sẽ bật
+	 * biên kỹ thuật và alarm ngưỡng cho một điểm chọn chế độ. Câu hỏi ở đây hẹp
+	 * hơn — "giá trị có đọc được thành số không" — nên trả lời ngay tại chỗ. */
+	if virtualPointNumericSignalType(signalType) || virtualPointMultistate(signalType) {
 		leftNum, okLeft := virtualPointFloat(left)
 		rightNum, okRight := virtualPointFloat(right)
 		/* Kiểu SỐ mà một vế không đọc được thành số ⇒ coi là KHÁC NHAU.

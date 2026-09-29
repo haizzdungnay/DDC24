@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-DDC-FIELD-USE-20260927` |
-| Phiên bản | 2.3 |
-| Ngày | 2026-09-27 (cập nhật 2026-09-28) |
+| Phiên bản | 2.4 |
+| Ngày | 2026-09-27 (cập nhật 2026-09-29) |
 | Phạm vi | Programming (ngôn ngữ ST, compiler, runtime Core, Check/Draft/Trace của web-api), Point/Virtual Point, đường ghi Modbus của iobus, công cụ và quy trình triển khai |
 | Mốc mã nguồn | `origin/main@12af1082` (= RC `f86150e3` + 3 commit tài liệu); web trên bo lab thêm PR #795 (`86aa4ede`). Dẫn chứng `file:dòng` đọc tại các mốc này |
 | Người rà | Claude, qua phiên viết – triển khai – kiểm chứng chương trình `PRG_DO16_MODBUS` |
@@ -198,7 +198,7 @@ Mức: **P1** ảnh hưởng tính đúng hoặc khả năng dùng cho dự án 
   - T2 (web dừng 75 s): Core giữ `DISABLED`, không `WAITING`, không FAULT; bật web thì `RUNNING` sau 0,5 s.
   - T3 (reboot bo): Program chạy 3,3 s sau khi có mạng, không thao tác tay.
   - UI thật hiện "Chờ đầu vào". T2b (ngưỡng 60 s trên bo) NOT_RUN vì không có cách không xâm lấn; test host 8/8 PASS chạy lại.
-  - **Lệch kỳ vọng:** relay Modbus đang đóng giữ nguyên trạng thái cuối trong khoảng chờ (77 s ở T2), không về giá trị an toàn — [#833](https://github.com/Mekong-HCM/MK-DDC-24/issues/833). **Lỗi phát hiện thêm:** `restartPolicy: initial` bị bỏ qua với VP `multistate` — [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832).
+  - **Lệch kỳ vọng:** relay Modbus đang đóng giữ nguyên trạng thái cuối trong khoảng chờ (77 s ở T2), không về giá trị an toàn — [#833](https://github.com/Mekong-HCM/MK-DDC-24/issues/833). **Lỗi phát hiện thêm:** `restartPolicy: initial` bị bỏ qua với VP `multistate` — [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832); **đã sửa** 2026-09-29 ở commit `e32c1ec6` và kiểm trên bo: `DO16_MODE` 10 → 0 khi web khởi động ([`EV-PROG-VP-MSV-RESTART-832-TARGET`](../test-evidence/programming/2026-09-29-vp-multistate-restart-policy-target.md)).
 
 ## 4. Lộ trình đề xuất
 
@@ -240,6 +240,7 @@ Khi làm U-02, cổng FE còn lộ thêm một lỗi ngoài danh sách: `ToastPr
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.4 | 2026-09-29 | §3.4: #832 (`restartPolicy` multistate) đã sửa ở commit `e32c1ec6` và kiểm trên bo lab (`EV-PROG-VP-MSV-RESTART-832-TARGET`) |
 | 2.3 | 2026-09-28 | §2, §3.4, §5: U-22 (#827) kiểm trên bo PASS phần trạng thái Program (`EV-PROG-STARTUP-WAIT-827-TARGET`); ghi #833 (DO Modbus giữ trạng thái cuối trong khoảng chờ) và #832 (`restartPolicy` multistate) |
 | 2.2 | 2026-09-28 | §2, §3.4, §5: U-22 (#827) đã sửa ở mức HOST — chờ đầu vào có ngưỡng 60 s thay cho FAULT tức thì; chưa kiểm trên bo |
 | 2.1 | 2026-09-28 | §5: U-04 (#798) kiểm trên bo PASS sau khi sửa lỗi đọc lại EXT; §2, §3.4: thêm U-22 (#827) — Core khởi động làm Program có đầu vào VP bị FAULTED |

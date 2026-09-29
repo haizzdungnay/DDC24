@@ -1,0 +1,24 @@
+?   	mkddc-web/cmd/mkddc-programming-e2e-seed	[no test files]
+?   	mkddc-web/cmd/mkddc-web	[no test files]
+ok  	mkddc-web/internal/app	57.836s
+ok  	mkddc-web/internal/auth	2.084s
+ok  	mkddc-web/internal/capabilities	0.005s
+ok  	mkddc-web/internal/config	0.021s
+ok  	mkddc-web/internal/configschema	0.006s
+ok  	mkddc-web/internal/health	0.003s
+ok  	mkddc-web/internal/historian	0.003s
+ok  	mkddc-web/internal/hmi	0.015s
+ok  	mkddc-web/internal/modbusrtu	0.063s
+ok  	mkddc-web/internal/network	0.012s
+ok  	mkddc-web/internal/points	0.004s
+ok  	mkddc-web/internal/programming/application	83.718s
+ok  	mkddc-web/internal/programming/artifact	0.062s
+?   	mkddc-web/internal/programming/canonicaljson	[no test files]
+ok  	mkddc-web/internal/programming/compiler	4.709s
+ok  	mkddc-web/internal/programming/coreipc	0.012s
+ok  	mkddc-web/internal/programming/domain	0.042s
+ok  	mkddc-web/internal/programming/simworker	0.073s
+ok  	mkddc-web/internal/programming/store	29.825s
+ok  	mkddc-web/internal/programming/transport/http	6.203s
+ok  	mkddc-web/internal/router	0.015s
+ok  	mkddc-web/internal/system	0.015s

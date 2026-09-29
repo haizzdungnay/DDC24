@@ -1,0 +1,33 @@
+=== RUN   TestRestartPolicyInitialWorksOnMultistateSignalType
+2026/09/29 10:04:15 AUDIT login ts=2026-09-29T03:04:15Z user=admin role=admin result=accepted remote=test
+    virtualpoint_limits_test.go:341: số điểm đặt lại = 0; muốn 1 — VP multistate cũng phải theo chính sách khởi động
+--- FAIL: TestRestartPolicyInitialWorksOnMultistateSignalType (0.00s)
+=== RUN   TestRestartPolicyMultistateIsIdempotent
+2026/09/29 10:04:15 AUDIT login ts=2026-09-29T03:04:15Z user=admin role=admin result=accepted remote=test
+--- PASS: TestRestartPolicyMultistateIsIdempotent (0.00s)
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/10_và_0_là_hai_state_khác_nhau
+    virtualpoint_limits_test.go:409: sameVirtualPointValue(10, 0, multistate) = true; muốn false
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/int64_10_từ_normalize_với_0_từ_JSON
+    virtualpoint_limits_test.go:409: sameVirtualPointValue(10, "0", multistate) = true; muốn false
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/3_và_3.0_là_cùng_một_state
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/json.Number_và_int64_cùng_giá_trị
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/một_vế_không_phải_số_⇒_khác_nhau
+    virtualpoint_limits_test.go:409: sameVirtualPointValue(10, struct {}{}, multistate) = true; muốn false
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/chuỗi_số_không_phải_giá_trị_multistate_hợp_lệ
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/hai_vế_đều_không_phải_số_⇒_khác_nhau
+    virtualpoint_limits_test.go:409: sameVirtualPointValue("AUTO", "AUTO", multistate) = true; muốn false
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/nil_⇒_khác_nhau
+    virtualpoint_limits_test.go:409: sameVirtualPointValue(<nil>, 0, multistate) = true; muốn false
+--- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber (0.00s)
+    --- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber/10_và_0_là_hai_state_khác_nhau (0.00s)
+    --- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber/int64_10_từ_normalize_với_0_từ_JSON (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/3_và_3.0_là_cùng_một_state (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/json.Number_và_int64_cùng_giá_trị (0.00s)
+    --- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber/một_vế_không_phải_số_⇒_khác_nhau (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/chuỗi_số_không_phải_giá_trị_multistate_hợp_lệ (0.00s)
+    --- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber/hai_vế_đều_không_phải_số_⇒_khác_nhau (0.00s)
+    --- FAIL: TestSameVirtualPointValueComparesMultistateAsNumber/nil_⇒_khác_nhau (0.00s)
+FAIL
+FAIL	mkddc-web/internal/app	0.045s
+FAIL

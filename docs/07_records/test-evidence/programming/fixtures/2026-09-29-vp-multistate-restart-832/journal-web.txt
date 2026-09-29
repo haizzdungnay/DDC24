@@ -1,0 +1,17 @@
+Sep 28 12:34:56 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 28 12:35:12 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 28 12:35:13 OK1126B-buildroot mkddc-web[1515]: mkddc-web 2026/09/28 12:35:13 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 02:09:28 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 02:09:28 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 02:09:28 OK1126B-buildroot mkddc-web[3616]: mkddc-web 2026/09/29 02:09:28 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 02:40:13 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 02:40:13 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 02:40:14 OK1126B-buildroot mkddc-web[4047]: mkddc-web 2026/09/29 02:40:14 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 03:10:23 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 03:10:25 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 03:10:25 OK1126B-buildroot mkddc-web[4359]: mkddc-web 2026/09/29 03:10:25 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+Sep 29 03:10:25 OK1126B-buildroot mkddc-web[4359]: mkddc-web 2026/09/29 03:10:25 AUDIT change ts=2026-09-29T03:10:25Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP2].value:_10_->_0
+Sep 29 03:10:25 OK1126B-buildroot mkddc-web[4359]: mkddc-web 2026/09/29 03:10:25 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+Sep 29 03:11:52 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 03:11:52 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 03:11:52 OK1126B-buildroot mkddc-web[4539]: mkddc-web 2026/09/29 03:11:52 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf

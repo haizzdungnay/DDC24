@@ -1,0 +1,35 @@
+# Restart mkddc-web-pi lần hai (idempotent)
+PRE 03:11:52Z active=0c29f4f1-377d-44ce-add0-2a0f5cad09db web_sha=cc5848d7e2632090
+CONF_BEFORE 2026-09-29 03:10:25.438190856 +0000 6717 66e6c6b14b9a65a5
+RESTART 2026-09-29 03:11:52
+active
+EXE /opt/mkddc-web/mkddc-web cc5848d7e2632090
+CONF_AFTER  2026-09-29 03:10:25.438190856 +0000 6717 66e6c6b14b9a65a5
+JOURNAL:
+Sep 29 03:11:52 OK1126B-buildroot systemd[1]: Stopped MK-DDC-24 Web/API.
+Sep 29 03:11:52 OK1126B-buildroot systemd[1]: Started MK-DDC-24 Web/API.
+Sep 29 03:11:52 OK1126B-buildroot mkddc-web[4539]: mkddc-web 2026/09/29 03:11:52 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf
+RESTART_POLICY_LINES=0
+
+NOW 2026-09-29T03:12:28Z
+HEALTH ok 6/6 ok
+VP_CFG VP1   DDD               float      value=0 initialValue=null restartPolicy=retain generation=3 slot=AV-01
+VP_CFG VP2   DO16_MODE         multistate value=0 initialValue=0 restartPolicy=initial generation=3 slot=MSV-01
+VP_CFG VP3   DO16_MANUAL_MASK  integer    value=0 initialValue=0 restartPolicy=retain generation=2 slot=AV-02
+VP_CFG VP4   DO16_LOCK_MASK    integer    value=0 initialValue=0 restartPolicy=retain generation=1 slot=AV-03
+VP_CFG VP5   DO16_STEP_S       float      value=1 initialValue=1 restartPolicy=retain generation=1 slot=AV-04
+VP_CFG VP6   DO16_DEMAND_PCT   float      value=0 initialValue=0 restartPolicy=initial generation=1 slot=AV-05
+VP_CFG VP7   DO16_TEST_START   boolean    value=false initialValue=false restartPolicy=initial generation=1 slot=BV-01
+VP_CFG VP8   DO16_REVERSE      boolean    value=false initialValue=false restartPolicy=retain generation=1 slot=BV-02
+VP_CFG VP9   DO16_PERMIT       boolean    value=true initialValue=true restartPolicy=retain generation=1 slot=BV-03
+VP_CFG VP10  DO16_STS_MODE     multistate value=0 initialValue=0 restartPolicy=retain generation=1 slot=MSV-02
+VP_CFG VP11  DO16_STS_ON       float      value=0 initialValue=0 restartPolicy=retain generation=1 slot=AV-06
+VP_CFG VP12  DO16_STS_TRIPS    float      value=0 initialValue=0 restartPolicy=retain generation=1 slot=AV-07
+LIVE VP2 DO16_MODE value=0 quality=good
+LIVE VP10 DO16_STS_MODE value=0 quality=good
+LIVE VP11 DO16_STS_ON value=0 quality=good
+LIVE VP12 DO16_STS_TRIPS value=5 quality=good
+RELAY CK508-04/05: 16 diem, dong=0 []
+PROGRAMMING targetState=READY
+RUNTIME activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db producerState=READY taskState=RUNNING periodMs=10
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=RUNNING faultCount=0 missedReleaseCount=0 waitingReason=None health=HEALTHY
