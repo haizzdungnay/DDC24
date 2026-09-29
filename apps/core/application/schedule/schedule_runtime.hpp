@@ -209,6 +209,8 @@ private:
     struct AppliedTarget {
         PointKind kind = PointKind::AV;
         int idx = 0;
+        double value = 0.0;
+        bool in_delay = false;
     };
 
     std::vector<ScheduleObject> schedules_;

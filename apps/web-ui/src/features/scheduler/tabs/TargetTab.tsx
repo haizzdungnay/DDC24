@@ -11,10 +11,11 @@ import {
 } from '../shared'
 
 function getPointLabel(kind: SchedulePointKind, channel: number, pointsById: Map<string, Point>): string {
-  const pid = `${kind}-${String(channel).padStart(2, '0')}`
-  const pt = pointsById.get(pid)
-  if (pt?.name) return `${pid} — ${pt.name}`
-  if (pt?.tag) return `${pid} — ${pt.tag}`
+  const pad2 = String(channel).padStart(2, '0')
+  const pid = `${kind}-${pad2}`
+  const pt = pointsById.get(pid) || pointsById.get(`${kind}-${channel}`)
+  const name = pt?.display_name || pt?.name || pt?.tag
+  if (name && name !== pid && name !== `${kind}-${channel}`) return `${pid} — ${name}`
   return pid
 }
 
@@ -294,19 +295,28 @@ export function TargetTab({
                       </div>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0}
-                          max={300}
-                          step={5}
-                          className={cellClass + ' w-16 font-mono text-xs text-right'}
-                          value={t.staggered_delay_seconds ?? 0}
-                          disabled={!canEdit}
-                          aria-label="Độ trễ khởi động so le"
-                          onChange={(e) => update(i, { staggered_delay_seconds: Math.max(0, Math.min(300, Number(e.target.value))) })}
-                        />
-                        <span className="text-xs text-[var(--c-text-dim)]">s</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={300}
+                            step={5}
+                            className={cn(
+                              cellClass,
+                              'w-16 font-mono text-xs text-right',
+                              ((t.staggered_delay_seconds ?? 0) < 0 || (t.staggered_delay_seconds ?? 0) > 300) && 'border-[var(--c-bad-fg)] ring-1 ring-[var(--c-bad-fg)]'
+                            )}
+                            value={t.staggered_delay_seconds ?? 0}
+                            disabled={!canEdit}
+                            aria-label="Độ trễ khởi động so le"
+                            onChange={(e) => update(i, { staggered_delay_seconds: Number(e.target.value) })}
+                          />
+                          <span className="text-xs text-[var(--c-text-dim)]">s</span>
+                        </div>
+                        {((t.staggered_delay_seconds ?? 0) < 0 || (t.staggered_delay_seconds ?? 0) > 300) && (
+                          <span className="text-[10px] text-[var(--c-bad-fg)] font-medium">Dải 0..300s</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2">
@@ -318,10 +328,9 @@ export function TargetTab({
                             disp = pt.value ? 'BẬT' : 'TẮT'
                           } else if (t.point_kind === 'DO' || t.point_kind === 'BV') {
                             disp = Number(pt.value) !== 0 ? 'BẬT' : 'TẮT'
-                          } else if (t.point_kind === 'AO') {
-                            disp = `${pt.value} %`
                           } else {
-                            disp = `${pt.value}${pt.unit ? ' ' + pt.unit : ''}`
+                            const unit = pt.unit || pt.rawUnit || (t.point_kind === 'AO' ? 'V' : '')
+                            disp = `${pt.value}${unit ? ' ' + unit : ''}`
                           }
                         } else if (rt?.actual_value !== undefined && rt.actual_value !== null) {
                           disp = formatValue(rt.actual_value, draft.value_type)
@@ -334,6 +343,7 @@ export function TargetTab({
                                 type="button"
                                 className="rounded p-0.5 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
                                 title="Soi Mảng Ưu Tiên BACnet (Priority Stack)"
+                                aria-label="Soi mảng mức độ ưu tiên BACnet"
                                 onClick={() => setInspectTarget(t)}
                               >
                                 <Layers className="h-3.5 w-3.5" />
@@ -487,57 +497,111 @@ function PriorityStackModal({
   const isOk = runtime?.write_result === 'OK'
   const isRelinquished = runtime?.write_result === 'RELINQUISHED'
   const isDelayed = runtime?.write_result === 'DELAYED'
+  const isManual = point?.priority === 'manual' || point?.forced || overridden === 'LOCAL_MANUAL'
+  const isSafety = point?.priority === 'safety' || overridden === 'FIRE_SAFETY'
+  const isBacnet = overridden === 'BACNET'
+  const isLogic = overridden === 'LOCAL_LOGIC' || point?.source === 'logic'
 
-  // Xác định khe ưu tiên đang thắng (Winning Priority Level)
-  let winningLevel = 16
-  let winningDesc = 'Lịch vận hành làm chủ'
+  const unit = point?.unit || point?.rawUnit || (target.point_kind === 'AO' ? 'V' : '')
 
-  if (overridden === 'FIRE_SAFETY') {
-    winningLevel = 1
-    winningDesc = 'Báo cháy / An toàn tính mạng cưỡng bức'
-  } else if (overridden === 'LOCAL_MANUAL') {
-    winningLevel = 8
-    winningDesc = 'Khóa chuyển mạch HOA / Chỉnh tay tại chỗ'
-  } else if (overridden === 'BACNET') {
-    winningLevel = 3
-    winningDesc = 'Lệnh mạng BACnet trung tâm ghi đè'
-  } else if (overridden === 'LOCAL_LOGIC') {
-    winningLevel = 15
-    winningDesc = 'Chương trình logic FBD / POU nội bộ'
-  } else if (isRelinquished) {
-    winningLevel = 17 // Relinquish Default
-    winningDesc = 'Mặc định sàn (Lịch đã nhả lệnh NULL)'
+  // Xác định mức ưu tiên Core Resolver (1..6) đang thắng (D-01 & D-03)
+  let winningCoreLevel = 6
+  let winningDesc = 'Mặc định sàn (Relinquish Default)'
+
+  if (isSafety) {
+    winningCoreLevel = 1
+    winningDesc = 'Mức 1: Báo cháy / An toàn tính mạng cưỡng bức'
+  } else if (isManual) {
+    winningCoreLevel = 2
+    winningDesc = 'Mức 2: Lệnh chỉnh tay người vận hành (Manual Override)'
+  } else if (isBacnet) {
+    winningCoreLevel = 3
+    winningDesc = 'Mức 3: Lệnh mạng BACnet trung tâm ghi đè'
+  } else if (isOk && !isRelinquished && !isDelayed) {
+    winningCoreLevel = 4
+    winningDesc = 'Mức 4: Lịch vận hành làm chủ (Schedule)'
+  } else if (isLogic) {
+    winningCoreLevel = 5
+    winningDesc = 'Mức 5: Chương trình logic FBD / POU nội bộ'
+  } else {
+    winningCoreLevel = 6
+    winningDesc = isRelinquished ? 'Mức 6: Mặc định sàn (Lịch đã nhả lệnh NULL)' : 'Mức 6: Mặc định sàn'
   }
 
-  const PRIORITY_SLOTS = [
-    { level: 1, name: 'Manual-Life Safety', desc: 'Ngắt an toàn tính mạng thủ công', val: overridden === 'FIRE_SAFETY' ? 'ACTIVE' : null },
-    { level: 2, name: 'Automatic-Life Safety', desc: 'Liên động báo cháy tự động (Fire Alarm)', val: null },
-    { level: 3, name: 'Critical Equipment Control', desc: 'Bảo vệ thiết bị tối quan trọng', val: overridden === 'BACNET' ? 'CMD' : null },
-    { level: 4, name: 'Critical Control', desc: 'Khóa an toàn mức 4', val: null },
-    { level: 5, name: 'Critical Control', desc: 'Khóa an toàn mức 5', val: null },
-    { level: 6, name: 'Minimum On/Off Time', desc: 'Bảo vệ chạy/nghỉ tối thiểu máy nén', val: null },
-    { level: 7, name: 'Reserved', desc: 'Dự phòng hệ thống', val: null },
-    { level: 8, name: 'Manual Operator Override', desc: 'Công tắc HOA / Chỉnh tay BMS', val: overridden === 'LOCAL_MANUAL' ? (point?.value ?? 'ON') : null },
-    { level: 9, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 10, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 11, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 12, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 13, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 14, name: 'Reserved', desc: 'Dự phòng', val: null },
-    { level: 15, name: 'Local DDC Logic', desc: 'Thuật toán POU FBD nội bộ', val: overridden === 'LOCAL_LOGIC' ? (point?.value ?? 'RUN') : null },
+  const formatPointVal = (val: any) => {
+    if (val === undefined || val === null) return 'NULL'
+    if (typeof val === 'boolean') return val ? 'BẬT (1)' : 'TẮT (0)'
+    if (target.point_kind === 'DO' || target.point_kind === 'BV') {
+      return Number(val) !== 0 ? 'BẬT (1)' : 'TẮT (0)'
+    }
+    return `${val}${unit ? ' ' + unit : ''}`
+  }
+
+  const CORE_PRIORITY_SLOTS = [
     {
-      level: 16,
-      name: `Normal / Scheduled (${scheduleId})`,
-      desc: 'Lệnh điều phối từ Lịch vận hành',
-      val: isRelinquished ? 'NULL (Nhả lệnh)' : isDelayed ? 'DELAYED' : (runtime?.written_value ?? target.active_value ?? 'NULL')
+      coreLevel: 1,
+      bacnetLevels: 'P1 / P2',
+      name: 'Life Safety (Báo cháy / Khẩn cấp)',
+      desc: 'Ngắt an toàn tính mạng & liên động báo cháy tự động',
+      val: isSafety ? (point?.value !== undefined ? formatPointVal(point.value) : 'ACTIVE') : null,
+      isWinner: winningCoreLevel === 1
     },
-    { level: 17, name: 'Relinquish Default', desc: 'Giá trị sàn khi tất cả 16 mức là NULL', val: '0 / OFF' }
+    {
+      coreLevel: 2,
+      bacnetLevels: 'P8',
+      name: 'Manual Operator (Chỉnh tay / HOA)',
+      desc: 'Công tắc HOA tại tủ hoặc lệnh can thiệp thủ công từ web/HMI',
+      val: isManual ? (point?.value !== undefined ? formatPointVal(point.value) : 'ACTIVE') : null,
+      isWinner: winningCoreLevel === 2
+    },
+    {
+      coreLevel: 3,
+      bacnetLevels: 'P3 / P10',
+      name: 'BACnet Network (Lệnh mạng trung tâm)',
+      desc: 'Hệ thống SCADA / BMS cấp trên ghi đè qua giao thức mạng',
+      val: isBacnet ? (point?.value !== undefined ? formatPointVal(point.value) : 'CMD') : null,
+      isWinner: winningCoreLevel === 3
+    },
+    {
+      coreLevel: 4,
+      bacnetLevels: 'P16 (hoặc P14)',
+      name: `Schedule (${scheduleId})`,
+      desc: 'Lệnh điều phối từ Lịch vận hành thiết bị',
+      val: isRelinquished
+        ? 'NULL (Nhả lệnh)'
+        : isDelayed
+          ? `DELAYED (~ ${runtime?.delay_remaining_sec ?? 0}s)`
+          : (runtime?.written_value !== undefined && runtime.written_value !== null
+            ? `${runtime.written_value}${target.point_kind === 'AO' ? ' %' : ''}`
+            : target.active_value !== undefined
+              ? `${target.active_value}${target.point_kind === 'AO' ? ' %' : ''}`
+              : 'NULL'),
+      isWinner: winningCoreLevel === 4
+    },
+    {
+      coreLevel: 5,
+      bacnetLevels: 'P15',
+      name: 'Local Logic (POU / FBD nội bộ)',
+      desc: 'Thuật toán điều khiển tự động lập trình trong Core',
+      val: isLogic ? (point?.value !== undefined ? formatPointVal(point.value) : 'RUN') : null,
+      isWinner: winningCoreLevel === 5
+    },
+    {
+      coreLevel: 6,
+      bacnetLevels: 'Relinquish Default',
+      name: 'Relinquish Default (Mặc định sàn)',
+      desc: 'Giá trị sàn an toàn khi tất cả các mức ưu tiên trên đều nhả NULL',
+      val: point?.default_value !== undefined
+        ? formatPointVal(point.default_value)
+        : (target.point_kind === 'DO' || target.point_kind === 'BV' ? 'TẮT (0)' : `0${unit ? ' ' + unit : ''}`),
+      isWinner: winningCoreLevel === 6
+    }
   ]
 
   return (
     <Modal
       open={true}
-      title={`Mảng Mức Độ Ưu Tiên BACnet — ${target.point_id}`}
+      title={`Mảng Trọng Tài Ưu Tiên (Priority Resolver) — ${target.point_id}`}
       size="lg"
       cancelLabel="Đóng"
       onClose={onClose}
@@ -551,43 +615,47 @@ function PriorityStackModal({
               <div className="text-xs text-[var(--c-text-dim)]">Loại điểm: {target.point_kind} · Kênh: {target.channel}</div>
             </div>
             <div className="text-right">
-              <div className="text-xs text-[var(--c-text-dim)]">Giá trị hiện tại:</div>
+              <div className="text-xs text-[var(--c-text-dim)]">Giá trị thực tế:</div>
               <div className="font-mono text-base font-bold text-[var(--c-good-fg)]">
-                {point?.value !== undefined ? String(point.value) : EM_DASH}
+                {point?.value !== undefined ? `${point.value}${unit ? ' ' + unit : ''}` : EM_DASH}
               </div>
             </div>
           </div>
           <div className="mt-2 text-xs pt-2 border-t border-[var(--c-border)]">
             <span className="font-medium text-[var(--c-text-dim)]">Mức thắng hiện hành: </span>
-            <span className={cn('font-bold', winningLevel <= 8 ? 'text-[var(--c-warn-fg)]' : winningLevel === 16 ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-accent)]')}>
-              {winningLevel <= 16 ? `Priority ${winningLevel}` : 'Relinquish Default'} ({winningDesc})
+            <span className={cn('font-bold', winningCoreLevel <= 2 ? 'text-[var(--c-warn-fg)]' : winningCoreLevel === 4 ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-accent)]')}>
+              {winningDesc}
             </span>
           </div>
         </div>
 
-        {/* Bảng 16 khe BACnet Command Priority Array */}
+        {/* Bảng 6 mức ưu tiên Core Resolver */}
         <div className="max-h-[380px] overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)]">
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="border-b border-[var(--c-border)] bg-[var(--c-surface-2)] text-left uppercase text-[var(--c-text-dim)]">
-                <th className="px-3 py-2 w-16">Mức</th>
-                <th className="px-3 py-2">Phân loại chuẩn ISO 16484-5</th>
-                <th className="px-3 py-2 min-w-[120px]">Giá trị</th>
+                <th className="px-3 py-2 w-20">Mức Core</th>
+                <th className="px-3 py-2 w-24">Chuẩn BACnet</th>
+                <th className="px-3 py-2">Nguồn điều khiển & Mô tả</th>
+                <th className="px-3 py-2 min-w-[120px]">Giá trị slot</th>
                 <th className="px-3 py-2 w-28 text-right">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              {PRIORITY_SLOTS.map((s) => {
-                const isWinning = s.level === winningLevel
-                const isPrio16 = s.level === 16
+              {CORE_PRIORITY_SLOTS.map((s) => {
+                const isWinning = s.isWinner
+                const isSched = s.coreLevel === 4
                 const rowBg = isWinning
-                  ? (winningLevel <= 2 ? 'bg-red-500/10' : winningLevel === 8 ? 'bg-purple-500/10' : 'bg-emerald-500/10')
-                  : isPrio16 ? 'bg-[var(--c-surface-2)]/60' : ''
+                  ? (s.coreLevel <= 2 ? 'bg-amber-500/10' : s.coreLevel === 4 ? 'bg-emerald-500/10' : 'bg-blue-500/10')
+                  : isSched ? 'bg-[var(--c-surface-2)]/60' : ''
 
                 return (
-                  <tr key={s.level} className={cn('border-b border-[var(--c-border)] hover:bg-[var(--c-surface-2)]/40', rowBg)}>
+                  <tr key={s.coreLevel} className={cn('border-b border-[var(--c-border)] hover:bg-[var(--c-surface-2)]/40', rowBg)}>
                     <td className="px-3 py-2 font-mono font-bold">
-                      {s.level <= 16 ? `P${s.level}` : 'Sàn'}
+                      Mức {s.coreLevel}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[var(--c-text-dim)] font-medium">
+                      {s.bacnetLevels}
                     </td>
                     <td className="px-3 py-2">
                       <div className="font-medium">{s.name}</div>
@@ -599,25 +667,18 @@ function PriorityStackModal({
                           {String(s.val)}
                         </span>
                       ) : (
-                        <span className="text-[var(--c-text-dim)] italic">NULL</span>
+                        <span className="text-[var(--c-text-dim)] italic">NULL (Trống)</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {isWinning ? (
-                        <span className={cn('rounded px-1.5 py-0.5 font-semibold text-[10px]',
-                          winningLevel <= 2 ? 'bg-red-500/20 text-red-500' :
-                          winningLevel === 8 ? 'bg-purple-500/20 text-purple-400' :
-                          'bg-emerald-500/20 text-emerald-400')}>
+                        <span className="inline-flex rounded-full bg-[var(--c-good-bg)] px-2 py-0.5 text-[10px] font-bold text-[var(--c-good-fg)] border border-[var(--c-good)]">
                           WINNING
                         </span>
-                      ) : isPrio16 && isRelinquished ? (
-                        <span className="text-[10px] text-[var(--c-text-dim)] italic">Đã nhả lệnh</span>
-                      ) : isPrio16 && isDelayed ? (
-                        <span className="text-[10px] text-[var(--c-warn-fg)]">Đang chờ trễ</span>
-                      ) : s.val ? (
-                        <span className="text-[10px] text-[var(--c-warn-fg)]">Bị đè</span>
+                      ) : s.val && s.val !== 'NULL (Nhả lệnh)' ? (
+                        <span className="text-[10px] text-[var(--c-text-dim)]">Thua ưu tiên</span>
                       ) : (
-                        <span className="text-[10px] text-[var(--c-text-dim)]">Trống</span>
+                        <span className="text-[10px] text-[var(--c-text-dim)] opacity-40">—</span>
                       )}
                     </td>
                   </tr>
@@ -627,9 +688,12 @@ function PriorityStackModal({
           </table>
         </div>
 
-        <p className="text-[11px] text-[var(--c-text-dim)] leading-relaxed">
-          * Theo tiêu chuẩn BACnet Clause 12.24: Bộ điều khiển chọn mức có số nhỏ nhất khác NULL làm giá trị thực tế đầu ra. Khi lịch nhả lệnh (Set NULL), mức 16 trở thành NULL và nhường quyền điều khiển xuống các mức thấp hơn (FBD Logic P15 hoặc Relinquish Default).
-        </p>
+        {/* Chú giải phân xử trọng tài */}
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-1)] p-2.5 text-[11px] text-[var(--c-text-dim)] space-y-1">
+          <div className="font-semibold text-[var(--c-text)]">Quy tắc trọng tài (Core Priority Resolver):</div>
+          <div>Số nhỏ hơn thắng: <strong>Mức 1</strong> (An toàn) &gt; <strong>Mức 2</strong> (Chỉnh tay) &gt; <strong>Mức 3</strong> (Mạng BACnet) &gt; <strong>Mức 4</strong> (Lịch) &gt; <strong>Mức 5</strong> (Logic POU) &gt; <strong>Mức 6</strong> (Mặc định).</div>
+          <div>Khi hết sự kiện lịch, nếu chọn <em>Nhả lệnh (RELINQUISH)</em>, Mức 4 trả về NULL và giải phóng quyền kiểm soát cho Mức 5 (Logic FBD) hoặc Mức 6.</div>
+        </div>
       </div>
     </Modal>
   )

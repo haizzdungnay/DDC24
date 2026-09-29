@@ -38,6 +38,14 @@ func (a *App) attachScheduleRuntime(list []ScheduleObject) {
 	for _, st := range states {
 		byID[st.ScheduleID] = st
 	}
+	pointsMap := make(map[string]any)
+	if pr, ok := a.core.(pointReader); ok {
+		if pts, pErr := pr.ReadPoints(ctx); pErr == nil {
+			for _, p := range pts {
+				pointsMap[p.ID] = p.Value
+			}
+		}
+	}
 	now := time.Now().UTC()
 	for i := range list {
 		st, found := byID[list[i].ScheduleID]
@@ -45,12 +53,12 @@ func (a *App) attachScheduleRuntime(list []ScheduleObject) {
 			// Controller chưa biết lịch này ⇒ chưa publish hoặc lệch revision.
 			continue
 		}
-		list[i].Runtime = buildScheduleRuntimeState(list[i], st, now)
+		list[i].Runtime = buildScheduleRuntimeState(list[i], st, now, pointsMap)
 		list[i].Status = deriveScheduleStatus(list[i], st)
 	}
 }
 
-func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now time.Time) *ScheduleRuntimeState {
+func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now time.Time, pointsMap map[string]any) *ScheduleRuntimeState {
 	rt := &ScheduleRuntimeState{
 		EffectiveValue:  decodeScheduleValue(st.EffectiveValue, obj.ValueType),
 		LastEvaluatedAt: strPtr(now.Format(time.RFC3339)),
@@ -75,9 +83,11 @@ func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now tim
 
 	for _, t := range st.Targets {
 		targetKind := ""
+		targetPointID := ""
 		for _, to := range obj.TargetObjects {
 			if to.TargetID == t.TargetID {
 				targetKind = to.PointKind
+				targetPointID = to.PointID
 				break
 			}
 		}
@@ -85,6 +95,9 @@ func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now tim
 			TargetID:     t.TargetID,
 			WrittenValue: decodeScheduleTargetValue(t.WrittenValue, targetKind, obj.ValueType),
 			LastWriteAt:  strPtr(now.Format(time.RFC3339)),
+		}
+		if val, ok := pointsMap[targetPointID]; ok {
+			target.ActualValue = val
 		}
 		switch {
 		case t.ErrorCode != "":
@@ -176,9 +189,9 @@ func decodeScheduleTargetValue(raw float64, kind string, fallbackType string) an
 	switch kind {
 	case "DO", "BV":
 		if raw != 0 {
-			return "ACTIVE"
+			return 1
 		}
-		return "INACTIVE"
+		return 0
 	case "AO", "AV", "EXT":
 		return raw
 	case "MSV":

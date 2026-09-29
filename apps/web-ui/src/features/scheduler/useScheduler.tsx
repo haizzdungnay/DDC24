@@ -9,7 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiClient } from '../../shared/api/client'
-import type { ScheduleObject } from '../../shared/types'
+import type { ScheduleObject, ScheduleRuntimeState } from '../../shared/types'
 
 interface SchedulerState {
   schedules: ScheduleObject[]
@@ -23,6 +23,8 @@ interface SchedulerState {
   /** Cập nhật một lịch trong bộ nhớ sau khi API trả về bản mới. */
   upsert: (schedule: ScheduleObject) => void
   remove: (id: string) => void
+  /** Cập nhật trạng thái runtime theo thời gian thực (D-02). */
+  updateRuntime: (id: string, runtime: ScheduleRuntimeState) => void
 }
 
 const SchedulerContext = createContext<SchedulerState | null>(null)
@@ -84,9 +86,20 @@ export function SchedulerProvider({ children }: { children: ReactNode }) {
     setSchedules((current) => current.filter((s) => s.schedule_id !== id))
   }, [])
 
+  const updateRuntime = useCallback((id: string, runtime: ScheduleRuntimeState) => {
+    setSchedules((current) => {
+      const idx = current.findIndex((s) => s.schedule_id === id)
+      if (idx < 0) return current
+      const existing = current[idx]
+      const next = [...current]
+      next[idx] = { ...existing, runtime }
+      return next
+    })
+  }, [])
+
   const value = useMemo<SchedulerState>(
-    () => ({ schedules, loading, error, legacyFormat, reload, upsert, remove }),
-    [schedules, loading, error, legacyFormat, reload, upsert, remove]
+    () => ({ schedules, loading, error, legacyFormat, reload, upsert, remove, updateRuntime }),
+    [schedules, loading, error, legacyFormat, reload, upsert, remove, updateRuntime]
   )
   return <SchedulerContext.Provider value={value}>{children}</SchedulerContext.Provider>
 }
@@ -100,5 +113,5 @@ export function useScheduler(): SchedulerState {
 /** Lấy một lịch theo id từ store; undefined khi chưa tải xong hoặc không có. */
 export function useSchedule(id: string | undefined): ScheduleObject | undefined {
   const { schedules } = useScheduler()
-  return useMemo(() => schedules.find((s) => s.schedule_id === id), [schedules, id])
+  return useMemo(() => (id ? schedules.find((s) => s.schedule_id === id) : undefined), [schedules, id])
 }

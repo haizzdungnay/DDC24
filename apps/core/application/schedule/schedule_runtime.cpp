@@ -1066,7 +1066,22 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         ScheduleState& st = states_[c.schedule_index];
         TargetResult& tr = st.targets[c.target_index];
 
-        active.push_back({tr.kind, tr.idx});
+        active.push_back({tr.kind, tr.idx, c.value, tr.in_staggered_delay});
+        bool changed = true;
+        for (const auto& prev : applied_) {
+            if (prev.kind == tr.kind && prev.idx == tr.idx) {
+                if (prev.value == c.value && prev.in_delay == tr.in_staggered_delay) {
+                    changed = false;
+                }
+                break;
+            }
+        }
+        if (changed) {
+            std::fprintf(stderr,
+                         "INFO  schedule.state_change id=%s target=%s val=%.2f in_delay=%d\n",
+                         st.schedule_id.c_str(), tr.target_id.c_str(), c.value,
+                         tr.in_staggered_delay ? 1 : 0);
+        }
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
@@ -1119,6 +1134,8 @@ void ScheduleRuntime::release_missing(const std::vector<AppliedTarget>& active, 
         } else {
             writer.release({old.kind, old.idx});
         }
+        std::fprintf(stderr, "INFO  schedule.target_released kind=%d idx=%d\n",
+                     static_cast<int>(old.kind), old.idx);
     }
 }
 
