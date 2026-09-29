@@ -55,7 +55,7 @@ Sau deploy: health 6/6 `ok`, Programming `READY`, toolchain `ok`. Revision Activ
 
 | Lần | t0 = lệnh restart (UTC) | Core sẵn sàng | `DISABLED` | `WAITING` + `INPUT_NOT_READY` | Web đẩy 9 VP | Lệnh đầu của Program | Mẫu `RUNNING` đầu | `faultCount` |
 |---|---|---|---|---|---|---|---|---|
-| T1-1 | 12:13:56.461 | +1,84 s | +1,97…+2,77 s (5 mẫu) | +3,08…+3,48 s (3 mẫu) | +3,44…+3,52 s | +3,58 s | +3,68 s | 0 → 0 |
+| T1-1 | 12:13:56.461 | +1,84 s | +1,97…+2,77 s (5 mẫu) | +3,08…+3,48 s (3 mẫu) | +3,43…+3,51 s | +3,58 s | +3,68 s | 0 → 0 |
 | T1-2 | 12:15:15.034 | +1,80 s | +1,91…+2,31 s (3 mẫu) | +2,51…+4,77 s (11 mẫu) | +4,86…+4,94 s | +5,01 s | +4,97 s | 0 → 0 |
 | T1-3 | 12:16:19.405 | +1,85 s | +2,00 s (1 mẫu) | +2,20…+10,51 s (38 mẫu) | +10,49…+10,57 s | +10,64 s | +10,83 s | 0 → 0 |
 
