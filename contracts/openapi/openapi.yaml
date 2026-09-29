@@ -6957,6 +6957,14 @@ components:
           type: string
           maxLength: 32
           example: "DO-01"
+        active_value:
+          type: number
+          nullable: true
+          description: Value to write when schedule event is active (start of event).
+        inactive_value:
+          type: number
+          nullable: true
+          description: Value to write when schedule event is inactive (end of event).
         device_id: { type: string, maxLength: 64 }
         device_instance: { type: integer, minimum: 0, maximum: 4194302 }
         object_type:

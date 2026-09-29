@@ -295,6 +295,39 @@ bool parse_target(const json::Value* v, ValueType value_type, ScheduleTarget* ou
                      declared.c_str(), out->point_id.c_str());
         return false;
     }
+
+    auto parse_target_num = [](const json::Value* fld, double* out_val) -> bool {
+        if (!fld) return false;
+        if (fld->is_num() && std::isfinite(fld->num)) { *out_val = fld->num; return true; }
+        if (fld->is_bool()) { *out_val = fld->b ? 1.0 : 0.0; return true; }
+        if (fld->is_str()) {
+            if (fld->str == "ACTIVE" || fld->str == "1" || fld->str == "true" || fld->str == "ON") { *out_val = 1.0; return true; }
+            if (fld->str == "INACTIVE" || fld->str == "0" || fld->str == "false" || fld->str == "OFF") { *out_val = 0.0; return true; }
+            char* end = nullptr;
+            double d = std::strtod(fld->str.c_str(), &end);
+            if (end != fld->str.c_str() && *end == '\0') { *out_val = d; return true; }
+        }
+        return false;
+    };
+
+    double av = 0.0;
+    if (parse_target_num(v->get("active_value"), &av)) {
+        out->active_value = av;
+        out->has_active_value = true;
+    } else {
+        out->active_value = (out->kind == PointKind::AO) ? 100.0 : 1.0;
+        out->has_active_value = false;
+    }
+
+    double iv = 0.0;
+    if (parse_target_num(v->get("inactive_value"), &iv)) {
+        out->inactive_value = iv;
+        out->has_inactive_value = true;
+    } else {
+        out->inactive_value = 0.0;
+        out->has_inactive_value = false;
+    }
+
     return true;
 }
 
@@ -845,7 +878,23 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
         r.target_id = t.id;
         r.kind = t.kind;
         r.idx = t.idx;
-        r.written_value = st.effective_value;
+        double target_val = 0.0;
+        if (st.effective_value != 0.0) {
+            if (t.has_active_value) {
+                target_val = t.active_value;
+            } else if (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) {
+                target_val = (t.kind == PointKind::AO) ? 100.0 : 1.0;
+            } else {
+                target_val = st.effective_value;
+            }
+        } else {
+            if (t.has_inactive_value) {
+                target_val = t.inactive_value;
+            } else {
+                target_val = (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) ? 0.0 : st.effective_value;
+            }
+        }
+        r.written_value = target_val;
         st.targets.push_back(r);
     }
     return st;
@@ -959,7 +1008,7 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
             const TargetResult& tr = st.targets[ti];
             const std::string key = target_key(tr.kind, tr.idx);
             Claim claim{si, ti, schedules_[si].priority_for_writing,
-                        st.next_transition_week_second, st.effective_value};
+                        st.next_transition_week_second, tr.written_value};
             const auto it = winners.find(key);
             if (it == winners.end()) {
                 winners[key] = claim;
@@ -989,7 +1038,7 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
-            const double pct = (c.value == 1.0) ? 100.0 : c.value;
+            const double pct = c.value;
             ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(pct, mode));
         } else if (tr.kind == PointKind::BO) {
             ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);

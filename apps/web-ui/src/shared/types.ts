@@ -996,6 +996,8 @@ export interface ScheduleTargetObject {
   point_kind?: SchedulePointKind
   channel?: number
   point_id?: string
+  active_value?: number | null
+  inactive_value?: number | null
   device_id?: string
   device_instance?: number
   object_type?: string

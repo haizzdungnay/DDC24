@@ -1303,3 +1303,27 @@ TEST(ScheduleV31Clock, PowerRecoveryComputesCurrentValueWithoutReplayingEvents)
     /* Chỉ MỘT lệnh ghi, không phải bốn lệnh phát lại các mốc đã qua. */
     EXPECT_TRUE(st->targets[0].written);
 }
+
+TEST(ScheduleV31Target, UsesTargetSpecificActiveAndInactiveValues)
+{
+    const std::string weekly_mon_only =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    const std::string targets =
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1,"active_value":1,"inactive_value":0},)"
+        R"({"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1,"active_value":85.0,"inactive_value":15.0}])";
+    Fixture f;
+    f.io.ao_mode[0] = 0; /* 0-10V */
+    f.resolver.set_ao_modes(f.io.ao_mode);
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only, "[]", targets, "BINARY", R"({"value":"INACTIVE"})")})));
+
+    // During active event (10:00 MON): DO1=1, AO1=85% -> 8.5V
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 8.5f);
+
+    // Outside event (20:00 MON): DO1=0, AO1=15% -> 1.5V
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_FALSE(do_on(f.resolver, 0));
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 1.5f);
+}

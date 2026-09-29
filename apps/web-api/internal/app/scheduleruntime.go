@@ -74,9 +74,16 @@ func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now tim
 	rt.AppliedRevision = &applied
 
 	for _, t := range st.Targets {
+		targetKind := ""
+		for _, to := range obj.TargetObjects {
+			if to.TargetID == t.TargetID {
+				targetKind = to.PointKind
+				break
+			}
+		}
 		target := ScheduleTargetRuntime{
 			TargetID:     t.TargetID,
-			WrittenValue: decodeScheduleValue(t.WrittenValue, obj.ValueType),
+			WrittenValue: decodeScheduleTargetValue(t.WrittenValue, targetKind, obj.ValueType),
 			LastWriteAt:  strPtr(now.Format(time.RFC3339)),
 		}
 		switch {
@@ -157,4 +164,20 @@ func nextTransitionTimestamp(weekSecond int, timezone string, now time.Time) str
 		delta += 7 * 86400 // lần chuyển thuộc tuần sau
 	}
 	return local.Add(time.Duration(delta) * time.Second).Format(time.RFC3339)
+}
+
+func decodeScheduleTargetValue(raw float64, kind string, fallbackType string) any {
+	switch kind {
+	case "DO", "BV":
+		if raw != 0 {
+			return "ACTIVE"
+		}
+		return "INACTIVE"
+	case "AO", "AV", "EXT":
+		return raw
+	case "MSV":
+		return int64(raw)
+	default:
+		return decodeScheduleValue(raw, fallbackType)
+	}
 }

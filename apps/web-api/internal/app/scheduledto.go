@@ -152,6 +152,8 @@ type ScheduleTargetObject struct {
 	PointKind string `json:"point_kind,omitempty"`
 	Channel   *int   `json:"channel,omitempty"`
 	PointID   string `json:"point_id,omitempty"`
+	ActiveValue   *float64 `json:"active_value,omitempty"`
+	InactiveValue *float64 `json:"inactive_value,omitempty"`
 	// BACNET_OBJECT (P4)
 	DeviceID           string `json:"device_id,omitempty"`
 	DeviceInstance     *int   `json:"device_instance,omitempty"`

@@ -353,6 +353,14 @@
           "type": "string",
           "maxLength": 32,
           "description": "Dẫn xuất từ point_kind + channel (ví dụ DO-01). Nếu client gửi thì phải khớp, không khớp ⇒ từ chối."
+        },
+        "active_value": {
+          "type": ["number", "null"],
+          "description": "Giá trị gán khi sự kiện bắt đầu (Active)."
+        },
+        "inactive_value": {
+          "type": ["number", "null"],
+          "description": "Giá trị gán khi sự kiện kết thúc (Inactive)."
         }
       }
     },

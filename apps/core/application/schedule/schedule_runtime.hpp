@@ -118,6 +118,10 @@ struct ScheduleTarget {
     PointKind kind = PointKind::AV;
     int idx = 0;                /* 0-based */
     std::string point_id;
+    double active_value = 1.0;
+    double inactive_value = 0.0;
+    bool has_active_value = false;
+    bool has_inactive_value = false;
 };
 
 /* ── Schedule Object ───────────────────────────────────────────────────── */
