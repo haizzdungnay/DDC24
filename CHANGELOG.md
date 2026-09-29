@@ -43,7 +43,10 @@
   - Runtime: chỉ lịch `BINARY`/`BOOLEAN` mới quy ACTIVE → 100 %, INACTIVE → 0 %; lịch `REAL`/`UNSIGNED`/`ENUMERATED` giữ nguyên giá trị phần trăm.
   - Test: thêm `expect_accepted` gọi thật `load_schedule_config`; thêm `BinaryScheduleDrivesAoFullScale` (0-10 V: ACTIVE 10 V, INACTIVE 0 V) và `RealScheduleOnePercentIsNotFullScale` (REAL 1 % → 0,1 V).
   - `CMakeLists.txt` gốc: `set(CMAKE_EXPORT_COMPILE_COMMANDS ON)`. Chỉ sinh thêm file trong thư mục build, không đổi cờ biên dịch hay binary.
-  - Máy dev (không commit, `.vscode/` bị ignore): `.vscode/settings.json` trỏ `C_Cpp.default.compileCommands` và `cmake.buildDirectory` vào `build/fw`; loại `.claude/worktrees` khỏi explorer/watcher/search/cpptools — lỗi `Cannot read file …/.claude/worktrees/agent-ae18187f70ce4e268/apps/web-ui/tsconfig.json` là của worktree agent đã bị xoá.
+  - Máy dev (không commit, `.vscode/` bị ignore):
+    - `.vscode/c_cpp_properties.json` dùng `build/fw/compile_commands.json` cho file nguồn, kèm `includePath`/`defines` lấy từ chính database. cpptools chỉ tra database với file có trong đó; header `.hpp` không có trong database nên rơi về `includePath`. Chỉ trỏ `compileCommands` thì lỗi vẫn còn (thông báo đổi thành "Consider updating your compile_commands.json or includePath").
+    - Kiểm: 153/153 header của `apps/` và `contracts/` biên dịch `-fsyntax-only` chỉ với `includePath` đó, 0 lỗi thiếu include; `safe_state.hpp` exit 0.
+    - `settings.json` trỏ `cmake.buildDirectory` vào `build/fw`, loại `.claude/worktrees` khỏi explorer/watcher/search/cpptools. Lỗi `Cannot read file …/.claude/worktrees/agent-ae18187f70ce4e268/apps/web-ui/tsconfig.json` là của worktree agent đã bị xoá.
 - **Kiểm chứng (host):**
   - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `build/fw/compile_commands.json` 743 TU, `safe_state.cpp` mang `-I apps/core` và `-I apps/core/domain` (đủ cho cả 6 include bị báo).
   - `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw` **1751/1751 PASS**; `ScheduleV31*` 70/70.
