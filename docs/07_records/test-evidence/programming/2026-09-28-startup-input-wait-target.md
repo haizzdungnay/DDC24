@@ -59,6 +59,8 @@ Sau deploy: health 6/6 `ok`, Programming `READY`, toolchain `ok`. Revision Activ
 | T1-2 | 12:15:15.034 | +1,80 s | +1,91…+2,31 s (3 mẫu) | +2,51…+4,77 s (11 mẫu) | +4,86…+4,94 s | +5,01 s | +4,97 s | 0 → 0 |
 | T1-3 | 12:16:19.405 | +1,85 s | +2,00 s (1 mẫu) | +2,20…+10,51 s (38 mẫu) | +10,49…+10,57 s | +10,64 s | +10,83 s | 0 → 0 |
 
+Nguồn: [`ket-qua-t1-1.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t1-1.txt), [`ket-qua-t1-2.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t1-2.txt), [`ket-qua-t1-3.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t1-3.txt) (trạng thái, coil, khung); cột "Web đẩy 9 VP" lấy từ journal Core, [`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §1.
+
 Tổng hợp ba lần (min / trung vị / max):
 
 - **Lệnh restart → Program chạy lại:** 3,58 / 5,01 / 10,64 s.
@@ -68,7 +70,7 @@ Tổng hợp ba lần (min / trung vị / max):
 Chuỗi trạng thái mỗi lần:
 
 1. `UNKNOWN`: Core đang dừng/khởi động, check `core` của health không `ok` trong khoảng 1,6 s.
-2. `DISABLED`: Core nạp Program ở trạng thái tắt; web phát lại intent Enable 0,35–1,24 s sau khi Core sẵn sàng.
+2. `DISABLED`: Core nạp Program ở trạng thái tắt; web phát lại intent Enable trước mẫu `WAITING` đầu tiên, tức trong vòng 0,34–1,25 s sau khi Core sẵn sàng (theo nhịp lấy mẫu 200 ms).
 3. `WAITING` với `waitingReason = INPUT_NOT_READY`.
 4. `RUNNING`.
 
@@ -76,7 +78,7 @@ Pha `WAITING` kết thúc đúng lúc vòng đối chiếu của web (mỗi 10 s
 
 **Quan sát bổ sung:**
 
-- **Lần deploy** (12:10:47Z, Core `1602b2fd` → `265f1a8b`, lấy mẫu 500 ms): `UNKNOWN` → `DISABLED` → `RUNNING` ở +4,16 s. Không bắt được mẫu `WAITING` nào: vòng đối chiếu đẩy VP lúc 12:10:49,9Z, chỉ ~0,35 s sau khi Core sẵn sàng. `faultCount` về 0 vì đây là đời Core mới.
+- **Lần deploy** (12:10:47Z, Core `1602b2fd` → `265f1a8b`, lấy mẫu 500 ms): `UNKNOWN` → `DISABLED` → `RUNNING` ở +4,16 s. Không bắt được mẫu `WAITING` nào: journal Core ghi web đẩy VP trong cùng giây 12:10:49Z với lúc Core sẵn sàng (12:10:49,54Z), tức ≤ 0,46 s sau đó ([`ket-qua-deploy.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-deploy.txt), [`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §2). `faultCount` về 0 vì đây là đời Core mới.
 - **Kiểm nhãn trên UI** (12:45:17Z, Chrome DevTools MCP, [`ui-cho-dau-vao.txt`](fixtures/2026-09-28-startup-input-wait-827/ui-cho-dau-vao.txt)):
   - trong lúc chờ, bảng "Chương trình đang vận hành" hiện **"Chờ đầu vào"** kèm dòng phụ "tự chạy khi đầu vào GOOD; lỗi sau 60 s";
   - lần làm mới kế (bảng poll mỗi 5 s) đã về "Đang chạy", VP được đẩy lúc 12:45:22,1Z; `faultCount` 0.
@@ -93,9 +95,9 @@ Mốc t0 = 12:22:45.209Z (lệnh restart Core). Số liệu lấy thẳng từ C
 | +1,82 … +76,96 s | **`DISABLED`, `enabled=false`**, `waitingReason` rỗng, `faultCount` 0 (301 mẫu) | fail-closed có chủ ý (`load_active_checkpoint`): **không** `WAITING`, **không** FAULT dù đã quá 60 s |
 | +76,68 s | `systemctl start mkddc-web-pi` | |
 | **+77,21 s** | **`RUNNING`**, `faultCount` 0 | **0,53 s sau khi bật web**; lệnh đầu (FC15 toàn 0) ở +77,14 s |
-| +87,4 s | web nhận đăng nhập (HTTP listen lúc 12:24:10Z) | REST 60 s sau đó: 257/257 mẫu `RUNNING`, `waitingReason` null, `faultCount` 0, health 6/6, Active không đổi ([`ket-qua-t2-rest.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t2-rest.txt)) |
+| +87,4 s | web nhận đăng nhập (HTTP listen lúc 12:24:10Z, [`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §3) | REST 60 s sau đó: 257/257 mẫu `RUNNING`, `waitingReason` null, `faultCount` 0, health 6/6, Active không đổi ([`ket-qua-t2-rest.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t2-rest.txt)) |
 
-Web phát lại intent và đẩy VP ngay khi tiến trình khởi động, trước cả khi HTTP listen (~9 s sau). Vì vậy ở mức Core không thấy `WAITING` nào ở nhịp 250 ms: Program đi thẳng `DISABLED` → `RUNNING`.
+Web phát lại intent và đẩy VP ngay khi tiến trình khởi động, trước cả khi HTTP listen (~8 s sau: web khởi động 12:24:01,9Z, listen 12:24:10Z). Vì vậy ở mức Core không thấy `WAITING` nào ở nhịp 250 ms: Program đi thẳng `DISABLED` → `RUNNING`.
 
 **Đầu ra lệch kỳ vọng "đầu ra ở safe state":**
 
@@ -114,7 +116,7 @@ Không có cách **không xâm lấn** để giữ một VP đã bind ở BAD �
 - muốn chặn nó thì phải dừng web, mà dừng web thì Core nạp Program ở `DISABLED` (§3.2), không phải `WAITING`;
 - các cách còn lại (ghi đè chất lượng slot VP qua `core.sock`, tắt/bỏ bind VP, sửa cấu hình VP, Commission một gói thử) đều đổi dữ liệu vào hoặc cấu hình của Program người dùng, trái ràng buộc của lượt kiểm.
 
-Ngưỡng 60 s được khoá bằng test host, **chạy lại trong lượt này** trên bản clone `265f1a8b`. Cấu hình `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` (CFG_EXIT=0, BUILD_EXIT=0), `core_tests --gtest_filter='ProgrammingStartupInputWait.*'`: **8/8 PASS** (671 ms). Trong đó có:
+Ngưỡng 60 s được khoá bằng test host, **chạy lại trong lượt này** trên bản clone `265f1a8b`. Cấu hình `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` (CFG_EXIT=0, BUILD_EXIT=0), `core_tests --gtest_filter='ProgrammingStartupInputWait.*'`: **8/8 PASS** (731 ms, lần chạy lưu ở [`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §6). Trong đó có:
 
 - `MissingVirtualPointsFaultExactlyOnceAtSixtySeconds`;
 - `RunningProgramHoldsLastUntilTtlThenFaultsAtThreshold`;
@@ -135,7 +137,7 @@ Mốc 0 là lúc kernel khởi động (12:35:02.162Z). Lệnh `systemctl reboot
 | **11,226 s** | **lệnh đầu của Program**: FC15 toàn 0, slave 4 (slave 5 ở 11,257 s) |
 | 17,522 s | máy đo SSH vào được |
 | 17,775 … 117,725 s | 400 mẫu trực tiếp: `RUNNING`, `enabled`, `faultCount` 0 |
-| 19,953 s | web HTTP listen; 21,6 s đăng nhập được; REST 301/301 mẫu `RUNNING`, `waitingReason` null, health 6/6, Active không đổi |
+| 19,953 s | web HTTP listen; 21,6 s đăng nhập được; REST 301/301 mẫu `RUNNING`, `waitingReason` null, health 6/6, Active không đổi ([`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §4) |
 
 - **Từ lúc có mạng tới lúc Program chạy:** 3,28 s tính từ `Network is Online`, 1,83 s tính từ `eth0 Link is Up`. Tính từ `core.ready` là 0,57 s; từ lệnh reboot là 16,80 s. **Không thao tác tay.**
 - **Trạng thái trung gian** (`DISABLED`/`WAITING` trước 11,2 s) **không lấy mẫu trực tiếp được**:
@@ -154,10 +156,12 @@ Mốc 0 là lúc kernel khởi động (12:35:02.162Z). Lệnh `systemctl reboot
 
 | Phép đo | Kênh đóng lúc Core dừng | Kênh đóng mới (0→1) trong khoảng chờ | Khung ghi trong khoảng chờ | Kênh giữ nguyên trạng thái cuối |
 |---|---|---|---|---|
-| T1-1 / T1-2 / T1-3 | 8 / 0 / 8 | 0 / 0 / 0 | 0 / 0 / 0 | có, 1,7 / — / 8,8 s tính từ lúc Core sẵn sàng |
+| T1-1 / T1-2 / T1-3 | 8 / 1¹ / 8 | 0 / 0 / 0 | 0 / 0 / 0 | có, 1,7 / — / 8,8 s tính từ lúc Core sẵn sàng |
 | Lần deploy | 2 | 0 | không phủ được: vòng 200 khung ~27 s đã trôi | có, tới +4,16 s |
 | T2 | 4 | 0 | 0 (75 s) | **có, 77 s** |
 | T3 | 8 | 0 | 0 | có, 16,8 s tính từ lệnh reboot |
+
+¹ T1-2: mẫu coil cuối trước t0 có `CK50805-DO8` đóng. Core cũ còn phát một khung ghi lúc t0−0,86 s; bộ lấy mẫu lúc đó chưa lưu giá trị ghi, nên không biết khung đó có nhả kênh này không. Mọi mẫu coil trong khoảng chờ đều 0 kênh đóng ([`ket-qua-t1-2.txt`](fixtures/2026-09-28-startup-input-wait-827/ket-qua-t1-2.txt)).
 
 Tiêu chí "DO không đóng khi Program đang chờ lúc khởi động" **đạt**: không lần nào đóng mới một relay. Nhưng relay đang đóng thì **giữ nguyên**, không về "Giá trị an toàn" = 0 dù cả 16 điểm đã khai giá trị này → Issue #833.
 
@@ -168,7 +172,7 @@ Tiêu chí "DO không đóng khi Program đang chờ lúc khởi động" **đ�
 - **Revision Active** `0c29f4f1…` không đổi ở mọi mẫu và mọi lần đọc; Draft r11 không bẩn. **Không** phải Disable → Enable lần nào.
 - **Cấu hình VP** (12 điểm) sau T2 trùng từng trường với ảnh chụp trước lượt đo.
 - **Sau toàn bộ lượt** (12:46Z): `PRG_DO16_MODBUS` `RUNNING`/`HEALTHY`, `faultCount` 0; health 6/6; toolchain `ok`; `readback` sau reboot 11 kiểm, 0 lệch ([`artifact-readback-sau-reboot.json`](fixtures/2026-09-28-startup-input-wait-827/artifact-readback-sau-reboot.json)).
-- **Task tính từ lần Core khởi động cuối** (12:45:19Z): 5 571 lần chạy, 0 lỡ release, 0 overrun, 0 lỡ base step, jitter tối đa 28 µs, 0 vi phạm.
+- **Task tính từ lần Core khởi động cuối** (12:45:19Z; [`trich-so-do-phu.txt`](fixtures/2026-09-28-startup-input-wait-827/trich-so-do-phu.txt) §5): 5 571 lần chạy, 0 lỡ release, 0 overrun, 0 lỡ base step, jitter tối đa 28 µs, 0 vi phạm.
 
 ## 4. Lỗi phát hiện trong lượt kiểm (mở Issue, chưa sửa — đề bài không sửa mã)
 
