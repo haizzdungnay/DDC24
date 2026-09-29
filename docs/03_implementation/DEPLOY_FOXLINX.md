@@ -316,21 +316,17 @@ Dùng khi cần đưa bo về trạng thái mới cài, ví dụ trước khi t�
   `…/runtime-intent`) thì dùng `perl` (`IO::Socket::INET`) chạy trên bo. sshd của
   bo tắt port-forwarding (`AllowTcpForwarding no`, siết sau sự cố 2026-09-26), nên
   không dựng được tunnel `-L` tới cổng web.
-- **Restart `mkddc-core` và Program có đầu vào Virtual Point (Issue #827).**
-  - **Core có bản sửa #827** (build từ `main` sau khi PR của Issue #827 merge): KHÔNG
-    cần thao tác tay. Sau restart, Program dùng VP đứng `WAITING` với
-    `waitingReason = INPUT_NOT_READY` (UI: "Chờ đầu vào") tới khi web đẩy VP xuống
-    (tối đa ~10 s, vòng đối chiếu VP), rồi tự `RUNNING`; `faultCount` không tăng. Chỉ
-    khi VP xấu liên tục ≥ 60 s Program mới `FAULTED ST-RT-008` — khi đó mới cần
-    Disable → Enable như dưới. Kiểm sau deploy: `GET …/programs` không còn dòng nào
-    `WAITING` quá 60 s.
-  - **Core cũ hơn bản sửa** (bo lab tới 2026-09-28 chạy Core `1602b2fd`): Program bị
-    `FAULTED ST-RT-008` trước lần chạy đầu (gặp hai lần 2026-09-28, kể cả khi web vẫn
-    chạy). Sau mỗi lần deploy có restart Core: đọc
-    `GET /api/v1/programming/projects/{id}/programs`, Program nào `FAULTED` với
-    `ST-RT-008` và `lastRunAtUtc = null` thì `PUT …/programs/{programId}/runtime-intent`
-    `{"schemaVersion":"1.0","desiredEnabled":false}` rồi `true` (mỗi lệnh một
-    `X-Idempotency-Key` mới), kiểm lại `RUNNING` và Revision Active không đổi.
+- **Restart `mkddc-core` khi Program có đầu vào Virtual Point (Issue #827).** Bo lab
+  chạy Core có bản sửa từ 2026-09-28 12:10Z (`main@265f1a8b`), nên **không cần thao
+  tác tay**. Sau restart, Program đi qua `DISABLED` rồi `WAITING` ("Chờ đầu vào"),
+  và tự `RUNNING` khi vòng đối chiếu VP của web đẩy VP xuống (≤ 10 s). Đo trên bo:
+  Program chạy lại 3,6–10,6 s sau lệnh restart, `faultCount` không tăng
+  (`EV-PROG-STARTUP-WAIT-827-TARGET`). Kiểm sau restart: `GET …/programs` không còn
+  dòng nào `WAITING` quá 60 s. Chỉ khi Program `FAULTED ST-RT-008` thật (đầu
+  vào xấu liên tục ≥ 60 s) mới cần `PUT …/programs/{programId}/runtime-intent`
+  `{"schemaVersion":"1.0","desiredEnabled":false}` rồi `true`, mỗi lệnh một
+  `X-Idempotency-Key` mới. Trong khoảng chờ, DO Modbus giữ nguyên trạng thái cuối,
+  không về giá trị an toàn (Issue #833).
 - Binary Go dựng **trong git worktree** không có `vcs.revision` (Go chỉ nhận `.git`
   là thư mục), nên `artifact_manifest.py deploy-record` exit 2. Dựng `mkddc-web` từ
   một bản clone thường (`git clone --no-checkout <repo> && git checkout <commit>`),

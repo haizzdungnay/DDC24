@@ -1,0 +1,17 @@
+T3 — reboot cả bo; mốc 0 = kernel khởi động = 12:35:02.162Z (wall - CLOCK_MONOTONIC từ mẫu trực tiếp)
+lệnh reboot (đồng hồ bo): 12:34:56.586Z = mono -5.576 s (trước lần khởi động mới)
+SSH vào được (đồng hồ bo): 12:35:19.684Z = mono 17.522 s
+đăng nhập web được: 12:35:23.759Z = mono 21.597 s
+mẫu trực tiếp (Core point_snapshot + SHM + iobus), nhịp 250 ms:
+  mono   17.775 …  117.725 s  n=400  (core, state, enabled, waitingReason, faultCount, lastFaultCode, [safeState, noCtrlOnly]) = ('ok', 'RUNNING', True, None, 0, None, (1, 1))
+khung iobus: 732, FC01 đầu tiên mono 8.065 s; khung lỗi 0
+khung ghi trước mono 11.2 s: 0
+  ghi mono   11.226 s (12:35:13.388Z) slave=4 fc=15 addr=0 count=8 values=[0, 0, 0, 0, 0, 0, 0, 0]
+  ghi mono   11.257 s (12:35:13.419Z) slave=5 fc=15 addr=0 count=8 values=[0, 0, 0, 0, 0, 0, 0, 0]
+  ghi mono   25.228 s (12:35:27.390Z) slave=4 fc=5 addr=0 count=1 values=[1]
+  ghi mono   26.237 s (12:35:28.399Z) slave=4 fc=5 addr=1 count=1 values=[1]
+  ghi mono   27.227 s (12:35:29.389Z) slave=4 fc=5 addr=2 count=1 values=[1]
+  ghi mono   28.237 s (12:35:30.399Z) slave=4 fc=5 addr=3 count=1 values=[1]
+lệnh reboot → khung ghi đầu tiên của Program: 16.80 s
+mẫu coil SHM đầu tiên: mono 17.064 s; số kênh đóng ở mẫu đó: 0
+coil cuối trước reboot: ['2026-09-28T12:34:54.308Z', '2026-09-28T12:34:54.44Z'] đóng: ['CK50804-DO1', 'CK50804-DO2', 'CK50804-DO3', 'CK50804-DO4', 'CK50804-DO5', 'CK50804-DO6', 'CK50804-DO7', 'CK50804-DO8']

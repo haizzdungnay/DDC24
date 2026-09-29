@@ -88,7 +88,7 @@ Hệ quả cho người đọc Trace: cột "Đọc lại" trễ sau lệnh tớ
 
 ### 5.1 Core khởi động làm Program FAULTED (Issue [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827), U-22) — chưa sửa
 
-> **Cập nhật 2026-09-28 (sau hồ sơ này):** đã sửa ở mức HOST theo quyết định Q1–Q4 của chủ dự án (`DECISIONS.md`, `DDD-CTRL-PROG-001` v1.7 §5): Program chờ đầu vào ở `WAITING` + `INPUT_NOT_READY`, FAULT `ST-RT-008` chỉ khi xấu liên tục ≥ 60 s. Số đo dưới đây là của Core `1602b2fd` (trước bản sửa) và giữ nguyên; bản sửa chưa lên bo.
+> **Cập nhật 2026-09-28 (sau hồ sơ này):** đã sửa ở mức HOST theo quyết định Q1–Q4 của chủ dự án (`DECISIONS.md`, `DDD-CTRL-PROG-001` v1.7 §5): Program chờ đầu vào ở `WAITING` + `INPUT_NOT_READY`, FAULT `ST-RT-008` chỉ khi xấu liên tục ≥ 60 s. Số đo dưới đây là của Core `1602b2fd` (trước bản sửa) và giữ nguyên; bản sửa chưa lên bo. **Cập nhật 2026-09-28 12:10Z:** bản sửa đã lên bo (`main@265f1a8b`) và kiểm trên bo PASS phần trạng thái Program — xem [`EV-PROG-STARTUP-WAIT-827-TARGET`](2026-09-28-startup-input-wait-target.md).
 
 Cả hai lần Core khởi động (09:22:07Z khi web đang dừng; 09:45:10Z khi web vẫn chạy), `PRG_DO16_MODBUS` bị `FAULTED ST-RT-008` trước lần chạy đầu (`lastRunAtUtc = null`). Nguyên nhân: VP chưa có trong bảng điểm của Core ở lần dispatch đầu, và bo không có `state.snap`. Mã FAULT ngay ở mẫu xấu đầu tiên, trong khi `DDD-CTRL-PROG-001` §5/§9 ghi "hold-last, tự phục hồi theo ngưỡng hoặc ack". Việc sửa cần chốt ngưỡng, nên chưa sửa.
 
@@ -120,5 +120,6 @@ Từ 09:45 tới 09:49Z Core ghi 6 lần wake-up jitter > 100 µs (cửa sổ ph
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 | 2026-09-28 | §5.1: trỏ tới hồ sơ kiểm #827 trên bo (`EV-PROG-STARTUP-WAIT-827-TARGET`) |
 | 1.1 | 2026-09-28 | §5.4: số đo jitter khi bo yên (09:49–09:57Z: tối đa 39–66 µs, 0 vi phạm mới) |
 | 1.0 | 2026-09-28 | Bản đầu: deploy `main@4c49e78b` + Core `1602b2fd`; Trace 100 ms/10 ms trên bo; lỗi đọc lại EXT phát hiện và sửa; lỗi manifest sim worker; U-22 (#827) |

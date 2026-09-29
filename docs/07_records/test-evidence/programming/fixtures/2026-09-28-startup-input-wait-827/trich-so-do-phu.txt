@@ -1,0 +1,38 @@
+Trích số đo phụ cho EV-PROG-STARTUP-WAIT-827-TARGET (dữ liệu gốc lấy trên bo ngày 2026-09-28; không chứa thông tin đăng nhập)
+
+== 1. Web đẩy VP xuống Core trong T1 (journalctl -u mkddc-core -o short-precise, dòng đầu AV1 và dòng cuối BV3 của mỗi lần) ==
+T1-1: 12:13:59.895828 point=AV1 … 12:13:59.975731 point=BV3
+T1-2: 12:15:19.891151 point=AV1 … 12:15:19.970369 point=BV3
+T1-3: 12:16:29.890784 point=AV1 … 12:16:29.970961 point=BV3
+(9 dòng mỗi lần: AV1, MSV1, AV2, AV3, AV4, AV5, BV1, BV2, BV3, cách nhau ~10 ms, user=virtual-point-sync)
+
+== 2. Lần deploy: journal Core (độ phân giải giây) ==
+Sep 28 12:10:49 mkddc-core[142441]: INFO  core.start version=0.1.0 git_commit=265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3 build_time=2026-09-28T12:01:04Z
+Sep 28 12:10:49 mkddc-core[142441]: INFO  core.ready first scan done
+Sep 28 12:10:49 mkddc-core[142441]: AUDIT web_cmd user=virtual-point-sync point=AV1 op=write value=0 result=accepted active_source=manual
+Sep 28 12:10:49 mkddc-core[142441]: AUDIT web_cmd user=virtual-point-sync point=BV3 op=write value=1 result=accepted active_source=manual
+restart_ret (Core sẵn sàng) theo times.txt = 12:10:49.542Z
+
+== 3. T2: web khởi động và listen (journalctl -u mkddc-web-pi) ==
+Sep 28 12:24:01 systemd[1]: Started MK-DDC-24 Web/API.
+Sep 28 12:24:02 mkddc-web[145123]: mkddc-web 2026/09/28 12:24:02 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=
+Sep 28 12:24:10 mkddc-web[145123]: mkddc-web 2026/09/28 12:24:10 INFO listen addr=:8082 core_sock=/run/mkddc/core.sock users_conf=/data/conf
+
+== 4. T3: REST sau khi web nhận đăng nhập (k827_sample.pl, nhịp 200 ms, 70 s) ==
+mẫu 301; runtimeState {'RUNNING': 301}; faultCount [0]; waitingReason ['None']; mẫu health không 6/6: 0; Active ['0c29f4f1-377d-44ce-add0-2a0f5cad09db']
+
+== 5. Chỉ số Task sau toàn bộ lượt (GET /api/v1/programming/runtime lúc 12:46:14.772Z; Core khởi động lần cuối 12:45:19Z) ==
+runCount=5571 missedReleaseCount=0 overrunCount=0 jitterMaxUs=28 jitterViolationCount=0 missedBaseStepCount=0 health=HEALTHY
+
+== 6. Test host trên bản clone 265f1a8b (CFG_EXIT=0, BUILD_EXIT=0) ==
+[==========] Running 8 tests from 1 test suite.
+[       OK ] ProgrammingStartupInputWait.BootWithoutVirtualPointsWaitsInsteadOfFaulting (98 ms)
+[       OK ] ProgrammingStartupInputWait.VirtualPointsArrivingAfterTwelveSecondsResumeWithoutFault (60 ms)
+[       OK ] ProgrammingStartupInputWait.MissingVirtualPointsFaultExactlyOnceAtSixtySeconds (132 ms)
+[       OK ] ProgrammingStartupInputWait.RunningProgramHoldsLastUntilTtlThenFaultsAtThreshold (130 ms)
+[       OK ] ProgrammingStartupInputWait.ShortInputLossRecoversWithoutFaultAndHoldsLastWithinTtl (108 ms)
+[       OK ] ProgrammingStartupInputWait.RestartRecoveryKeepsWaitingThenRunningAcrossTwoRestarts (63 ms)
+[       OK ] ProgrammingStartupInputWait.CommissionWithoutVirtualPointsWaitsThenCommits (38 ms)
+[       OK ] ProgrammingStartupInputWait.CommissionWhoseInputsNeverArriveRollsBackAtThreshold (99 ms)
+[==========] 8 tests from 1 test suite ran. (731 ms total)
+[  PASSED  ] 8 tests.
