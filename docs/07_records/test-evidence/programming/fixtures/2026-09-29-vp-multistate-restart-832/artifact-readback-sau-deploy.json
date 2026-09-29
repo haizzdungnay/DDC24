@@ -1,0 +1,214 @@
+{
+  "collected_at": "2026-09-29T03:11:00Z",
+  "remote_manifest": "/usr/share/mkddc/artifact-manifest.json",
+  "manifest_updated_at": "2026-09-29T03:10:52Z",
+  "manifest_artifacts": {
+    "mkddc-core": {
+      "sha256": "3799ff33b0fce94d6d6fcf2552823f1e88efbc9edf3cca120327455e659f82ba",
+      "git_commit": "265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3",
+      "dirty": false,
+      "build_time": "2026-09-28T12:01:43Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "embedded",
+      "origin": "deploy"
+    },
+    "mkddc-iobus": {
+      "sha256": "d017f38a31fe9604918866a3ac677d3287d8d62b61b7255d043abe757e09a5c8",
+      "git_commit": "4c49e78b970cd878e79c66e3063735c44678f148",
+      "dirty": false,
+      "build_time": "2026-09-28T09:16:06Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "embedded",
+      "origin": "deploy"
+    },
+    "mkddc-programming-sim-worker": {
+      "sha256": "60a300e4392c3898b92782ecd781ffac1f804f952616caaf14ad16a17f26d95c",
+      "git_commit": "1602b2fd31f6f391b821770d57e64fe9a1b2cc0e",
+      "dirty": false,
+      "build_time": "2026-09-28T09:44:44Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "embedded",
+      "origin": "deploy"
+    },
+    "mkddc-st-compile": {
+      "sha256": "389c99ff43e5496f37f12cf1f4e1b2fd9fa9317d4775d84b874638afb4560540",
+      "git_commit": "4c49e78b970cd878e79c66e3063735c44678f148",
+      "dirty": false,
+      "build_time": "2026-09-28T09:16:34Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "git-worktree",
+      "origin": "deploy"
+    },
+    "mkddc-st-package": {
+      "sha256": "939d51378207adb7e69fabdf12ab3d96e8321f60bac076d47cf391da8683dd32",
+      "git_commit": "4c49e78b970cd878e79c66e3063735c44678f148",
+      "dirty": false,
+      "build_time": "2026-09-28T09:16:43Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "git-worktree",
+      "origin": "deploy"
+    },
+    "mkddc-st-validate": {
+      "sha256": "f1c7501ef1393253608b9417d4e727771c6c888517e199a851607ba2910d648a",
+      "git_commit": "4c49e78b970cd878e79c66e3063735c44678f148",
+      "dirty": false,
+      "build_time": "2026-09-28T09:16:50Z",
+      "toolchain": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "commit_source": "git-worktree",
+      "origin": "deploy"
+    },
+    "mkddc-web": {
+      "sha256": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "git_commit": "e32c1ec6c4727508498e892eabed29f4338f0cde",
+      "dirty": false,
+      "build_time": "2026-09-29T03:07:51Z",
+      "toolchain": "go1.26.4",
+      "commit_source": "go-buildinfo",
+      "origin": "deploy"
+    },
+    "web-ui": {
+      "sha256": "3f77bcefc66e753cf8542612ab69a0c2d627387e5693bb7d849086fc77e66b46",
+      "git_commit": "265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3",
+      "dirty": false,
+      "build_time": "2026-09-28T12:02:01Z",
+      "toolchain": "node-v24.15.0 vite-8.2.0",
+      "commit_source": "git-worktree",
+      "origin": "deploy"
+    }
+  },
+  "runtime": {
+    "units": {
+      "mkddc-core": {
+        "pid": "2315",
+        "exe": "/usr/sbin/mkddc-core",
+        "sha256": "3799ff33b0fce94d6d6fcf2552823f1e88efbc9edf3cca120327455e659f82ba"
+      },
+      "mkddc-iobus": {
+        "pid": "644",
+        "exe": "/usr/sbin/mkddc-iobus",
+        "sha256": "d017f38a31fe9604918866a3ac677d3287d8d62b61b7255d043abe757e09a5c8"
+      },
+      "mkddc-web-pi": {
+        "pid": "4359",
+        "exe": "/opt/mkddc-web/mkddc-web",
+        "sha256": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5"
+      },
+      "mkddc-reload-helper": {
+        "pid": "4357",
+        "exe": "/opt/mkddc-web/mkddc-web",
+        "sha256": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5"
+      },
+      "mkddc-time-helper": {
+        "pid": "4358",
+        "exe": "/opt/mkddc-web/mkddc-web",
+        "sha256": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5"
+      }
+    },
+    "served_file": {
+      "path": "/opt/mkddc-web/dist/index.html",
+      "sha256": "08808e44bf99b1f2dcc2392bd64c05c7f14f3f9b74659e4d950a7e4284717fea"
+    },
+    "served_http": {
+      "port": "8082",
+      "sha256": "08808e44bf99b1f2dcc2392bd64c05c7f14f3f9b74659e4d950a7e4284717fea"
+    },
+    "files": {
+      "/opt/mkddc-web/mkddc-programming-sim-worker": "60a300e4392c3898b92782ecd781ffac1f804f952616caaf14ad16a17f26d95c",
+      "/usr/sbin/mkddc-st-compile": "389c99ff43e5496f37f12cf1f4e1b2fd9fa9317d4775d84b874638afb4560540",
+      "/usr/sbin/mkddc-st-package": "939d51378207adb7e69fabdf12ab3d96e8321f60bac076d47cf391da8683dd32",
+      "/usr/sbin/mkddc-st-validate": "f1c7501ef1393253608b9417d4e727771c6c888517e199a851607ba2910d648a"
+    }
+  },
+  "results": [
+    {
+      "check": "unit:mkddc-core",
+      "artifact": "mkddc-core",
+      "status": "OK",
+      "expected": "3799ff33b0fce94d6d6fcf2552823f1e88efbc9edf3cca120327455e659f82ba",
+      "actual": "3799ff33b0fce94d6d6fcf2552823f1e88efbc9edf3cca120327455e659f82ba",
+      "detail": ""
+    },
+    {
+      "check": "unit:mkddc-iobus",
+      "artifact": "mkddc-iobus",
+      "status": "OK",
+      "expected": "d017f38a31fe9604918866a3ac677d3287d8d62b61b7255d043abe757e09a5c8",
+      "actual": "d017f38a31fe9604918866a3ac677d3287d8d62b61b7255d043abe757e09a5c8",
+      "detail": ""
+    },
+    {
+      "check": "unit:mkddc-web-pi",
+      "artifact": "mkddc-web",
+      "status": "OK",
+      "expected": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "actual": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "detail": ""
+    },
+    {
+      "check": "unit:mkddc-reload-helper",
+      "artifact": "mkddc-web",
+      "status": "OK",
+      "expected": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "actual": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "detail": ""
+    },
+    {
+      "check": "unit:mkddc-time-helper",
+      "artifact": "mkddc-web",
+      "status": "OK",
+      "expected": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "actual": "cc5848d7e26320903f6c8cb03ba2c29c6ca412f2e4073fdee4e35b114ab37be5",
+      "detail": ""
+    },
+    {
+      "check": "served:index.html",
+      "artifact": "web-ui",
+      "status": "SHA_MISMATCH",
+      "expected": "3f77bcefc66e753cf8542612ab69a0c2d627387e5693bb7d849086fc77e66b46",
+      "actual": "08808e44bf99b1f2dcc2392bd64c05c7f14f3f9b74659e4d950a7e4284717fea",
+      "detail": ""
+    },
+    {
+      "check": "http:127.0.0.1:8082/",
+      "artifact": "web-ui",
+      "status": "HTTP_MISMATCH",
+      "expected": "3f77bcefc66e753cf8542612ab69a0c2d627387e5693bb7d849086fc77e66b46",
+      "actual": "08808e44bf99b1f2dcc2392bd64c05c7f14f3f9b74659e4d950a7e4284717fea",
+      "detail": ""
+    },
+    {
+      "check": "file:/opt/mkddc-web/mkddc-programming-sim-worker",
+      "artifact": "mkddc-programming-sim-worker",
+      "status": "OK",
+      "expected": "60a300e4392c3898b92782ecd781ffac1f804f952616caaf14ad16a17f26d95c",
+      "actual": "60a300e4392c3898b92782ecd781ffac1f804f952616caaf14ad16a17f26d95c",
+      "detail": ""
+    },
+    {
+      "check": "file:/usr/sbin/mkddc-st-compile",
+      "artifact": "mkddc-st-compile",
+      "status": "OK",
+      "expected": "389c99ff43e5496f37f12cf1f4e1b2fd9fa9317d4775d84b874638afb4560540",
+      "actual": "389c99ff43e5496f37f12cf1f4e1b2fd9fa9317d4775d84b874638afb4560540",
+      "detail": ""
+    },
+    {
+      "check": "file:/usr/sbin/mkddc-st-package",
+      "artifact": "mkddc-st-package",
+      "status": "OK",
+      "expected": "939d51378207adb7e69fabdf12ab3d96e8321f60bac076d47cf391da8683dd32",
+      "actual": "939d51378207adb7e69fabdf12ab3d96e8321f60bac076d47cf391da8683dd32",
+      "detail": ""
+    },
+    {
+      "check": "file:/usr/sbin/mkddc-st-validate",
+      "artifact": "mkddc-st-validate",
+      "status": "OK",
+      "expected": "f1c7501ef1393253608b9417d4e727771c6c888517e199a851607ba2910d648a",
+      "actual": "f1c7501ef1393253608b9417d4e727771c6c888517e199a851607ba2910d648a",
+      "detail": ""
+    }
+  ],
+  "checks": 11,
+  "mismatches": 2
+}

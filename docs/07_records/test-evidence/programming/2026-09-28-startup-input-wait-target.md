@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `EV-PROG-STARTUP-WAIT-827-TARGET` |
-| Phiên bản | 1.0 |
-| Ngày | 2026-09-28 |
+| Phiên bản | 1.1 |
+| Ngày | 2026-09-28 (cập nhật 2026-09-29) |
 | Issue | [#827](https://github.com/Mekong-HCM/MK-DDC-24/issues/827) (U-22 của [`REC-DDC-FIELD-USE-20260927`](../../reviews/DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md)), bản sửa PR [#831](https://github.com/Mekong-HCM/MK-DDC-24/pull/831); thiết kế `DDD-CTRL-PROG-001` v1.7 §5 ([`PROGRAMMING_CONTROL_SEMANTICS.md`](../../../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md)) |
 | Trạng thái | **PASS phần trạng thái Program.** T1 3/3, T2 và T3: Program về `RUNNING` không cần thao tác tay, không lần nào FAULT, `faultCount` không tăng; nhãn "Chờ đầu vào" hiện trên UI thật. **Lệch kỳ vọng phần đầu ra:** DO Modbus giữ nguyên trạng thái cuối trong khoảng chờ, không về giá trị an toàn → Issue [#833](https://github.com/Mekong-HCM/MK-DDC-24/issues/833). **Lỗi phát hiện thêm:** `restartPolicy: initial` bị bỏ qua với VP `multistate` → Issue [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832). T2b **NOT_RUN** (§3.3) |
 | Đích | `OK1126B-buildroot` (Forlinx OK1126B-S, RV1126B), bus `rs485-1` 9600 8N1, CK508-04/05 |
@@ -189,6 +189,8 @@ Tiêu chí "DO không đóng khi Program đang chờ lúc khởi động" **đ�
 
 ### 4.2 `restartPolicy: initial` bị bỏ qua với VP `multistate` — Issue [#832](https://github.com/Mekong-HCM/MK-DDC-24/issues/832)
 
+> **Cập nhật 2026-09-29 (sau hồ sơ này):** đã sửa ở commit `e32c1ec6` (`sameVirtualPointValue` so theo số cho `multistate`) và kiểm trên bo lab: `DO16_MODE` 10 → 0 khi web khởi động, restart lần hai không đặt lại gì — [`EV-PROG-VP-MSV-RESTART-832-TARGET`](2026-09-29-vp-multistate-restart-policy-target.md). Số đo dưới đây là của web `265f1a8b` (trước bản sửa) và giữ nguyên.
+
 - **Triệu chứng:** `DO16_MODE` (multistate, `initial` = 0) vẫn là 10 sau **bốn** lần web khởi động trong ngày: 09:27Z, lúc deploy, trong T2, và lúc reboot bo. `virtual_points.conf` không bị ghi lại từ 2026-09-27; journal không có dòng `restart policy`. Hệ quả: sau mất điện, relay chạy AUTO thay vì đứng OFF như người dùng cấu hình.
 - **Nguyên nhân:** `sameVirtualPointValue` chỉ so số cho `integer`/`float`. Với `multistate` nó rơi vào nhánh so chuỗi, nơi mọi giá trị số đều thành `""`, nên hàm coi 10 và 0 là "bằng nhau".
 - **Tái hiện host:** test tạm (không commit) FAIL với `reset=0 value=10`; hai test sẵn có cho `integer`/`float` PASS trong cùng lượt.
@@ -213,4 +215,5 @@ Tiêu chí "DO không đóng khi Program đang chờ lúc khởi động" **đ�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.1 | 2026-09-29 | §4.2: ghi #832 đã sửa (commit `e32c1ec6`) và kiểm trên bo, trỏ tới `EV-PROG-VP-MSV-RESTART-832-TARGET`; số đo của lượt này không đổi |
 | 1.0 | 2026-09-28 | Bản đầu: deploy `main@265f1a8b` (Core RELEASE, web, FE) lên bo lab; T1 ×3, T2, T3 PASS phần trạng thái Program, UI hiện "Chờ đầu vào"; T2b NOT_RUN; mở #833 (DO Modbus giữ trạng thái cuối) và #832 (`restartPolicy` multistate) |

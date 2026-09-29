@@ -1,0 +1,17 @@
+# Deploy mkddc-web e32c1ec6 (3 unit), 2026-09-29, backup hậu tố .bak-20260929T030958Z
+PRE 03:10:23Z active=0c29f4f1-377d-44ce-add0-2a0f5cad09db web_sha=1e0a8be8651989bd
+-rw-r--r-- 1 mkddc mkddc     6718 Sep 27 14:01 /data/config/virtual_points.conf.bak-20260929T030958Z
+-rwxr-xr-x 1 mkddc mkddc 22238954 Sep 28 12:09 /opt/mkddc-web/mkddc-web.bak-20260929T030958Z
+-rw-r--r-- 1 root  root      4852 Sep 28 12:18 /usr/share/mkddc/artifact-manifest.json.bak-20260929T030958Z
+STOP 03:10:23Z
+STOPPED
+START 03:10:25Z
+active
+SYSTEMD_OK
+UNIT mkddc-web-pi active /opt/mkddc-web/mkddc-web cc5848d7e2632090
+UNIT mkddc-reload-helper active /opt/mkddc-web/mkddc-web cc5848d7e2632090
+UNIT mkddc-time-helper active /opt/mkddc-web/mkddc-web cc5848d7e2632090
+
+# python3 scripts/artifact_manifest.py deploy-record --artifact mkddc-web=<binary dựng từ clone thường tại e32c1ec6>  (exit 0)
+RECORD mkddc-web sha256=cc5848d7e2632090 commit=e32c1ec6c472 dirty=false source=go-buildinfo toolchain='go1.26.4'
+KEPT mkddc-core mkddc-iobus mkddc-programming-sim-worker mkddc-st-compile mkddc-st-package mkddc-st-validate web-ui

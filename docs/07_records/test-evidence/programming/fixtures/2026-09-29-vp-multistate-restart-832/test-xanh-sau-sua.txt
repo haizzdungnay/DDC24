@@ -1,0 +1,70 @@
+=== RUN   TestVirtualPointNumberReadersCoverRealTypes
+--- PASS: TestVirtualPointNumberReadersCoverRealTypes (0.00s)
+=== RUN   TestSameVirtualPointValueDoesNotFallBackToTextForNumbers
+--- PASS: TestSameVirtualPointValueDoesNotFallBackToTextForNumbers (0.00s)
+=== RUN   TestRestartPolicyInitialWorksOnIntegerSignalType
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP1].value:_3_->_0
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyInitialWorksOnIntegerSignalType (0.02s)
+=== RUN   TestRestartPolicyInitialWorksOnMultistateSignalType
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP2].value:_10_->_0
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyInitialWorksOnMultistateSignalType (0.01s)
+=== RUN   TestRestartPolicyMultistateIsIdempotent
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+--- PASS: TestRestartPolicyMultistateIsIdempotent (0.00s)
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/10_và_0_là_hai_state_khác_nhau
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/int64_10_từ_normalize_với_0_từ_JSON
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/3_và_3.0_là_cùng_một_state
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/json.Number_và_int64_cùng_giá_trị
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/một_vế_không_phải_số_⇒_khác_nhau
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/chuỗi_số_không_phải_giá_trị_multistate_hợp_lệ
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/hai_vế_đều_không_phải_số_⇒_khác_nhau
+=== RUN   TestSameVirtualPointValueComparesMultistateAsNumber/nil_⇒_khác_nhau
+--- PASS: TestSameVirtualPointValueComparesMultistateAsNumber (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/10_và_0_là_hai_state_khác_nhau (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/int64_10_từ_normalize_với_0_từ_JSON (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/3_và_3.0_là_cùng_một_state (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/json.Number_và_int64_cùng_giá_trị (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/một_vế_không_phải_số_⇒_khác_nhau (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/chuỗi_số_không_phải_giá_trị_multistate_hợp_lệ (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/hai_vế_đều_không_phải_số_⇒_khác_nhau (0.00s)
+    --- PASS: TestSameVirtualPointValueComparesMultistateAsNumber/nil_⇒_khác_nhau (0.00s)
+=== RUN   TestRestartPolicyInitialRestoresInitialValue
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP1].value:_35_->_20
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyInitialRestoresInitialValue (0.02s)
+=== RUN   TestRestartPolicyRetainKeepsLastValue
+=== RUN   TestRestartPolicyRetainKeepsLastValue/khai_retain
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+=== RUN   TestRestartPolicyRetainKeepsLastValue/không_khai_gì_(mặc_định)
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+--- PASS: TestRestartPolicyRetainKeepsLastValue (0.01s)
+    --- PASS: TestRestartPolicyRetainKeepsLastValue/khai_retain (0.00s)
+    --- PASS: TestRestartPolicyRetainKeepsLastValue/không_khai_gì_(mặc_định) (0.00s)
+=== RUN   TestRestartPolicyInitialWithoutInitialValueUsesSignalDefault
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP1].value:_35_->_0
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyInitialWithoutInitialValueUsesSignalDefault (0.02s)
+=== RUN   TestRestartPolicyInitialHandlesBoolean
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP1].value:_true_->_false
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyInitialHandlesBoolean (0.02s)
+=== RUN   TestRestartPolicyIsIdempotent
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+--- PASS: TestRestartPolicyIsIdempotent (0.00s)
+=== RUN   TestSameVirtualPointValueComparesAcrossNumericTypes
+--- PASS: TestSameVirtualPointValueComparesAcrossNumericTypes (0.00s)
+=== RUN   TestRestartPolicyLeavesAuditTrail
+2026/09/29 10:04:39 AUDIT login ts=2026-09-29T03:04:39Z user=admin role=admin result=accepted remote=test
+2026/09/29 10:04:39 AUDIT change ts=2026-09-29T03:04:39Z user=system action=virtual-points.restart-policy target=virtual_points.conf result=applied remote=boot detail=items[VP1].value:_35_->_20
+2026/09/29 10:04:39 INFO virtual-point restart policy: 1 điểm quay về giá trị khởi tạo
+--- PASS: TestRestartPolicyLeavesAuditTrail (0.02s)
+PASS
+ok  	mkddc-web/internal/app	0.138s
