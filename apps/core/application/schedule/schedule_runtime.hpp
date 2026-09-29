@@ -113,6 +113,8 @@ struct EffectivePeriod {
 };
 
 /* ── Target ────────────────────────────────────────────────────────────── */
+enum class InactiveAction { WriteValue, Relinquish };
+
 struct ScheduleTarget {
     std::string id;
     PointKind kind = PointKind::AV;
@@ -122,6 +124,8 @@ struct ScheduleTarget {
     double inactive_value = 0.0;
     bool has_active_value = false;
     bool has_inactive_value = false;
+    InactiveAction inactive_action = InactiveAction::WriteValue;
+    int staggered_delay_seconds = 0;
 };
 
 /* ── Schedule Object ───────────────────────────────────────────────────── */
@@ -155,6 +159,9 @@ struct TargetResult {
      * đang tới được đầu ra. Đây là trường trả lời câu hỏi tốn nhiều thời gian
      * hiện trường nhất: "lịch bật rồi mà sao thiết bị không chạy". */
     const char* override_source = "";
+    bool should_claim = true;
+    bool in_staggered_delay = false;
+    int delay_remaining_sec = 0;
 };
 
 struct ScheduleState {

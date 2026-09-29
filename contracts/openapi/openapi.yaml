@@ -6965,6 +6965,17 @@ components:
           type: number
           nullable: true
           description: Value to write when schedule event is inactive (end of event).
+        inactive_action:
+          type: string
+          enum: [WRITE_VALUE, RELINQUISH]
+          default: WRITE_VALUE
+          description: Action when out-of-event (WRITE_VALUE or RELINQUISH priority 16).
+        staggered_delay_seconds:
+          type: integer
+          minimum: 0
+          maximum: 300
+          default: 0
+          description: Staggered start delay in seconds (0..300s).
         device_id: { type: string, maxLength: 64 }
         device_instance: { type: integer, minimum: 0, maximum: 4194302 }
         object_type:

@@ -998,6 +998,8 @@ export interface ScheduleTargetObject {
   point_id?: string
   active_value?: number | null
   inactive_value?: number | null
+  inactive_action?: 'WRITE_VALUE' | 'RELINQUISH'
+  staggered_delay_seconds?: number
   device_id?: string
   device_instance?: number
   object_type?: string
@@ -1014,7 +1016,8 @@ export interface ScheduleEffectivePeriod {
 
 export interface ScheduleTargetRuntime {
   target_id: string
-  write_result: 'OK' | 'FAILED' | 'TIMEOUT' | 'SKIPPED' | null
+  write_result: 'OK' | 'FAILED' | 'TIMEOUT' | 'SKIPPED' | 'RELINQUISHED' | 'DELAYED' | null
+  delay_remaining_sec?: number | null
   written_value: ScheduleValue | null
   actual_value: ScheduleValue | null
   /** Nguồn priority cao hơn đang giữ điểm — trả lời "lịch bật mà sao thiết bị không chạy". */

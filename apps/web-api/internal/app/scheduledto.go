@@ -154,6 +154,8 @@ type ScheduleTargetObject struct {
 	PointID   string `json:"point_id,omitempty"`
 	ActiveValue   *float64 `json:"active_value,omitempty"`
 	InactiveValue *float64 `json:"inactive_value,omitempty"`
+	InactiveAction string `json:"inactive_action,omitempty"`
+	StaggeredDelaySeconds *int `json:"staggered_delay_seconds,omitempty"`
 	// BACNET_OBJECT (P4)
 	DeviceID           string `json:"device_id,omitempty"`
 	DeviceInstance     *int   `json:"device_instance,omitempty"`
@@ -192,6 +194,7 @@ type ScheduleTargetRuntime struct {
 	OverriddenBy *string `json:"overridden_by"`
 	ErrorCode    *string `json:"error_code"`
 	LastWriteAt  *string `json:"last_write_at"`
+	DelayRemainingSec *int    `json:"delay_remaining_sec,omitempty"`
 }
 
 // ── Kiểu phụ trợ cho API ──────────────────────────────────────────────────

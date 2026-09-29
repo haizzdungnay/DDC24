@@ -90,6 +90,12 @@ func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now tim
 		case t.ErrorCode != "":
 			target.WriteResult = strPtr("FAILED")
 			target.ErrorCode = strPtr(t.ErrorCode)
+		case t.InDelay != nil && *t.InDelay:
+			target.WriteResult = strPtr("DELAYED")
+			target.DelayRemainingSec = t.DelayRemainingSec
+		case t.ShouldClaim != nil && !*t.ShouldClaim:
+			target.WriteResult = strPtr("RELINQUISHED")
+			target.WrittenValue = nil
 		case !t.Written:
 			// Lịch này thua ở bước phân xử priority giữa các lịch. Không phải
 			// lỗi, nhưng người dùng phải thấy được — thua âm thầm là cách để

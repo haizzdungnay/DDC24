@@ -328,6 +328,16 @@ bool parse_target(const json::Value* v, ValueType value_type, ScheduleTarget* ou
         out->has_inactive_value = false;
     }
 
+    std::string inact_act;
+    if (as_string(v->get("inactive_action"), &inact_act)) {
+        if (inact_act == "RELINQUISH") out->inactive_action = InactiveAction::Relinquish;
+        else out->inactive_action = InactiveAction::WriteValue;
+    }
+    int delay = 0;
+    if (as_int(v->get("staggered_delay_seconds"), &delay) && delay >= 0) {
+        out->staggered_delay_seconds = (delay > 300) ? 300 : delay;
+    }
+
     return true;
 }
 
@@ -825,12 +835,12 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
     if (conflict) st.error = ScheduleError::ConfigExceptionConflict;
 
     int start_sec = -1;
+    int event_elapsed_sec = 0;
     if (winner && value_at(winner->time_values, now.second_of_day, &st.effective_value, &start_sec)) {
         st.source = ValueSource::Exception;
         st.source_exception_id = winner->id;
+        if (start_sec >= 0) event_elapsed_sec = now.second_of_day - start_sec;
     } else {
-        /* 2. Lịch tuần — mốc gần nhất trước hoặc bằng bây giờ; chưa tới mốc nào
-         * hôm nay thì lùi tối đa 7 ngày để lấy mốc cuối cùng còn hiệu lực. */
         bool found = false;
         for (int back = 0; back < 7 && !found; back++) {
             const int day = ((now.weekday - back) % 7 + 7) % 7;
@@ -838,12 +848,15 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
             if (value_at(s.weekly[day], cutoff, &st.effective_value, &start_sec)) {
                 st.source = ValueSource::Weekly;
                 found = true;
+                if (start_sec >= 0) {
+                    event_elapsed_sec = back * kDaySeconds + (now.second_of_day - (back == 0 ? start_sec : 0));
+                }
             }
         }
         if (!found) {
-            /* 3. Mặc định. */
             st.effective_value = s.schedule_default;
             st.source = ValueSource::Default;
+            event_elapsed_sec = 999999;
         }
     }
 
@@ -879,22 +892,40 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
         r.kind = t.kind;
         r.idx = t.idx;
         double target_val = 0.0;
+        bool should_claim = true;
+        bool in_delay = false;
         if (st.effective_value != 0.0) {
-            if (t.has_active_value) {
-                target_val = t.active_value;
-            } else if (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) {
-                target_val = (t.kind == PointKind::AO) ? 100.0 : 1.0;
+            if (t.staggered_delay_seconds > 0 && event_elapsed_sec < t.staggered_delay_seconds) {
+                in_delay = true;
+                if (t.inactive_action == InactiveAction::Relinquish) {
+                    should_claim = false;
+                } else if (t.has_inactive_value) {
+                    target_val = t.inactive_value;
+                } else {
+                    target_val = 0.0;
+                }
             } else {
-                target_val = st.effective_value;
+                if (t.has_active_value) {
+                    target_val = t.active_value;
+                } else if (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) {
+                    target_val = (t.kind == PointKind::AO) ? 100.0 : 1.0;
+                } else {
+                    target_val = st.effective_value;
+                }
             }
         } else {
-            if (t.has_inactive_value) {
+            if (t.inactive_action == InactiveAction::Relinquish) {
+                should_claim = false;
+            } else if (t.has_inactive_value) {
                 target_val = t.inactive_value;
             } else {
                 target_val = (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) ? 0.0 : st.effective_value;
             }
         }
+        r.should_claim = should_claim;
         r.written_value = target_val;
+        r.in_staggered_delay = in_delay;
+        r.delay_remaining_sec = in_delay ? (t.staggered_delay_seconds - event_elapsed_sec) : 0;
         st.targets.push_back(r);
     }
     return st;
@@ -1006,6 +1037,7 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         if (!st.active) continue;
         for (std::size_t ti = 0; ti < st.targets.size(); ti++) {
             const TargetResult& tr = st.targets[ti];
+            if (!tr.should_claim) continue;
             const std::string key = target_key(tr.kind, tr.idx);
             Claim claim{si, ti, schedules_[si].priority_for_writing,
                         st.next_transition_week_second, tr.written_value};

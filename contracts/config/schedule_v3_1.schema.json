@@ -361,6 +361,19 @@
         "inactive_value": {
           "type": ["number", "null"],
           "description": "Giá trị gán khi sự kiện kết thúc (Inactive)."
+        },
+        "inactive_action": {
+          "type": "string",
+          "enum": ["WRITE_VALUE", "RELINQUISH"],
+          "default": "WRITE_VALUE",
+          "description": "Hành động khi hết sự kiện: WRITE_VALUE (ghi inactive_value) hoặc RELINQUISH (nhả quyền điều khiển ở priority 16 / Set NULL)."
+        },
+        "staggered_delay_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300,
+          "default": 0,
+          "description": "Độ trễ khởi động so le (0..300 s) chống sốc tải điện lưới và đường ống khi sự kiện bắt đầu."
         }
       }
     },
