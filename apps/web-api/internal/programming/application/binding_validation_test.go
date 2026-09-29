@@ -95,8 +95,13 @@ func TestBindingValidatorReturnsStableWarningBlockAndCanonicalOwner(t *testing.T
 	candidate := BindingCandidate{BindingID: "44444444-4444-4444-8444-444444444444", VariableID: secondVariable,
 		Point: BindingPointIdentity{Category: "VP", PointID: "AV-01"}, Direction: "WRITE", DataType: "REAL", Unit: "K", Writable: true, QualityPolicy: "ALLOW_UNCERTAIN"}
 	result := ValidateBindingCandidate(candidate, variables, []BindingCandidate{owner, candidate}, []PointCatalogEntry{point})
-	if result.Verdict != "BLOCK" || issueByDetail(result, "PGM-MAP-UNIT-001") == nil || issueByDetail(result, "PGM-MAP-QUALITY-001") == nil {
-		t.Fatalf("thiếu warning đơn vị/quality: %+v", result)
+	if result.Verdict != "BLOCK" || issueByDetail(result, "PGM-MAP-UNIT-001") == nil {
+		t.Fatalf("thiếu warning đơn vị: %+v", result)
+	}
+	// Issue #840: binding GHI không bị cổng chất lượng live (DDD-CTRL-PROG-001 §5);
+	// ca đầu vào UNCERTAIN ⇒ WARNING nằm ở TestBindingValidatorStillGatesInputOnLiveQuality.
+	if issue := issueByDetail(result, "PGM-MAP-QUALITY-001"); issue != nil {
+		t.Fatalf("binding ghi bị cổng chất lượng live: %+v", issue)
 	}
 	conflict := issueByDetail(result, "PGM-MAP-OWNER-001")
 	if conflict == nil || conflict.OwnerProgramID != variables[firstVariable].ProgramID || conflict.ConflictProgramID != variables[secondVariable].ProgramID {
@@ -365,5 +370,149 @@ func TestCheckUsesSameBindingValidatorAndFailsClosedWhenPointDisappears(t *testi
 	}
 	if !found || runner.input.SourceID != "" {
 		t.Fatalf("Check không dùng cùng validator hoặc vẫn gọi compiler: diagnostics=%+v input=%+v", view.Diagnostics, runner.input)
+	}
+}
+
+/* Issue #840 — Check chặn binding ĐẦU RA khi điểm đích không GOOD.
+ *
+ * Trên bo lab, ba VP do chính `PRG_DO16_MODBUS` ghi (`MSV-02`, `AV-06`,
+ * `AV-07`, chủ sở hữu `PROGRAM`) về `BAD` khi Program FAULTED. Check một
+ * revision GIỐNG HỆT Active liền FAILED với `PGM-MAP-QUALITY-001` — muốn
+ * Commission lại thì bị chặn chính vì Program đang không chạy.
+ *
+ * `DDD-CTRL-PROG-001` §5 chỉ áp quality policy cho binding đầu vào; đầu ra chỉ
+ * cần Point writable và range/unit/rate hợp lệ. Chất lượng live của điểm đích
+ * là hệ quả của việc Program có đang ghi hay không, không phải điều kiện để
+ * được ghi. */
+func TestBindingValidatorDoesNotGateOutputOnLiveTargetQuality(t *testing.T) {
+	outputID := "45555555-5555-4555-8555-555555555555"
+	variables := map[string]bindingVariable{
+		outputID: {ID: outputID, ProgramID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", DataType: "REAL", Class: "OUTPUT"},
+	}
+	for _, quality := range []string{"BAD", "UNCERTAIN", "STALE", "OFFLINE", "UNKNOWN"} {
+		t.Run(quality, func(t *testing.T) {
+			point := PointCatalogEntry{Category: "VP", PointID: "AV-06", DataType: "REAL", Direction: "READ_WRITE", Writable: true, Quality: quality}
+			point.Mapping = EvaluatePointMapEligibility(point)
+			candidate := BindingCandidate{BindingID: "46666666-6666-4666-8666-666666666666", VariableID: outputID,
+				Point: BindingPointIdentity{Category: "VP", PointID: "AV-06"}, Direction: "WRITE", DataType: "REAL", Writable: true, QualityPolicy: "REQUIRE_GOOD"}
+			result := ValidateBindingCandidate(candidate, variables, []BindingCandidate{candidate}, []PointCatalogEntry{point})
+			if issue := issueByDetail(result, "PGM-MAP-QUALITY-001"); issue != nil {
+				t.Fatalf("binding ghi vào điểm %s bị chặn bởi chất lượng live: %+v", quality, issue)
+			}
+			if result.Verdict != "ALLOW" {
+				t.Fatalf("verdict=%s issues=%+v; muốn ALLOW", result.Verdict, result.Issues)
+			}
+		})
+	}
+	// Giá trị `qualityPolicy` vẫn phải hợp lệ ở MỌI chiều — sửa #840 chỉ bỏ cổng
+	// chất lượng live của đích ghi, không bỏ kiểm hợp đồng.
+	point := PointCatalogEntry{Category: "VP", PointID: "AV-06", DataType: "REAL", Direction: "READ_WRITE", Writable: true, Quality: "BAD"}
+	point.Mapping = EvaluatePointMapEligibility(point)
+	bad := BindingCandidate{BindingID: "46666666-6666-4666-8666-666666666666", VariableID: outputID,
+		Point: BindingPointIdentity{Category: "VP", PointID: "AV-06"}, Direction: "WRITE", DataType: "REAL", Writable: true, QualityPolicy: "WHATEVER"}
+	if result := ValidateBindingCandidate(bad, variables, []BindingCandidate{bad}, []PointCatalogEntry{point}); issueByDetail(result, "PGM-MAP-QUALITY-POLICY-001") == nil {
+		t.Fatalf("qualityPolicy lạ trên binding ghi không bị từ chối: %+v", result)
+	}
+}
+
+// Chốt chặn chiều ngược của #840: binding ĐỌC vẫn chịu quality policy như cũ.
+func TestBindingValidatorStillGatesInputOnLiveQuality(t *testing.T) {
+	inputID := "47777777-7777-4777-8777-777777777777"
+	variables := map[string]bindingVariable{
+		inputID: {ID: inputID, ProgramID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", DataType: "REAL", Class: "INPUT"},
+	}
+	for _, tc := range []struct{ quality, policy, severity string }{
+		{"BAD", "REQUIRE_GOOD", "ERROR"},
+		{"UNCERTAIN", "REQUIRE_GOOD", "ERROR"},
+		{"UNCERTAIN", "ALLOW_UNCERTAIN", "WARNING"},
+		{"BAD", "ALLOW_UNCERTAIN", "ERROR"},
+	} {
+		t.Run(tc.quality+"/"+tc.policy, func(t *testing.T) {
+			point := PointCatalogEntry{Category: "LOCAL", PointID: "UI-01", DataType: "REAL", Direction: "READ", Quality: tc.quality}
+			point.Mapping = EvaluatePointMapEligibility(point)
+			candidate := BindingCandidate{BindingID: "48888888-8888-4888-8888-888888888888", VariableID: inputID,
+				Point: BindingPointIdentity{Category: "LOCAL", PointID: "UI-01"}, Direction: "READ", DataType: "REAL", QualityPolicy: tc.policy}
+			result := ValidateBindingCandidate(candidate, variables, []BindingCandidate{candidate}, []PointCatalogEntry{point})
+			issue := issueByDetail(result, "PGM-MAP-QUALITY-001")
+			if issue == nil || issue.Severity != tc.severity {
+				t.Fatalf("đầu vào %s/%s: issue=%+v; muốn PGM-MAP-QUALITY-001 mức %s", tc.quality, tc.policy, issue, tc.severity)
+			}
+		})
+	}
+}
+
+/* Mức Check, đúng kịch bản trên bo: revision có binding GHI vào một VP mà lúc
+ * Check đang BAD (Program ghi nó không chạy). Check phải đi qua cổng binding và
+ * gọi compiler, không FAILED vì `PGM-MAP-QUALITY-001`. */
+func TestCheckDoesNotFailWhenOutputTargetIsBad(t *testing.T) {
+	service, store := openProjectService(t)
+	provider := standardBindingCatalog()
+	service.SetPointCatalogProvider(provider)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{SchemaVersion: "1.0", Name: "Output target BAD",
+		IdempotencyKey: "84000000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	programID := "85555555-5555-4555-8555-555555555556"
+	variableID := "86666666-6666-4666-8666-666666666667"
+	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{
+		"programId": programID, "name": "P", "kind": "PROGRAM", "language": "ST", "document": "PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := TRUE;\nEND_PROGRAM\n"}})
+	variable, _ := json.Marshal(map[string]any{"op": "upsertVariable", "variable": map[string]any{
+		"variableId": variableID, "programId": programID, "name": "X", "type": "BOOL", "class": "OUTPUT", "retain": false}})
+	candidate := BindingCandidate{BindingID: "87777777-7777-4777-8777-777777777778", VariableID: variableID,
+		Point: BindingPointIdentity{Category: "VP", PointID: "VP-07"}, Direction: "WRITE", DataType: "BOOL", Writable: true, QualityPolicy: "REQUIRE_GOOD"}
+	binding, _ := json.Marshal(map[string]any{"op": "upsertBinding", "binding": candidate})
+	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{
+		"taskId": "88888888-8888-4888-8888-888888888889", "periodMs": 1000, "programOrder": []string{programID}}})
+	saved, err := service.SaveDraft(context.Background(), actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
+		Operations: []json.RawMessage{program, variable, binding, task}, IfMatch: created.ETag,
+		IdempotencyKey: "84000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := service.SealRevision(context.Background(), actor, SealRevisionCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
+		Label: "Output BAD", IfMatch: saved.ETag, IdempotencyKey: "84000000-0000-4000-8000-000000000003", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Program ghi VP-07 FAULTED ⇒ slot về BAD, như MSV-02/AV-06/AV-07 trên bo.
+	for index := range provider.entries {
+		if provider.entries[index].PointID == "VP-07" {
+			provider.entries[index].Quality = "BAD"
+		}
+	}
+	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeCheckRunner{}
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{}, Artifacts: artifacts,
+		TargetID: "controller-local", LeaseDuration: time.Minute, Catalog: provider})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := checks.RequestCheck(context.Background(), actor, RequestCheckCommand{RevisionID: sealed.Resource["revisionId"].(string),
+		SchemaVersion: "1.0", TargetProfile: checkTargetProfile,
+		IdempotencyKey: "84000000-0000-4000-8000-000000000004", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processed, processErr := checks.ProcessNext(context.Background()); processErr != nil || !processed {
+		t.Fatalf("ProcessNext=%v err=%v", processed, processErr)
+	}
+	view, err := checks.GetCheck(context.Background(), accepted.CheckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, diagnostic := range view.Diagnostics {
+		if diagnostic.DetailCode == "PGM-MAP-QUALITY-001" {
+			t.Fatalf("Check %s chặn binding ghi vì đích BAD: %+v", view.State, diagnostic)
+		}
+	}
+	if runner.input.SourceID == "" {
+		t.Fatalf("Check dừng ở cổng binding, không gọi compiler: state=%s diagnostics=%+v", view.State, view.Diagnostics)
 	}
 }
