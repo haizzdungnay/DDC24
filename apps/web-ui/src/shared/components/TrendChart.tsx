@@ -74,6 +74,7 @@ interface TrendChartProps {
    *  một điểm dữ liệu đứt quãng (N-02). Trang Trends đầy đủ giữ mặc định tắt vì
    *  ở đó mật độ mẫu cao, chấm chỉ làm rối. */
   showDots?: boolean
+  xDomain?: [number | string, number | string]
 }
 
 /** Dữ liệu có dải min–max thật hay không.
@@ -120,7 +121,7 @@ export function assignSecondAxis(series: Array<{ unit?: string; axis?: 'left' | 
   }
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false, markers = [] }: TrendChartProps) {
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false, markers = [], xDomain }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
   const bandVisible = showBand && hasMinMaxBand(data, series)
 
@@ -130,7 +131,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
         {/* Chỗ giữ đúng chiều cao trong lúc chunk biểu đồ đang về: không nhảy
             layout, và không vẽ trục/đường giả nào khi chưa có thư viện vẽ. */}
         <Suspense fallback={<div data-testid="trend-chart-loading" className="h-full w-full rounded bg-[var(--c-surface-2)] opacity-40" />}>
-          <TrendChartPlot data={data} series={series} rawUnit={rawUnit} timeZone={timeZone} hasTimeAxis={hasTimeAxis} bandVisible={bandVisible} showDots={showDots} markers={markers} />
+          <TrendChartPlot data={data} series={series} rawUnit={rawUnit} timeZone={timeZone} hasTimeAxis={hasTimeAxis} bandVisible={bandVisible} showDots={showDots} markers={markers} xDomain={xDomain} />
         </Suspense>
       </div>
       {/* Vạch trên biểu đồ nói CÓ sự kiện; bảng này nói sự kiện GÌ và AI làm.

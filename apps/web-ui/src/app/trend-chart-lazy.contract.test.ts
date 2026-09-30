@@ -93,6 +93,11 @@ describe('T63-109 thư viện biểu đồ không nằm trong đồ thị khởi
     expect(files.has(plot), 'TrendChartPlot bị import tĩnh ⇒ recharts quay lại đồ thị khởi động').toBe(false)
   })
 
+  it('TrendChartPlot tat animation cua Line de tinh tien khong bien dang', () => {
+    const plotSrc = readFileSync(plot, 'utf8')
+    expect(plotSrc).toContain('isAnimationActive={false}')
+  })
+
   it('TrendChartPlot là nơi DUY NHẤT import recharts, và chỉ được nạp qua import()', () => {
     const importers = sourceFiles(src)
       .filter((file) => [...readFileSync(file, 'utf8').matchAll(STATIC_IMPORT)].some((m) => m[1] === 'recharts'))

@@ -779,6 +779,7 @@ function WorkspaceTile({ id, point, onUnpin }: { id: string; point: Point | unde
 /* ── 6. Trend preview ───────────────────────────────────────────────────── */
 
 const trendPrefsKey = 'mkddc:v1:landing-trend-points'
+const TREND_WINDOW_MS = TREND_SAMPLE_LIMIT * 2000
 
 function TrendPreview() {
   const { pick } = useI18n()
@@ -795,6 +796,12 @@ function TrendPreview() {
   })
   const [pickerOpen, setPickerOpen] = useState(false)
   const [samples, setSamples] = useState<TrendSample[]>([])
+
+  const latestTs = samples[samples.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - TREND_WINDOW_MS, latestTs]
+  }, [latestTs])
 
   const candidates = useMemo(
     () => points.filter((point) => pointNumber(point) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
@@ -903,7 +910,7 @@ function TrendPreview() {
       }
     >
       {samples.length > 1 && series.length ? (
-        <TrendChart data={samples} series={series} height={240} showTable={false} showDots />
+        <TrendChart data={samples} series={series} height={240} showTable={false} showDots xDomain={xDomain} />
       ) : (
         <StateBlock
           state="empty"
