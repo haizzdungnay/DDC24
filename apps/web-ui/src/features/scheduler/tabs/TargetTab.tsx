@@ -14,7 +14,7 @@ function getPointLabel(kind: SchedulePointKind, channel: number, pointsById: Map
   const pad2 = String(channel).padStart(2, '0')
   const pid = `${kind}-${pad2}`
   const pt = pointsById.get(pid) || pointsById.get(`${kind}-${channel}`)
-  const name = pt?.display_name || pt?.name || pt?.tag
+  const name = pt?.displayName || pt?.name || pt?.tag
   if (name && name !== pid && name !== `${kind}-${channel}`) return `${pid} — ${name}`
   return pid
 }
@@ -591,8 +591,8 @@ function PriorityStackModal({
       bacnetLevels: 'Relinquish Default',
       name: 'Relinquish Default (Mặc định sàn)',
       desc: 'Giá trị sàn an toàn khi tất cả các mức ưu tiên trên đều nhả NULL',
-      val: point?.default_value !== undefined
-        ? formatPointVal(point.default_value)
+      val: point?.defaultValue !== undefined
+        ? formatPointVal(point.defaultValue)
         : (target.point_kind === 'DO' || target.point_kind === 'BV' ? 'TẮT (0)' : `0${unit ? ' ' + unit : ''}`),
       isWinner: winningCoreLevel === 6
     }
