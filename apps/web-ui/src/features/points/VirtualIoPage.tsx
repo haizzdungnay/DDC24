@@ -579,11 +579,13 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
     // lên trục thời gian bằng giờ máy trạm — biểu đồ sẽ nói dối về độ tươi.
     if (!point.updatedAt) return
     const time = formatTime(point.updatedAt)
+    const stampMs = Date.parse(point.updatedAt)
+    const ts = Number.isFinite(stampMs) ? stampMs : 0
     setBuffers((current) => {
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value }].slice(-60) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __ts: ts }].slice(-60) }
     })
   }, [pointId, point])
 
@@ -612,6 +614,11 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
     setDraft(String(livePoint?.value ?? item.value ?? defaultValue(item.signalType)))
   }, [item.id, item.signalType, item.value, livePoint?.value])
   const { data, reset } = useVpTrend(item.id, livePoint)
+  const latestTs = data[data.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 120_000, latestTs]
+  }, [latestTs])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
@@ -646,6 +653,8 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
             data={data}
             height={250}
             series={[{ key: item.id, label: item.tag, color: 'var(--c-accent)', unit }]}
+            showDots
+            xDomain={xDomain}
           />
           {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu trực tiếp cho VP này.', 'No live data for this VP yet.')}</div>}
         </section>
