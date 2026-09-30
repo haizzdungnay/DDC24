@@ -8,6 +8,67 @@
 
 ## [Unreleased]
 
+### Changed — Gộp `main` (PR #845) vào PR #844: bỏ quy đổi AO ở `apply_states`, giữ test của cả hai phía (2026-09-30)
+
+- **Phạm vi:** merge `origin/main@bc62a725` vào `fix/schedule-ao-binary-and-intellisense@e34d0a2f`. Một file conflict: `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`). `test_schedule_runtime.cpp` do git tự gộp, đã soát tay.
+- **Hai phía:**
+  - PR #844 quy đổi trong `apply_states`: lịch `BINARY`/`BOOLEAN` → AO 100 %/0 %, còn lại giữ giá trị.
+  - PR #845 chuyển quy đổi lên `evaluate_schedule`, theo từng target: có `active_value`/`inactive_value` thì dùng; `BINARY`/`BOOLEAN` không khai thì AO 100, BO 1, INACTIVE 0; `REAL` giữ `effective_value`. `apply_states` chỉ còn `pct = c.value`.
+- **Quyết định:** lấy phía `main`, thêm chú thích vì sao `apply_states` không quy đổi nữa. Giữ phía PR sẽ ép target AO khai `active_value = 85` lên 100 %. Lỗi gốc của PR #844 (REAL 1 % bật AO hết thang) đã được `main` sửa theo cách này.
+- **Giữ nguyên từ PR #844:** `expect_accepted` và `TargetKindAcceptedRegardlessOfValueType` (`main` vẫn còn dòng `EXPECT_TRUE(config(...))` làm `core_tests` không biên dịch được); `BinaryScheduleDrivesAoFullScale`, `RealScheduleOnePercentIsNotFullScale`; `CMAKE_EXPORT_COMPILE_COMMANDS`; hồ sơ deploy `EV-FWSOM-DEPLOY-844-TARGET`. Mục `Fixed` ngày 2026-09-29 bên dưới mô tả mã `a4c31b53` đang chạy trên bo, không viết lại.
+- **Kiểm chứng (host, worktree sạch tại kết quả gộp):**
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw --output-on-failure` exit 0, **1754/1754 PASS**; `ScheduleV31*` 73/73.
+  - Kiểm đột biến 1: đưa logic phía PR vào lại `apply_states` → `UsesTargetSpecificActiveAndInactiveValues` FAIL (72/73); khôi phục → 73/73.
+  - Kiểm đột biến 2: ở `evaluate_schedule`, cho REAL `1.0` → AO 100 % → `RealScheduleOnePercentIsNotFullScale` FAIL (72/73); khôi phục → 73/73.
+  - Go và FE giống `origin/main` từng byte, không chạy lại.
+- **Refs:** PR #844, PR #845, commit `45e31285`.
+
+### Changed — Deploy PR #844 lên bo lab: Core khoá RELEASE, schedule-sim, sim-worker, web, FE (2026-09-29)
+
+- **Phạm vi:** bo `OK1126B-buildroot`, qua WAN `:2223`. Hồ sơ mới `docs/07_records/test-evidence/fw-som/2026-09-29-foxlinx-deploy-pr844-schedule-ao.md` (`EV-FWSOM-DEPLOY-844-TARGET` 1.0), log gốc ở `deploy-pr844-20260929/`.
+- **Trước deploy (13:27Z):** Core `e1b2ac51-dirty` nhúng **khoá TEST**, web `3806d22e…` từ mã chưa merge (trả `RELINQUISHED` cho AO của `SCH-001`). Cả hai do một lượt deploy tay lúc 09:45Z, không kèm `deploy-record`. Hai helper còn chạy binary đã xoá.
+- **Artifact:** dựng từ bản clone sạch `a4c31b53`, không dirty:
+  - Core `f5ccb315…` khoá RELEASE `2fb77aa42e7fe446`, `GLIBCXX` ≤ 3.4.29;
+  - schedule-sim `d0d8dc97…`, sim-worker `2fe3b4ad…`;
+  - web `cdcc6df8…` (cả 3 unit), FE `f9d49d42…` (budget PASS).
+  - iobus và tool ST giữ nguyên: không đổi mã, profile trùng.
+- **Kiểm chứng trên bo:**
+  - `deploy-record` ghi 5 mục; `readback` **12 kiểm, 0 lệch**.
+  - Health 6/6, `READY`, Active `20507c0e…` không đổi, Program `RUNNING` với `faultCount` 0.
+  - `SCH-001` (BINARY → DO1 + AO1): cả hai target `OK` INACTIVE; AO-01 = 0 V ở mức `schedule`.
+  - Mô phỏng 7 ngày chạy bằng schedule-sim mới: 3 chuyển trạng thái, 0 gap, 0 xung đột.
+- **Sao lưu:** `/data/mkddc/deploy-backups/20260929T132908Z-pr844-a4c31b53/`, gồm `programming-v1.sqlite` chép khi web đã dừng.
+- **NOT_RUN:**
+  - nhánh ACTIVE → AO 100 % trên bo (lịch ACTIVE lúc 03:30 giờ VN ngày 2026-09-30; không sửa lịch người dùng);
+  - lịch REAL trên bo (bo không có lịch REAL);
+  - đo điện, HIL.
+
+### Fixed — Lịch BINARY ghi AO quy 100 % theo `value_type` thay vì so giá trị với 1.0; `core_tests` biên dịch lại được; IntelliSense C++ có include path (2026-09-29)
+
+- **Phạm vi:** `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`), `apps/core/application/schedule/tests/test_schedule_runtime.cpp`, `CMakeLists.txt` gốc.
+- **Triệu chứng:**
+  - `main@895444be` không build được `core_tests`: `test_schedule_runtime.cpp:680` viết `EXPECT_TRUE(config(...))`, gtest báo `cannot convert 'const std::string' to 'bool'`. Khi build dở, `ctest` chạy lại binary cũ và báo 9 test ST FAIL giả (`StProfile…`, `StLibraryConformance…`, …).
+  - Commit `45e31285` (cho phép lịch gán mọi loại điểm) quy đổi AO bằng `(c.value == 1.0) ? 100.0 : c.value`: lịch **REAL** đặt 1 % bật AO lên hết thang (10 V / 20 mA).
+  - VS Code báo `cannot open source file "graph/graph_runtime.hpp"` (và 5 include khác) ở `apps/core/domain/safety/safe_state.hpp`.
+- **Nguyên nhân gốc:**
+  - Test đổi từ `expect_rejected(...)` sang `EXPECT_TRUE(config(...))`, nhưng `config()` chỉ ghép chuỗi JSON, không nạp cấu hình. Dù có biên dịch được, test cũng không kiểm gì.
+  - Quy đổi ACTIVE → 100 % dựa vào giá trị số chứ không dựa vào kiểu lịch.
+  - CMake gốc không xuất `compile_commands.json`. `build/` (thư mục mặc định của CMake Tools) còn cache trỏ `services/` đã xoá, nên cpptools không có include path cho header include theo gốc module (`graph/…`, `ports/…`).
+- **Cách sửa:**
+  - Runtime: chỉ lịch `BINARY`/`BOOLEAN` mới quy ACTIVE → 100 %, INACTIVE → 0 %; lịch `REAL`/`UNSIGNED`/`ENUMERATED` giữ nguyên giá trị phần trăm.
+  - Test: thêm `expect_accepted` gọi thật `load_schedule_config`; thêm `BinaryScheduleDrivesAoFullScale` (0-10 V: ACTIVE 10 V, INACTIVE 0 V) và `RealScheduleOnePercentIsNotFullScale` (REAL 1 % → 0,1 V).
+  - `CMakeLists.txt` gốc: `set(CMAKE_EXPORT_COMPILE_COMMANDS ON)`. Chỉ sinh thêm file trong thư mục build, không đổi cờ biên dịch hay binary.
+  - Máy dev (không commit, `.vscode/` bị ignore):
+    - `.vscode/c_cpp_properties.json` dùng `build/fw/compile_commands.json` cho file nguồn, kèm `includePath`/`defines` lấy từ chính database. cpptools chỉ tra database với file có trong đó; header `.hpp` không có trong database nên rơi về `includePath`. Chỉ trỏ `compileCommands` thì lỗi vẫn còn (thông báo đổi thành "Consider updating your compile_commands.json or includePath").
+    - Kiểm: 153/153 header của `apps/` và `contracts/` biên dịch `-fsyntax-only` chỉ với `includePath` đó, 0 lỗi thiếu include; `safe_state.hpp` exit 0.
+    - `settings.json` trỏ `cmake.buildDirectory` vào `build/fw`, loại `.claude/worktrees` khỏi explorer/watcher/search/cpptools. Lỗi `Cannot read file …/.claude/worktrees/agent-ae18187f70ce4e268/apps/web-ui/tsconfig.json` là của worktree agent đã bị xoá.
+- **Kiểm chứng (host):**
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `build/fw/compile_commands.json` 743 TU, `safe_state.cpp` mang `-I apps/core` và `-I apps/core/domain` (đủ cho cả 6 include bị báo).
+  - `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw` **1751/1751 PASS**; `ScheduleV31*` 70/70.
+  - Kiểm đột biến: đưa lại dòng `(c.value == 1.0)` → `RealScheduleOnePercentIsNotFullScale` FAIL; khôi phục bản sửa → PASS.
+  - Go và FE không đổi trong mục này, không chạy lại.
+- **Refs:** commit `45e31285`, `PLAN-ARCH-RESTRUCT-002` (xoá `services/`).
+
 ### Fixed — Check không còn chặn binding đầu ra theo chất lượng live của điểm đích; deploy `main` lên bo lab (Issue #840, 2026-09-29)
 
 - **Phạm vi:**

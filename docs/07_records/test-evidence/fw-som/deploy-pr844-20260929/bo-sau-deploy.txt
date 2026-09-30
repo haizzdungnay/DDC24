@@ -1,0 +1,17 @@
+# Trạng thái bo SAU deploy PR #844 (chỉ đọc)
+NOW 2026-09-29T13:30:11Z
+UNIT mkddc-core active since=Tue_2026-09-29_13:29:14_UTC exe=/usr/sbin/mkddc-core sha=f5ccb3158ff9b8c9
+UNIT mkddc-iobus active since=Mon_2026-09-28_12:35:10_UTC exe=/usr/sbin/mkddc-iobus sha=d017f38a31fe9604
+UNIT mkddc-web-pi active since=Tue_2026-09-29_13:29:16_UTC exe=/opt/mkddc-web/mkddc-web sha=cdcc6df87b18a931
+UNIT mkddc-reload-helper active since=Tue_2026-09-29_13:29:16_UTC exe=/opt/mkddc-web/mkddc-web sha=cdcc6df87b18a931
+UNIT mkddc-time-helper active since=Tue_2026-09-29_13:29:16_UTC exe=/opt/mkddc-web/mkddc-web sha=cdcc6df87b18a931
+FILE f5ccb3158ff9b8c9 /usr/sbin/mkddc-core
+FILE cdcc6df87b18a931 /opt/mkddc-web/mkddc-web
+FILE d0d8dc979a5cd117 /opt/mkddc-web/mkddc-schedule-sim
+FILE 2fe3b4adf8615ea0 /opt/mkddc-web/mkddc-programming-sim-worker
+FILE f9d49d42ce2ea036 /opt/mkddc-web/dist/index.html
+HEALTH ok 6/6 ok
+RUNTIME activeRevisionId=20507c0e-3f29-4dcc-9ea4-36a711670403 producerState=READY taskState=RUNNING safeState=False
+PROJECT CHUONG CONTROLLER activeRevisionId=20507c0e-3f29-4dcc-9ea4-36a711670403 draftSequence=14
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=RUNNING faultCount=0 lastFaultCode= health=HEALTHY
+SCHEDULES 3 lịch; gán AO: ['SCH-001']

@@ -1,0 +1,6 @@
+LOGIN role="role":"admin"
+CAP "targetState":"READY" "languages":["ST","FBD"] 
+FE <!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset=

@@ -1,0 +1,31 @@
+TS 20260929T132908Z BK /data/mkddc/deploy-backups/20260929T132908Z-pr844-a4c31b53
+PRE 13:29:08Z web=3806d22efebb3524 core=ef35ff8a95cf0b3f index=7553d4cf487a189b
+STOP_WEB 13:29:11Z
+WEB_STOPPED
+total 26140
+drwxr-xr-x  2 root  root      4096 Sep 29 13:29 .
+drwxr-xr-x 11 root  root      4096 Sep 29 13:29 ..
+-rw-r--r--  1 root  root      4849 Sep 29 03:37 artifact-manifest.json.prev
+-rw-r--r--  1 root  root   4771545 Sep 29 13:29 dist.prev.tgz
+-rwxr-xr-x  1 root  root   1238720 Sep 29 09:45 mkddc-core.prev
+-rwxr-xr-x  1 root  root    549448 Sep 28 09:45 mkddc-programming-sim-worker.prev
+-rwxr-xr-x  1 root  root    246528 Sep 27 09:04 mkddc-schedule-sim.prev
+-rwxr-xr-x  1 root  root  15532194 Sep 29 09:45 mkddc-web.prev
+-rw-------  1 mkddc mkddc  4390912 Sep 29 13:29 programming-v1.sqlite
+-rw-r--r--  1 mkddc mkddc     6717 Sep 29 06:03 virtual_points.conf.prev
+RESTART_CORE 13:29:12Z
+active
+START_WEB 13:29:16Z
+active
+SYSTEMD_OK
+UNIT mkddc-core active /usr/sbin/mkddc-core f5ccb3158ff9b8c9
+UNIT mkddc-iobus active /usr/sbin/mkddc-iobus d017f38a31fe9604
+UNIT mkddc-web-pi active /opt/mkddc-web/mkddc-web cdcc6df87b18a931
+UNIT mkddc-reload-helper active /opt/mkddc-web/mkddc-web cdcc6df87b18a931
+UNIT mkddc-time-helper active /opt/mkddc-web/mkddc-web cdcc6df87b18a931
+INDEX f9d49d42ce2ea036
+st_public_key fingerprint=2fb77aa42e7fe446 mode=RELEASE
+Sep 29 13:29:14 OK1126B-buildroot mkddc-core[13289]: INFO  core.start version=0.1.0 git_commit=a4c31b539d74befee0b4ca49df66a4f3cb8506b2 build_time=2026-09-29T13:24:10Z toolchain=GNU-13.3.0 pid=13289
+Sep 29 13:29:14 OK1126B-buildroot mkddc-core[13289]: INFO  core.st_public_key=RELEASE fingerprint=2fb77aa42e7fe446
+Sep 29 13:29:14 OK1126B-buildroot mkddc-core[13289]: INFO  safe_cfg.loaded path=/data/config/io_safe_state.conf ao=[0.0,0.0,0.0,0.0] (mode=[0-10V,0-10V,0-10V,0-10V]) do=[0,0,0,0]
+Sep 29 13:29:16 OK1126B-buildroot mkddc-web[13300]: mkddc-web 2026/09/29 13:29:16 INFO programming.toolchain ok compiler=/usr/sbin/mkddc-st-compile packager=/usr/sbin/mkddc-st-package profile_sha256=a43966368b1aa487489c2e50fb28ac31a6a5374717e256fe588c7fa979707baf

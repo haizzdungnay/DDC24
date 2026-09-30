@@ -1085,6 +1085,10 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
+            /* c.value đã là phần trăm cuối cùng: evaluate_schedule quy đổi theo
+             * value_type và active_value/inactive_value của từng target (BINARY
+             * không khai giá trị: ACTIVE = 100 %, INACTIVE = 0 %). Quy đổi lại ở
+             * đây sẽ ép active_value = 50 lên 100 %. */
             const double pct = c.value;
             ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(pct, mode));
         } else if (tr.kind == PointKind::BO) {
