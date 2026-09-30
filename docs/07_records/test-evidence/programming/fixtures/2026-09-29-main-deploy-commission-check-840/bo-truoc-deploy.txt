@@ -1,0 +1,21 @@
+# Trạng thái bo TRƯỚC deploy main (chỉ đọc), web bb4931e7-dirty + Core 77a149e1 của lượt deploy song song
+NOW 2026-09-29T03:30:19Z
+UNIT mkddc-core active since=Tue_2026-09-29_03:17:28_UTC exe=/usr/sbin/mkddc-core sha=77a149e1d9bd4cdf
+UNIT mkddc-iobus active since=Mon_2026-09-28_12:35:10_UTC exe=/usr/sbin/mkddc-iobus sha=d017f38a31fe9604
+UNIT mkddc-web-pi active since=Tue_2026-09-29_03:16:50_UTC exe=/opt/mkddc-web/mkddc-web sha=475f4a4feaf393de
+UNIT mkddc-reload-helper active since=Tue_2026-09-29_03:10:25_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=cc5848d7e2632090
+UNIT mkddc-time-helper active since=Tue_2026-09-29_03:10:25_UTC exe=/opt/mkddc-web/mkddc-web_(deleted) sha=cc5848d7e2632090
+2026-09-29 03:16:50.153878856 +0000 15532194 /opt/mkddc-web/mkddc-web
+2026-09-29 03:17:26.323725562 +0000 1051128 /usr/sbin/mkddc-core
+2026-09-29 03:16:18.196247219 +0000 1117 /opt/mkddc-web/dist/index.html
+2026-09-29 03:10:25.438190856 +0000 6717 /data/config/virtual_points.conf
+HEALTH ok 6/6 ok
+RUNTIME activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db producerState=READY taskState=FAULT safeState=True
+PROJECT CHUONG CONTROLLER activeRevisionId=0c29f4f1-377d-44ce-add0-2a0f5cad09db draftSequence=13 latestCheck={"checkId": "ecba7068-058f-4dd8-9068-04184c572978", "revisionId": "65b2b855-ef61-4e46-9beb-89e29a05a9f4", "state": "FAILED", "createdAt": "2026-09-29T03:24:45.511Z", "completedAt": "2026-09-29T03:24:45.583Z"}
+PROGRAM a153aa91-f0e9-4b60-8741-3cadcfb7f579 runtimeState=FAULTED faultCount=1 lastFaultCode=ST-RT-008 lastRunAtUtc=None health=FAULT
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=0c29f4f1-377d-44ce-add0-2a0f5cad09db at=2026-09-28T02:44:02.951Z
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=a0f107fa-8a14-452c-ab03-3b8dbb14d4b1 at=2026-09-27T14:01:03.297Z
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=9b40a15e-13de-4bba-ad11-71e3b5178fe7 at=2026-09-27T13:45:13.425Z
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=104ded61-d4ff-4360-b98c-0c3259f82d80 at=2026-09-27T13:29:19.683Z
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=5d2ae6c4-6dbd-4681-accc-1c8e6ae60b78 at=2026-09-27T11:18:59.685Z
+OPERATION COMMISSION SUCCEEDED COMMITTED requested=dbdace53-a7bf-4cdd-b12c-6e6fa86df4cb at=2026-09-27T11:10:25.493Z

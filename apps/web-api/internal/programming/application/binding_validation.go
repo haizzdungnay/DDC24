@@ -234,9 +234,22 @@ func ValidateBindingCandidate(candidate BindingCandidate, variables map[string]b
 		issues = append(issues, issue)
 	}
 	qualityPolicy := candidate.QualityPolicy
+	/* Issue #840 — cổng chất lượng live CHỈ áp cho binding ĐỌC.
+	 *
+	 * `DDD-CTRL-PROG-001` §5: đầu vào chịu quality policy; đầu ra chỉ cần Point
+	 * writable và range/unit/rate hợp lệ. Bản cũ áp cho mọi chiều, nên binding
+	 * GHI vào một VP do chính Program sở hữu bị chặn mỗi khi Program đó không
+	 * chạy — slot về BAD vì không ai ghi. Trên bo lab, Check một revision giống
+	 * hệt Active FAILED với ba lỗi `PGM-MAP-QUALITY-001` ở ba VP đầu ra của
+	 * `PRG_DO16_MODBUS` đang FAULTED: muốn Commission lại để sửa thì bị chặn
+	 * chính vì Program đang hỏng. Chất lượng của đích ghi là HỆ QUẢ của việc
+	 * Program có đang ghi hay không, không phải điều kiện để được ghi.
+	 *
+	 * Giá trị `qualityPolicy` vẫn kiểm cho mọi chiều: đó là hợp đồng dữ liệu,
+	 * không phụ thuộc trạng thái runtime. */
 	if qualityPolicy != "REQUIRE_GOOD" && qualityPolicy != "ALLOW_UNCERTAIN" && qualityPolicy != "FAIL_POLICY" {
 		issues = append(issues, bindingIssue(domain.ErrRequest, "PGM-MAP-QUALITY-POLICY-001", "ERROR", "binding.qualityPolicy", candidate))
-	} else if point.Quality != "GOOD" {
+	} else if expectedDirection == "READ" && point.Quality != "GOOD" {
 		severity := "ERROR"
 		if qualityPolicy == "ALLOW_UNCERTAIN" && point.Quality == "UNCERTAIN" {
 			severity = "WARNING"
