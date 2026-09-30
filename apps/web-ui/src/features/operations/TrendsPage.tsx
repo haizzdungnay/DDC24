@@ -729,7 +729,7 @@ export function buildHistoryChartModel(response: HistoryResponse | null, points:
     const point = pointsById.get(item.pointId)
     const key = `${item.pointId}::g${item.generation}`
     keyByIdentity.set(historySeriesKey(item.pointId, item.generation), key)
-    const baseLabel = point ? (point.kind === 'virtual' ? point.tag : `${point.id} - ${point.name}`) : item.pointId
+    const baseLabel = point ? (point.kind === 'virtual' ? point.tag : (point.name && point.name !== point.id ? `${point.id} - ${point.name}` : point.id)) : item.pointId
     const showGeneration = (generationsByPoint.get(item.pointId) ?? 0) > 1
     return {
       key,

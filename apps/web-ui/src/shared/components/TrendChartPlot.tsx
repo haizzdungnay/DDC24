@@ -9,7 +9,7 @@
 import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import type { TrendSample } from '../types'
 import type { TrendChartMarker, TrendSeries } from './TrendChart'
-import { displayTrendValue, formatTrendRaw, formatTrendTime, trendBandKey } from './trendChartFormat'
+import { displayTrendValue, formatTrendTime, trendBandKey } from './trendChartFormat'
 
 export interface TrendChartPlotProps {
   data: TrendSample[]
@@ -86,7 +86,7 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
   )
 }
 
-function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
+export function HistoryTooltip({ active, payload, label, series, rawUnit: _rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
   /* `T57-2.4` — CON TRỎ ĐỌC GIÁ TRỊ: duyệt theo `series`, không theo `payload`.
    *
@@ -109,11 +109,9 @@ function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: {
           <div key={item.key}>
             <span style={{ color: item.color }}>■</span>{' '}
             <span>{item.label}: {missing ? '—' : displayTrendValue(raw as number, item.kind, item.stepped)}{!missing && item.unit ? ` ${item.unit}` : ''}</span>
-            {!missing && <div className="text-[var(--c-text-dim)]">Quality {row[`${item.key}:quality`] ?? '—'} · Source {row[`${item.key}:source`] ?? '—'} · Tier {row[`${item.key}:tier`] ?? '—'}</div>}
           </div>
         )
       })}
-      {rawUnit && payload[0]?.payload?.['__raw'] != null && <div className="mt-1 text-[var(--c-text-dim)]">Raw: {formatTrendRaw(payload[0].payload['__raw'], rawUnit)}</div>}
     </div>
   )
 }

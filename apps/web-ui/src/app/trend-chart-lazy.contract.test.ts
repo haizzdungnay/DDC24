@@ -96,7 +96,7 @@ describe('T63-109 thư viện biểu đồ không nằm trong đồ thị khởi
   it('TrendChartPlot là nơi DUY NHẤT import recharts, và chỉ được nạp qua import()', () => {
     const importers = sourceFiles(src)
       .filter((file) => [...readFileSync(file, 'utf8').matchAll(STATIC_IMPORT)].some((m) => m[1] === 'recharts'))
-      .map((file) => file.slice(src.length + 1))
+      .map((file) => file.slice(src.length + 1).replace(/\\/g, '/'))
     expect(importers).toEqual(['shared/components/TrendChartPlot.tsx'])
     const chart = readFileSync(resolve(src, 'shared/components/TrendChart.tsx'), 'utf8')
     expect(chart).toContain("import('./TrendChartPlot')")
