@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Changed — Gói IOP V3.0 R2 ghim lại sau rà nguồn/rủi ro (2026-09-30)
+
+- **Phạm vi:** dựng lại 17 file gói từ commit nguồn `9e62fc11ed15` để bản FW-REQ có nguồn/lý do 11 nhóm và bản VVP có 5 rủi ro giao diện; thay bản ZIP R2 trước đó, chưa gửi các team nhận.
+- **Kiểm chứng:** 16/16 dòng manifest PASS, 17/17 mục ZIP không lỗi; 60 link nội bộ, 74/74 yêu cầu, 16/16 quy trình và 5/5 rủi ro có đường kiểm; ZIP 75 792 byte, SHA-256 `9df04ac2fd54cdb106334bcad371de1cc841f37fc6a4f1e6839f1ceb8dbf152a`. P1/P2/P3 vẫn `NOT RUN`.
+
 ### Changed — Nguồn yêu cầu và rủi ro tích hợp IOP V3.0 (2026-09-30)
 
 - **Phạm vi:** bổ sung nguồn và lý do theo 11 nhóm ID cho 74 yêu cầu FW MCU; VVP nối 5 rủi ro giao diện tới kiểm soát, bài kiểm, bằng chứng và người có thẩm quyền chấp nhận. Không đổi ID, tiêu chí hay byte giao thức.

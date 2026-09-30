@@ -8,7 +8,7 @@
 
 **Trạng thái:** Draft, chưa ký, chưa gửi; gói tài liệu và kế hoạch kiểm, **không phải** kết quả phần cứng hoặc hồ sơ chứng nhận ISO
 
-**Commit nguồn tài liệu:** `d04703e5d2af3f05dd4183cf195ed5dc49b656fb`; SHA-256 từng file ở [NGUON_GOC.md](NGUON_GOC.md), kiểm bằng [MANIFEST.sha256](MANIFEST.sha256).
+**Commit nguồn tài liệu:** `9e62fc11ed15e91a346e0d09f1cacd7c5781e3da`; SHA-256 từng file ở [NGUON_GOC.md](NGUON_GOC.md), kiểm bằng [MANIFEST.sha256](MANIFEST.sha256).
 
 ## 1. Mục tiêu và thứ tự đọc
 
@@ -20,7 +20,7 @@ Một giao thức IOP V3.0 cho cả profile 16 UI / 4 AO / 4 DO và 16 UI / 8 AO
 | 2 | [Yêu cầu FW MCU](FW_REQUIREMENTS_MK-DDC-24_VI.md) | `FW-REQ-MK-DDC-24-VI` v3.1; 74 yêu cầu hộp đen, cổng nghiệm thu | Draft, chờ MCU/SOM/Safety ký |
 | 3 | [Header byte nháp](iop_protocol_v3_DRAFT.h) | Hằng số và CRC cho kiểm host; chưa là contract production | DRAFT |
 | 4 | [Ví dụ tích hợp](IOP_V3_INTEGRATION_EXAMPLES_MK-DDC-24_VI.md) | `IOP-EX-MK-DDC-24-VI` v1.0; EX-01 4/4, EX-02 8/8, EX-03 mất poll/RESYNC | Minh họa, chưa đo bo |
-| 5 | [Kế hoạch và ma trận kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) | `IOP-VVP-MK-DDC-24-VI` v1.0; 16 quy trình ICD, 8 nhóm FW, ma trận 74/74 | Mọi Test Result `NOT RUN` |
+| 5 | [Kế hoạch và ma trận kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) | `IOP-VVP-MK-DDC-24-VI` v1.0; 16 quy trình ICD, 8 nhóm FW, ma trận 74/74 và 5 rủi ro giao diện | Mọi Test Result `NOT RUN`; rủi ro chưa được Safety chấp nhận |
 | 6 | [Phiếu đầu vào HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) | `IOP-HW-IN-MK-DDC-24-VI` v1.0; thông tin cần cho từng revision bo | Chưa nhận hồ sơ chuẩn 8/8 |
 
 Bốn hình SVG đọc ngoại tuyến và file DOT nguồn nằm trong `assets/iop-v3/`: ranh giới, xử lý frame, RESYNC và mốc thời gian. Các hình thể hiện **hợp đồng logic/giới hạn thiết kế**, không phải pinout hoặc số đo thực tế.

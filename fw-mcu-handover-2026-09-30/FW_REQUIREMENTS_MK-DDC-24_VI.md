@@ -71,6 +71,24 @@ R = thực hiện · A = chịu trách nhiệm cuối · C = tham vấn · I = �
 
 - ID giữ ổn định theo bản 2.1. Yêu cầu mới dùng số chưa cấp. ID đã rút **không được tái sử dụng** (§7).
 
+### 3.1 Nguồn và lý do cho từng nhóm ID
+
+Mỗi ID ở §4 kế thừa **nguồn và lý do của hàng cùng tiền tố** bên dưới; tham chiếu ICD và tiêu chí riêng trong chính dòng yêu cầu làm rõ hành vi cụ thể. Cách này giữ yêu cầu hộp đen có nguồn/lý do mà không áp thiết kế nội bộ MCU. Nếu một dòng không còn cùng nguồn/lý do khi review, bên tiêu thụ phải mở finding và sửa đúng dòng đó trước khi ký.
+
+| Nhóm ID | Nguồn phân bổ | Lý do cần nhóm yêu cầu |
+|---|---|---|
+| `FW-IOP-*` | `IF-REQ-001`, `SAFE-REQ-001`, ADR-064, ICD §3–§12 | SOM và MCU phải dùng cùng byte, phiên, số kênh và timeout; sai hợp đồng có thể làm output áp sai hoặc mất safe |
+| `FW-IO-*` | `SYS-REQ-002`, `HW-REQ-001`, ICD §6.1/§6.6 | SOM cần raw UI có dấu, rate và trạng thái lỗi rõ để đổi đơn vị và đánh quality; chọn mode phải theo bo thực |
+| `FW-AO-*` | `SYS-REQ-002`, `SAFE-REQ-001`, ICD §6.2/§6.5/§6.7/§7 | AO phải áp đúng số kênh/mode và trở về giá trị safe khi lỗi; O-9 chặn kết luận nguyên khối vật lý |
+| `FW-DO-*` | `SYS-REQ-002`, `SAFE-REQ-001`, ICD §6.3/§6.7 | Relay thực lắp phải được chọn bằng mask đúng, có trạng thái safe và feedback đúng khả năng bo |
+| `FW-WDG-*` | `SAFE-REQ-001`, `FW-REQ-MCU-002`, ICD §7–§9 | Dừng poll hoặc ngừng tiến triển xử lý không được giữ output chạy vô hạn |
+| `FW-BOOT-*` | `FW-REQ-MCU-002`, ICD §3.3/§7 | Sau reset thiết bị phải có output an toàn và giao diện sẵn sàng trong thời hạn xác định |
+| `FW-DIAG-*` | ICD §6.1/§6.8/§6.9, `SAFE-REQ-001` | SOM cần quan sát fault, nguyên nhân reset, nhiệt và nguồn để alarm/RESYNC đúng |
+| `FW-CFG-*` | ICD §6.12/§13, quyết định O-3 | Mode AO và safe value phải phục hồi có kiểm soát sau mất điện; digest giúp phát hiện lệch SOM/MCU |
+| `FW-OTA-*` | Quyết định Rev A nạp SWD, OTA qua SOM hoãn Rev B trong `DECISIONS.md` | Nhà máy vẫn cần nạp/nhận dạng firmware Rev A mà không giả có OTA |
+| `FW-HW-*` | `HW-REQ-001`, `SYS-REQ-002`, ICD §2.1/§3, phiếu HWIF-01..10 | Firmware phải gắn đúng ngoại vi, image và số kênh của từng revision bo; tài liệu HW do HW làm authority |
+| `FW-REL-*` | Cổng G-MCU-1..3 §6 và yêu cầu bàn giao của System Architect | Bên nhận cần tái lập build, đối chiếu image/profile và chạy test cặp theo đúng revision |
+
 ## 4. Yêu cầu
 
 ### 4.1 Giao tiếp IOP (`FW-IOP`)
@@ -262,7 +280,7 @@ Tự rà theo loại **hồ sơ yêu cầu** của DOC-GOV-001 (ngoài gói: ../
 
 | Kiểm | Bằng chứng | Trạng thái / điều kiện còn cần |
 |---|---|---|
-| ID, mức, phân bổ, phương pháp và tiêu chí | 74 dòng §4, bảng trách nhiệm §1 | Có để review; 5 SHOULD cần giải trình nếu không đạt |
+| ID, nguồn/lý do, mức, phân bổ, phương pháp và tiêu chí | 74 dòng §4, bảng trách nhiệm §1 và nguồn/lý do nhóm §3.1 | Có để review; 5 SHOULD cần giải trình nếu không đạt |
 | Nguồn, biến thể, hợp đồng byte/hành vi | Đầu file, ICD và header nháp | Có; O-1/O-3/O-4/O-5/O-9 chờ ký |
 | Yêu cầu → quy trình → bằng chứng | [VVP §2–§4](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) phủ 74/74 dòng | Chỉ là kế hoạch; mọi kết quả `NOT RUN` |
 | Điều kiện vật lý và dung sai | [Phiếu HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) | HW cần cung cấp theo revision bo trước G-MCU-2/3 |
@@ -281,7 +299,7 @@ Tự rà theo loại **hồ sơ yêu cầu** của DOC-GOV-001 (ngoài gói: ../
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 3.1 | 2026-09-30 | Theo quyết định chủ sở hữu: hỗ trợ cả hai biến thể 16/4/4 và 16/8/8 qua khai số kênh (thêm FW-IOP-015, FW-DO-007, FW-HW-004); trỏ ICD v3.0 và header nháp; phần cứng lấy theo tài liệu HW của từng biến thể do HW cung cấp riêng; bản build host phải chọn được biến thể. Bản rà soát R2 liên kết ma trận 74/74, quy trình kiểm và phiếu đầu vào HW; 74 ID/tiêu chí giữ nguyên. Draft, chưa ký. |
+| 3.1 | 2026-09-30 | Theo quyết định chủ sở hữu: hỗ trợ cả hai biến thể 16/4/4 và 16/8/8 qua khai số kênh (thêm FW-IOP-015, FW-DO-007, FW-HW-004); trỏ ICD v3.0 và header nháp; phần cứng lấy theo tài liệu HW của từng biến thể do HW cung cấp riêng; bản build host phải chọn được biến thể. Bản rà soát R2 liên kết ma trận 74/74, quy trình kiểm, phiếu HW và nguồn/lý do theo nhóm ID; 74 ID/tiêu chí giữ nguyên. Draft, chưa ký. |
 | 3.0 | 2026-09-30 | Viết lại thành yêu cầu hộp đen cho team MCU riêng (không phát hành, thay bởi 3.1 cùng ngày) |
 | 2.1 | 2026-06-30 | §7: FW-IOP-008..009 (fault_flags, ADC fault → COMMUNICATION_FAILURE theo ADR-011) |
 | 2.0 | 2026-06-30 | Căn chỉnh I/O và IOP theo ADR-010 (breaking) |
