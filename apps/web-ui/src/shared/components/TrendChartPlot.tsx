@@ -20,9 +20,10 @@ export interface TrendChartPlotProps {
   bandVisible: boolean
   showDots: boolean
   markers: TrendChartMarker[]
+  xDomain?: [number | string, number | string]
 }
 
-export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, bandVisible, showDots, markers }: TrendChartPlotProps) {
+export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, bandVisible, showDots, markers, xDomain }: TrendChartPlotProps) {
   const hasRightAxis = series.some((item) => item.axis === 'right')
   const rightAxisUnit = series.find((item) => item.axis === 'right')?.unit
   const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
@@ -36,7 +37,7 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
         <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
-        <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+        <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={xDomain ?? (hasTimeAxis ? ['dataMin', 'dataMax'] : undefined)} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         <YAxis yAxisId="left" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         {hasRightAxis && (
           <YAxis yAxisId="right" orientation="right" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} label={rightAxisUnit ? { value: rightAxisUnit, position: 'insideTopRight', fontSize: 11, fill: 'var(--c-text-dim)' } : undefined} />
@@ -80,7 +81,7 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
             }}
           />
         ))}
-        {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
+        {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />)}
       </ComposedChart>
     </ResponsiveContainer>
   )
