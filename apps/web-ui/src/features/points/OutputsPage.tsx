@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
@@ -791,6 +792,27 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
 function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, LiveSample[]>>({})
   const lastKeyRef = useRef('')
+
+  useEffect(() => {
+    if (!pointId) return
+    let cancelled = false
+    fetchRecentTrendSamples([pointId], 120_000, outputTrendLimit).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setBuffers((current) => {
+        const existing = current[pointId] ?? []
+        if (existing.length === 0) {
+          return { ...current, [pointId]: initialSamples as LiveSample[] }
+        }
+        const byTs = new Map<number, LiveSample>()
+        for (const s of initialSamples as LiveSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-outputTrendLimit) }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pointId])
 
   useEffect(() => {
     if (!point) return
