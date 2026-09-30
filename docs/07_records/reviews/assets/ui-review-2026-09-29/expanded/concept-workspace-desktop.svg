@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="Bàn cấu hình và chạy thử"><title>Bàn cấu hình và chạy thử</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="1440" height="900" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="1440" height="66" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="24" y="31" font-size="20" font-weight="700" style="fill:#fff">DDC24 • Không gian tích hợp BMS</text>
+<text x="24" y="53" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa • chưa triển khai</text>
+<text x="1190" y="36" font-size="15" font-weight="400" style="fill:#fff">Kỹ sư • VI • Trợ giúp</text>
+<rect x="0" y="66" width="208" height="834" rx="0" fill="#e3eaef" stroke="#cbd6df"/>
+<text x="22" y="111" font-size="15" font-weight="400" style="fill:#162c3d">Tổng quan</text>
+<text x="22" y="159" font-size="15" font-weight="400" style="fill:#162c3d">Thiết bị / hệ thống</text>
+<text x="22" y="207" font-size="15" font-weight="400" style="fill:#162c3d">Cấu hình &amp; ánh xạ</text>
+<text x="22" y="255" font-size="15" font-weight="700" style="fill:#162c3d">Phiếu chạy thử</text>
+<text x="22" y="303" font-size="15" font-weight="400" style="fill:#162c3d">Cảnh báo &amp; xu hướng</text>
+<text x="22" y="351" font-size="15" font-weight="400" style="fill:#162c3d">Chẩn đoán</text>
+<text x="22" y="399" font-size="15" font-weight="400" style="fill:#162c3d">Hồ sơ bàn giao</text>
+<text x="22" y="447" font-size="15" font-weight="400" style="fill:#162c3d">Hệ thống</text>
+<text x="235" y="110" font-size="25" font-weight="700" style="fill:#162c3d">Cấu hình &amp; chạy thử</text>
+<text x="236" y="141" font-size="14" font-weight="400" style="fill:#162c3d">Dự án: Tòa nhà A  /  Controller DDC-01  /  8 điểm minh họa</text>
+<rect x="235" y="166" width="1178" height="98" rx="10" fill="#e2f2f3" stroke="#cbd6df"/>
+<text x="258" y="198" font-size="20" font-weight="700" style="fill:#162c3d">Bước tiếp theo: xác nhận phản hồi quạt AHU-01</text>
+<text x="258" y="226" font-size="15" font-weight="400" style="fill:#162c3d">Đạt 5/8 • 1 lỗi • 2 chưa kiểm • 0 lệnh đang giữ</text>
+<rect x="1133" y="188" width="252" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="1145" y="216" font-size="14" font-weight="700" style="fill:#fff">Tiếp tục phiếu chạy thử</text>
+<rect x="235" y="284" width="284" height="75" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="251" y="311" font-size="17" font-weight="700" style="fill:#162c3d">1. Chuẩn bị</text>
+<text x="251" y="336" font-size="13" font-weight="400" style="fill:#162c3d">Kết nối, giờ và phiên bản</text>
+<rect x="533" y="284" width="284" height="75" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="549" y="311" font-size="17" font-weight="700" style="fill:#162c3d">2. Cấu hình</text>
+<text x="549" y="336" font-size="13" font-weight="400" style="fill:#162c3d">Mẫu và ánh xạ điểm</text>
+<rect x="831" y="284" width="284" height="75" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="847" y="311" font-size="17" font-weight="700" style="fill:#162c3d">3. Kiểm tra</text>
+<text x="847" y="336" font-size="13" font-weight="400" style="fill:#162c3d">Mô phỏng + I/O</text>
+<rect x="1129" y="284" width="284" height="75" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="1145" y="311" font-size="17" font-weight="700" style="fill:#162c3d">4. Bàn giao</text>
+<text x="1145" y="336" font-size="13" font-weight="400" style="fill:#162c3d">Lỗi còn lại + cấu hình</text>
+<rect x="235" y="382" width="350" height="452" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="255" y="413" font-size="18" font-weight="700" style="fill:#162c3d">Thiết bị trong phiên</text>
+<rect x="252" y="434" width="316" height="78" rx="10" fill="#e9f4f4" stroke="#cbd6df"/>
+<text x="270" y="464" font-size="17" font-weight="700" style="fill:#162c3d">AHU-01</text>
+<text x="270" y="489" font-size="14" font-weight="400" style="fill:#162c3d">5 đạt • 1 lỗi • 2 chưa kiểm</text>
+<rect x="252" y="528" width="316" height="78" rx="10" fill="#f7f9fb" stroke="#cbd6df"/>
+<text x="270" y="558" font-size="17" font-weight="700" style="fill:#162c3d">VAV-01</text>
+<text x="270" y="583" font-size="14" font-weight="400" style="fill:#162c3d">Chưa cấu hình</text>
+<rect x="252" y="622" width="316" height="78" rx="10" fill="#f7f9fb" stroke="#cbd6df"/>
+<text x="270" y="652" font-size="17" font-weight="700" style="fill:#162c3d">Meter-01</text>
+<text x="270" y="677" font-size="14" font-weight="400" style="fill:#162c3d">Modbus • chưa kiểm</text>
+<rect x="605" y="382" width="808" height="452" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="627" y="414" font-size="18" font-weight="700" style="fill:#162c3d">AHU-01 — công việc cần xử lý</text>
+<text x="628" y="464" font-size="17" font-weight="700" style="fill:#162c3d">Phản hồi quạt</text>
+<text x="628" y="492" font-size="14" font-weight="400" style="fill:#162c3d">Lệnh ON; chưa xác nhận thiết bị quay</text>
+<text x="628" y="555" font-size="17" font-weight="700" style="fill:#162c3d">Cảm biến nhiệt</text>
+<text x="628" y="583" font-size="14" font-weight="400" style="fill:#162c3d">Đối chiếu đồng hồ hiện trường</text>
+<text x="628" y="646" font-size="17" font-weight="700" style="fill:#162c3d">Đóng phiên</text>
+<text x="628" y="674" font-size="14" font-weight="400" style="fill:#162c3d">Đọc lại đầu ra; ghi nhận lỗi còn lại</text>
+<rect x="628" y="750" width="234" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="640" y="778" font-size="14" font-weight="700" style="fill:#162c3d">Mở hồ sơ thiết bị</text>
+<rect x="880" y="750" width="240" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="892" y="778" font-size="14" font-weight="700" style="fill:#162c3d">Xem chẩn đoán</text>
+</svg>

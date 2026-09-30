@@ -1,0 +1,20 @@
+JSON PASS: navigation.json
+JSON PASS: survey.json
+JSON PASS: survey-raw.json
+JSON PASS: concept-render.json
+SVG XML PASS: concept-workspace-desktop.svg
+SVG XML PASS: concept-workspace-mobile.svg
+SVG XML PASS: concept-confirm-desktop.svg
+SVG XML PASS: concept-checkout-mobile.svg
+SVG XML PASS: concept-equipment-desktop.svg
+SVG XML PASS: concept-confirm-mobile.svg
+SVG XML PASS: concept-checkout-desktop.svg
+SVG XML PASS: concept-equipment-mobile.svg
+SVG XML PASS: concept-states.svg
+PNG PASS: virtual-mobile.png
+PNG PASS: modbus-points-mobile.png
+PNG PASS: commission-mobile.png
+PNG PASS: trend-gap-mobile.png
+PNG PASS: concept-checkout-mobile-preview.png
+PNG PASS: dashboard-mobile.png
+SURVEY PASS: 58 quan sát, không có Login thay cho trang cần kiểm

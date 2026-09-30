@@ -1,0 +1,15 @@
+hồ sơ trong manifest §2 : 17
+khớp                    : 15
+
+=== DRIFT so với candidate đã ghim ===
+ - docs/00_governance/DECISIONS.md
+      ghim : 5fe60e5e4baa20c416685061833c675915a0cee3dd06be97b23cfb436b664066
+      hiện : b5e44c539fc71067f63497057533b78684954beab8cc002e949cf6327bde7ee0
+ - docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md
+      ghim : 5a264006b136461275a07d9d404ac538cc623567fa6a85c99ac2f56ffd2bf202
+      hiện : e8cea82b33b6885f6bd6e4f994507cd6753a4a7232322d50ebcca33bbf2f9a4d
+
+=== KẾT LUẬN: FAIL ===
+Authority baseline đã đổi sau khi ghim. Phải phát hành manifest
+mới rồi review lại phần chịu ảnh hưởng — không được để
+reviewer đọc nội dung khác với revision họ sẽ ký.

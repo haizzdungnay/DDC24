@@ -1,0 +1,86 @@
+
+> mk-ddc-24-frontend@0.1.0 build
+> npm run check:programming-contracts && tsc --noEmit && vite build && node scripts/check-login-chunks.mjs && node scripts/precompress-assets.mjs && npm run check:bundle-budget
+
+
+> mk-ddc-24-frontend@0.1.0 check:programming-contracts
+> npm run check:programming-errors && npm run check:programming-api && npm run check:programming-fbd && npm run check:programming-st-keywords && npm run check:programming-st-keyboard
+
+
+> mk-ddc-24-frontend@0.1.0 check:programming-errors
+> python3 ../../scripts/generate_programming_errors.py --check
+
+PASS: error catalog 38 public / 160 detail / SHA-256 f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171
+
+> mk-ddc-24-frontend@0.1.0 check:programming-api
+> node scripts/generate-programming-client.mjs --check
+
+Programming API client đồng bộ: 45 operation
+
+> mk-ddc-24-frontend@0.1.0 check:programming-fbd
+> python3 ../../scripts/verify_programming_fbd_contract.py --self-test
+
+PASS self-test: 10/10 mutation bị reject fail-closed
+PASS: FBD schema/golden/profile/keyboard/equivalence/manifest khớp; canonical semantics hợp lệ
+
+> mk-ddc-24-frontend@0.1.0 check:programming-st-keywords
+> python3 ../../scripts/generate_st_reserved_words.py --check
+
+OK: apps/web-ui/src/features/programming/design/editor/stCoreReservedWords.generated.ts khớp compiler.
+
+> mk-ddc-24-frontend@0.1.0 check:programming-st-keyboard
+> python3 ../../scripts/verify_programming_st_keyboard.py --self-test
+
+PASS self-test: 5/5 hợp đồng sai bị reject fail-closed
+PASS: hợp đồng phím ST khớp mã nguồn (23 lệnh, 7 ngữ cảnh)
+vite v8.2.0 building client environment for production...
+[2Ktransforming...✓ 2491 modules transformed.
+rendering chunks...
+computing gzip size...
+../../build/web-ui/dist/index.html                                  1.19 kB │ gzip:   0.63 kB
+../../build/web-ui/dist/assets/index-DskvKztY.css                  86.39 kB │ gzip:  15.64 kB
+../../build/web-ui/dist/assets/visibleInterval-WN6GGIbw.js          0.31 kB │ gzip:   0.21 kB
+../../build/web-ui/dist/assets/cyclePeriods-CezqFHOx.js             0.60 kB │ gzip:   0.39 kB
+../../build/web-ui/dist/assets/rolldown-runtime-hePW80VL.js         0.71 kB │ gzip:   0.42 kB
+../../build/web-ui/dist/assets/useUrlFilters-D7hYo5mY.js            0.72 kB │ gzip:   0.43 kB
+../../build/web-ui/dist/assets/profile-CKcPmxCb.js                  0.75 kB │ gzip:   0.42 kB
+../../build/web-ui/dist/assets/diagnosticFreshness-BDVg9T24.js      0.83 kB │ gzip:   0.44 kB
+../../build/web-ui/dist/assets/authorization-CedXbQww.js            1.33 kB │ gzip:   0.65 kB
+../../build/web-ui/dist/assets/programsRoute-CvXycwo4.js            1.88 kB │ gzip:   0.91 kB
+../../build/web-ui/dist/assets/useDraftWorkspace-CaveofKo.js        4.02 kB │ gzip:   1.52 kB
+../../build/web-ui/dist/assets/crypto-BpMLuNFX.js                   4.56 kB │ gzip:   2.33 kB
+../../build/web-ui/dist/assets/signals-DfTkB58q.js                  4.98 kB │ gzip:   1.90 kB
+../../build/web-ui/dist/assets/workspaceAdapters-096t-NZr.js        9.58 kB │ gzip:   3.28 kB
+../../build/web-ui/dist/assets/ProblemsDrawer--ieAJJn2.js          11.15 kB │ gzip:   3.89 kB
+../../build/web-ui/dist/assets/PublishedSignalsPanel-Dhz0loWQ.js   21.31 kB │ gzip:   6.77 kB
+../../build/web-ui/dist/assets/CheckCommissionPage-DJtV7kxo.js     27.23 kB │ gzip:   8.63 kB
+../../build/web-ui/dist/assets/ProgrammingLayout-BPhxVFZS.js       36.49 kB │ gzip:  10.84 kB
+../../build/web-ui/dist/assets/icons-CKxmwY0r.js                   41.04 kB │ gzip:  13.56 kB
+../../build/web-ui/dist/assets/queries-BW-wIErI.js                 44.95 kB │ gzip:  12.14 kB
+../../build/web-ui/dist/assets/RuntimeServicePage-CZo-_CBh.js      56.86 kB │ gzip:  14.62 kB
+../../build/web-ui/dist/assets/libraryInsertIntent-Uvv6_fRe.js     69.70 kB │ gzip:  16.56 kB
+../../build/web-ui/dist/assets/LibraryPage-B9SpeVaM.js             85.88 kB │ gzip:  24.32 kB
+../../build/web-ui/dist/assets/operations-spNDO0jt.js              94.82 kB │ gzip:  27.54 kB
+../../build/web-ui/dist/assets/modbus-rtu-CQ9_fSab.js             103.14 kB │ gzip:  26.67 kB
+../../build/web-ui/dist/assets/scheduler-D8jD_hUa.js              108.25 kB │ gzip:  26.59 kB
+../../build/web-ui/dist/assets/auth-CwV87ged.js                   132.06 kB │ gzip:  39.09 kB
+../../build/web-ui/dist/assets/react-BQCkNCAN.js                  172.78 kB │ gzip:  57.30 kB
+../../build/web-ui/dist/assets/stInterfaceVariables-CQyKB3-g.js   188.92 kB │ gzip:  52.88 kB
+../../build/web-ui/dist/assets/fbd-editor-CRo5YHum.js             208.85 kB │ gzip:  58.07 kB
+../../build/web-ui/dist/assets/programming-CKSZFH5J.js            299.10 kB │ gzip:  79.35 kB
+../../build/web-ui/dist/assets/TrendChartPlot-DLkFNesV.js         403.84 kB │ gzip: 105.25 kB
+../../build/web-ui/dist/assets/index-_ScayPGG.js                  467.50 kB │ gzip: 124.97 kB
+
+✓ built in 845ms
+check-login-chunks: đồ thị tải ban đầu 6 chunk (assets/auth-CwV87ged.js, assets/crypto-BpMLuNFX.js, assets/icons-CKxmwY0r.js, assets/index-_ScayPGG.js, assets/react-BQCkNCAN.js, assets/rolldown-runtime-hePW80VL.js); thư viện biểu đồ ở assets/TrendChartPlot-DLkFNesV.js
+precompress: 26 file JS/CSS, 2623.8 KiB → 711.8 KiB gzip; bỏ qua 6
+
+> mk-ddc-24-frontend@0.1.0 check:bundle-budget
+> python3 ../../scripts/verify_programming_bundle_budget.py --increment r3
+
+chunk      : programming-CKSZFH5J.js
+gzip       : 76.85 KiB  (78.70 kB, 78697 bytes)
+baseline   : 98.00 KiB
+ngân sách  : 165.00 KiB (R3)
+dư địa     : 88.15 KiB
+PASS: chunk `programming` trong ngân sách R3.

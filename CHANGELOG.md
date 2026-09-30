@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Changed — Mở rộng review giao diện và phương án cạnh tranh cho đơn vị tích hợp BMS (2026-09-29)
+
+- Nâng `REC-DDC-UI-REVIEW-20260929` và `REC-DDC-UI-PROPOSAL-20260929` lên 1.1; mở rộng 29 tuyến trang Dashboard/Monitor/I/O/Commissioning/Alarm/Trend/Scheduler/Modbus/Diagnostics/Hệ thống/Help. Baseline mới `origin/main@101d1fdf`; giữ finding và bằng chứng Programming 1.0 tại `265f1a8b`, không coi số đo cũ là phép kiểm mới.
+- Ghi UI-F06: mobile 390 px tràn document ở Modbus 527 px, Outputs 425 px, VP 532 px; UI-F07: hai mẫu null bị thống kê thành hai mẫu số 0. Ghi riêng UI-G01..04 về phiếu chạy thử, ngữ cảnh thiết bị, hồ sơ bàn giao và entry-point/capability; không gán demo lỗi đơn vị thành lỗi target.
+- Nghiên cứu nguồn chính thức 7 hãng/hệ sinh thái; thêm UI-P09..16, mapping CP-01..09, ownership refactor, target data/state và pilot cho nhóm tích hợp BMS. Thêm 9 concept SVG desktop/mobile/modal/state cùng gallery; dữ liệu minh họa, chưa thay visual authority/spec hoặc mở cổng implement/release.
+- Kiểm chứng mới: Chrome DevTools MCP 58 quan sát/29 tuyến desktop/mobile; 12 file Vitest/169 test hiện có PASS; test tái hiện UI-F07 1/1 FAIL đúng lỗi, bản sao lưu evidence; lint và build PASS, Programming 76,85 KiB gzip/165 KiB. Demo chưa có backend fixture cho schedules/history/frames: ghi lỗi 502 và giới hạn luồng; backend thật, target/HIL và usability đối thủ NOT RUN. Log, ảnh và số đo kiểm tài liệu/render nằm trong evidence mở rộng. Docs ISO PASS (quét 501 file Markdown, EXPECT khớp), render 9/9 SVG và diff check PASS. Candidate pin còn FAIL 15/17 do hai authority đã lệch trên baseline sạch; không tự ghim lại ngoài phạm vi review.
+
 ### Changed — Gói tích hợp IOP V3.0 R3 kèm sổ tay lệnh (2026-09-30)
 
 - **Phạm vi:** cập nhật bản bàn giao và ZIP từ commit nguồn `70e9f19980d2`, gồm 18 file; thêm sổ tay 16 CMD và liên kết tra cứu, giữ các tài liệu/byte V3.0 hiện hành.

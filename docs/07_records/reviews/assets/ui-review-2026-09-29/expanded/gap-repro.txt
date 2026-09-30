@@ -1,0 +1,32 @@
+
+ RUN  v4.1.10 /tmp/ddc-ui-expanded-20260929/apps/web-ui
+
+ ❯ src/features/operations/ExpandedReviewRepro.test.tsx (1 test | 1 failed) 26ms
+     × bỏ mẫu null khỏi số mẫu thống kê 22ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/operations/ExpandedReviewRepro.test.tsx > UI-F07: gap không được tính thành mẫu số 0 > bỏ mẫu null khỏi số mẫu thống kê
+AssertionError: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ src/features/operations/ExpandedReviewRepro.test.tsx:6:26
+      4|  it('bỏ mẫu null khỏi số mẫu thống kê', () => {
+      5|  const rows = buildTrendRows([{key:'UI-01',pointId:'UI-01',label:'Temp…
+      6|  expect(rows[0].samples).toBe(0)
+       |                          ^
+      7|  })
+      8| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:10:18
+   Duration  2.15s (transform 819ms, setup 0ms, import 1.13s, tests 26ms, environment 807ms)

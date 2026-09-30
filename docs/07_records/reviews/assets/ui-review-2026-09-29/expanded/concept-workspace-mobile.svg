@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="980" viewBox="0 0 390 980" role="img" aria-label="Bàn cấu hình và chạy thử"><title>Bàn cấu hình và chạy thử</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="390" height="980" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="390" height="64" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="18" y="27" font-size="16" font-weight="700" style="fill:#fff">DDC24  /  Tích hợp BMS</text>
+<text x="18" y="49" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa</text>
+<text x="18" y="96" font-size="21" font-weight="700" style="fill:#162c3d">Cấu hình &amp; chạy thử</text>
+<rect x="16" y="119" width="358" height="149" rx="10" fill="#e2f2f3" stroke="#cbd6df"/>
+<text x="32" y="149" font-size="18" font-weight="700" style="fill:#162c3d">DDC-01 / AHU-01</text>
+<text x="32" y="178" font-size="14" font-weight="400" style="fill:#162c3d">Đạt 5/8 • 1 lỗi • 2 chưa kiểm</text>
+<text x="32" y="204" font-size="14" font-weight="400" style="fill:#162c3d">Tiếp theo: xác nhận phản hồi quạt.</text>
+<rect x="32" y="222" width="324" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="44" y="250" font-size="14" font-weight="700" style="fill:#fff">Tiếp tục phiếu</text>
+<text x="18" y="305" font-size="19" font-weight="700" style="fill:#162c3d">Công việc của phiên</text>
+<rect x="16" y="328" width="358" height="106" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="362" font-size="18" font-weight="700" style="fill:#162c3d">Chuẩn bị</text>
+<text x="32" y="390" font-size="14" font-weight="400" style="fill:#162c3d">Đã kiểm kết nối, giờ, phiên bản</text>
+<rect x="16" y="449" width="358" height="106" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="483" font-size="18" font-weight="700" style="fill:#162c3d">Cấu hình</text>
+<text x="32" y="511" font-size="14" font-weight="400" style="fill:#162c3d">Mẫu AHU và ánh xạ đã kiểm</text>
+<rect x="16" y="570" width="358" height="106" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="604" font-size="18" font-weight="700" style="fill:#162c3d">Kiểm I/O</text>
+<text x="32" y="632" font-size="14" font-weight="400" style="fill:#162c3d">Còn 2 điểm chưa kiểm</text>
+<rect x="16" y="691" width="358" height="106" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="725" font-size="18" font-weight="700" style="fill:#162c3d">Bàn giao</text>
+<text x="32" y="753" font-size="14" font-weight="400" style="fill:#162c3d">Chờ đọc lại và ghi lỗi còn lại</text>
+<text x="18" y="866" font-size="14" font-weight="400" style="fill:#162c3d">Không có Internet vẫn dùng qua mạng LAN;</text>
+<text x="18" y="887" font-size="14" font-weight="400" style="fill:#162c3d">mất liên lạc controller sẽ chặn gửi lệnh.</text>
+<rect x="16" y="918" width="358" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="28" y="946" font-size="14" font-weight="700" style="fill:#162c3d">Xem thiết bị trong phiên</text>
+</svg>

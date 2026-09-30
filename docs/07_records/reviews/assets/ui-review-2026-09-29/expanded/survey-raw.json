@@ -1,0 +1,698 @@
+[
+  {
+    "route": "/",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"DDC24-AC\\nFAULT\\n\\nTrạng thái chưa rõ (mã demo)\\n\\nCRITICAL 1\\nHIGH 1\\nMEDIUM 0\\nLàm mới\\nXuất ảnh chụp\\nKết nối\\nTrực tuyến\\nDữ liệu mới nhất\\n0s\\nẢnh chụp\\n0s\\nCảnh báo chưa xác nhận\\n0\\nPhân hệ cũ nhất\\nBộ điều khiển · 0s\\nBộ điều khiển\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nI/O tại chỗ\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nModbus RTU\\nUNKNOWN\\nChưa cấu hình\\nsimulator · 0s\\nMạng\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nLịch sử dữ liệu\\nUNKNOWN\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nCẦN XỬ LÝ\\nTất cả cảnh báo\\nCRITICAL\\nUI-05 Filter Switch\\nUI-05 · 21:31:02 23/5/2025\\nXem chi tiết\\nHIGH\\nUI-02 Pressure High\\nUI-02 · 21:29:45 23/5/2025\\nXem chi tiết\\nMEDIUM\\nDUCT PRESSURE — STALE\\nUI-02 · 10:05:59 29/9/2026\\nXem chi tiết\\nMEDIUM\\nSPARE UNIVERSAL INPUT — STALE\\nUI-16 · 10:05:59 29/9/2026\\nXem chi tiết\\nTỔNG HỢP ĐIỂM\\nMonitor\\nLOẠI\\tGOOD\\tUNCERTAIN\\tBAD\\tSTALE\\tOFFLINE\\tTỔNG\\nDO\\t4\\t0\\t0\\t0\\t0\\t4\\nUI\\t14\\t1\\t0\\t1\\t0\\t16\\nAO\\t4\\t0\\t0\\t0\\t0\\t4\\nVirtual\\t5\\t0\\t0\\t0\\t0\\t5\\nAI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN\\nMở nhật ký hoạt động\\nKhông có lệnh tay nào đang giữ quyền\\n\\nMọi đầu ra đang do logic điều khiển và lịch vận hành quyết định. Đã đọc được 29 điểm — đây là kết luận từ dữ liệu đủ, không phải màn hình trống vì không đọc được gì.\\n\\nKHÔNG GIAN CỦA TÔI\\nQuản lý ghim\\nChưa ghim điểm nào\\n\\nGhim các điểm bạn theo dõi thường xuyên để chúng hiện ngay trên trang đầu.\\n\\nXU HƯỚNG NHANH\\nĐiểm 0/4\\nMở Trends\\nChưa có dữ liệu xu hướng trực tiếp\\n\\nChọn tối đa 4 điểm có giá trị số; biểu đồ bắt đầu khi authority trả về giá trị kèm mốc thời gian.\\n\\nHOẠT ĐỘNG GẦN ĐÂY\\nNgười dùng\\nHệ thống\\nChưa có thao tác nào của người dùng\",\"links\":[{\"text\":\"Tất cả cảnh báo\",\"url\":\"/alarms\"},{\"text\":\"Xem chi tiết\",\"url\":\"/alarms?alarm=AL-001\"},{\"text\":\"Xem chi tiết\",\"url\":\"/alarms?alarm=AL-002\"},{\"text\":\"Xem chi tiết\",\"url\":\"/monitor?point=UI-02\"},{\"text\":\"Xem chi tiết\",\"url\":\"/monitor?point=UI-16\"},{\"text\":\"Monitor\",\"url\":\"/monitor\"},{\"text\":\"DO\",\"url\":\"/monitor?kind=DO\"},{\"text\":\"UI\",\"url\":\"/monitor?kind=UI\"},{\"text\":\"AO\",\"url\":\"/monitor?kind=AO\"},{\"text\":\"Virtual\",\"url\":\"/monitor?kind=virtual\"},{\"text\":\"Mở nhật ký hoạt động\",\"url\":\"/activity\"}],\"buttons\":[{\"text\":\"Làm mới\",\"disabled\":false},{\"text\":\"Xuất ảnh chụp\",\"disabled\":false},{\"text\":\"Bộ điều khiển\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\",\"disabled\":false},{\"text\":\"I/O tại chỗ\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\",\"disabled\":false},{\"text\":\"Modbus RTU\\nUNKNOWN\\nChưa cấu hình\\nsimulator · 0s\",\"disabled\":false},{\"text\":\"Mạng\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\",\"disabled\":false},{\"text\":\"Lịch sử dữ liệu\\nUNKNOWN\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\",\"disabled\":false},{\"text\":\"Quản lý ghim\",\"disabled\":false},{\"text\":\"Điểm 0/4\",\"disabled\":false},{\"text\":\"Mở Trends\",\"disabled\":false},{\"text\":\"Người dùng\",\"disabled\":false},{\"text\":\"Hệ thống\",\"disabled\":false}]}\n```"
+        }
+      ]
+    }
+  },
+  {
+    "route": "/monitor?group=local",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/monitor?group=local\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Monitor I/O\\n\\nGiám sát trạng thái điểm I/O\\n\\nTỔNG SỐ ĐIỂM\\n29\\nUI 16 | DO 4 | AO 4\\nĐIỂM NHỊ PHÂN ĐANG ON\\n4\\n4/10 · 40%\\nĐIỂM UI/AO BÌNH THƯỜNG\\n23\\n92%\\nĐIỂM LỖI / MẤT TÍN HIỆU\\n2\\n7%\\nKhung nhìn\\n— Chưa có khung nhìn nào —\\nLưu khung nhìn\\nĐổi tên\\nXoá\\nLưu trên thiết bị theo tài khoản đang đăng nhập.\\nNguồn - Tất cả\\nI/O tại chỗ\\nĐiểm ảo\\nModbus RTU\\nThiết bị - Tất cả\\nChưa gán (29)\\nNhóm I/O - Tất cả\\nUI\\nDO\\nAO\\nẢo\\nModbus RTU\\nChất lượng - Tất cả\\nGood\\nUncertain\\nBad\\nStale\\nOffline\\nTrạng thái - Tất cả\\nĐang ép tay\\nĐang lỗi\\nMất liên lạc\\nGhi được\\nĐang ghi lịch sử\\nLàm mới\\nDO - DIGITAL OUTPUT (4)\\nĐIỂM\\nTÊN ĐIỂM\\nTRẠNG THÁI\\nTHỜI GIAN CẬP NHẬT\\nCÒN LẠI\\nDO-01\\nPUMP START\\nON\\n10:06:01\\nDO-02\\nFAN START\\nOFF\\n10:06:01\\nDO-03\\nVALVE OPEN\\nON\\n10:06:01\\nDO-04\\nALARM BUZZER\\nOFF\\n10:06:01\\nUI - UNIVERSAL INPUT (16)\\nĐIỂM\\nTÊN ĐIỂM\\nGIÁ TRỊ\\nĐƠN VỊ\\nTRẠNG THÁI\\nTREND\\nCẬP NHẬT\\nCÒN LẠI\\nUI-01\\nSUPPLY AIR TEMP\\n29.5\\nC\\nBình thường\\n10:06:01\\nUI-02\\nDUCT PRESSURE\\n9.4\\nbar\\nUNCERTAIN\\n10:06:01\\nUI-03\\nROOM HUMIDITY\\n50.7\\n%RH\\nBình thường\\n10:06:01\\nUI-04\\nOUTDOOR TEMP\\n18.6\\nC\\nBình thường\\n10:06:01\\nUI-05\\nFILTER SWITCH\\nON\\nBình thường\\n10:06:01\\nUI-06\\nFIRE ALARM CONTACT\\nOFF\\nBình thường\\n10:06:01\\nUI-07\\nDAMPER POTENTIOMETER\\n75.4\\n%\\nBình thường\\n10:06:01\\nUI-08\\nPULSE METER\\n125.6\\npulse\\nBình thường\\n10:06:01\\nUI-09\\nRETURN AIR TEMP\\n24.8\\nC\\nBình thường\\n10:06:01\\nUI-10\\nCO2 SENSOR\\n745.4\\nppm\\nBình thường\\n10:06:01\\nUI-11\\nCHILLED WATER TEMP\\n8.8\\nC\\nBình thường\\n10:06:01\\nUI-12\\nSUPPLY FAN STATUS\\nOFF\\nBình thường\\n10:06:01\\nUI-13\\nMOTION SENSOR\\nOFF\\nBình thường\\n10:06:01\\nUI-14\\nLIGHT LEVEL\\n69.4\\n%\\nBình thường\\n10:06:01\\nUI-15\\nWATER LEAK CONTACT\\nOFF\\nBình thường\\n10:06:01\\nUI-16\\nSPARE UNIVERSAL INPUT\\n1.7\\nSTA\",\"links\":[{\"text\":\"Xem vết audit của điểm này →\",\"url\":\"/activity?objectId=AO-01\"},{\"text\":\"Mở trong Trends →\",\"url\":\"/trends?points=AO-01\"}],\"buttons\":[{\"text\":\"Lưu khung nhìn\",\"disabled\":false},{\"text\":\"Đổi tên\",\"disabled\":true},{\"text\":\"Xoá\",\"disabled\":true},{\"text\":\"Làm mới\",\"disabled\":false},{\"text\":\"DO-01\\nPUMP START\\nON\\n10:06:01\",\"disabled\":false},{\"text\":\"\",\"disabled\":false},{\"text\":\"DO-02\\nFAN START\\nOFF\\n10:06:01\",\"disabled\":false},{\"text\":\"\",\"disabled\":false},{\"text\":\"DO-03\\nVALVE OPEN\\nON\\n10:06:01\",\"disabled\":false},{\"text\":\"\",\"disabled\":false},{\"text\":\"DO-04\\nALARM BUZZER\\nOFF\\n10:06:01\",\"disabled\":false},{\"text\":\"\",\"disabled\":false},{\"text\":\"UI-01\\nSUPPLY AIR TEMP\\n29.5\\nC\\nBình thường\\n10:06:01\",\"disabled\":false},{\"text\":\"UI-02\\nDUCT PRESSURE\\n9.4\\nbar\\nUNCERTAIN\\n10:06:01\",\"disabled\":false},{\"text\":\"UI-03\\nROOM HUMIDITY\\n50.7\\n%RH\\nBình thường\\n10:06:01\",\"disabled\":false},{\"text\":\"UI-04\\nOUTDOOR TEMP\\n18.6\\nC\\nBình thường\\n10:06:01\",\"disabled\":false},{\"text\":\"UI-05\\nFILTER SWITCH\\nON\\nBình thường\\n10:06:01\",\"disabled\":false},{\"text\":\"UI-06\\nFIRE ALARM CONTACT\\nOFF\\nBình thường\\n10:06:01\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/monitor?group=local."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/commissioning",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/commissioning\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nChạy thử\\nChạy thử\\n\\nGhi trực tiếp ra AO/DO qua core — mọi lệnh đều được ghi audit log\\n\\nTự nhả sau\\n1 min\\n5 min\\n15 min\\n30 min\\nTrả tất cả về tự động (0)\\n\\nCác lệnh trên trang này tác động trực tiếp lên cơ cấu chấp hành đang đấu nối: van, damper, contactor, biến tần. Chỉ dùng khi đã cô lập thiết bị hoặc đã báo cho người vận hành tại chỗ.\\n\\nĐiều kiện tiên quyết\\nLiên lạc với bộ điều khiển\\nCore đang trả lời\\nCó output để chạy thử\\n8 điểm AO/DO\\nĐủ quyền ghi\\nVai trò admin\\nKhông còn điểm kẹt ép tay từ phiên trước\\nMọi output đang thuộc điều khiển tự động\\nXem vết audit các lần chạy thử →\\nKiểm thử output\\nDO-01\\nPUMP START\\nGOOD\\nON\\nCore\\n10:06:01\\nGiá trị ghi\\n— chọn —\\nON\\nOFF\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nDO-02\\nFAN START\\nGOOD\\nOFF\\nCore\\n10:06:01\\nGiá trị ghi\\n— chọn —\\nON\\nOFF\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nDO-03\\nVALVE OPEN\\nGOOD\\nON\\nCore\\n10:06:01\\nGiá trị ghi\\n— chọn —\\nON\\nOFF\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nDO-04\\nALARM BUZZER\\nGOOD\\nOFF\\nCore\\n10:06:01\\nGiá trị ghi\\n— chọn —\\nON\\nOFF\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nAO-01\\nVFD SPEED\\nGOOD\\n58.9 %\\nCore\\n10:06:01\\nGiá trị ghi (%)\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nAO-02\\nHEATING VALVE\\nGOOD\\n23.7 %\\nCore\\n10:06:01\\nGiá trị ghi (%)\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nAO-03\\nCOOLING VALVE\\nGOOD\\n20.0 %\\nCore\\n10:06:01\\nGiá trị ghi (%)\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nAO-04\\nDAMPER POSITION\\nGOOD\\n63.6 %\\nCore\\n10:06:01\\nGiá trị ghi (%)\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\",\"links\":[{\"text\":\"Tổng quan\",\"url\":\"/\"},{\"text\":\"Xem vết audit các lần chạy thử →\",\"url\":\"/activity?action=commissioning_test\"}],\"buttons\":[{\"text\":\"Trả tất cả về tự động (0)\",\"disabled\":true},{\"text\":\"DO-01\\nPUMP START\\nGOOD\\nON\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false},{\"text\":\"Trả về tự động\",\"disabled\":true},{\"text\":\"DO-02\\nFAN START\\nGOOD\\nOFF\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false},{\"text\":\"Trả về tự động\",\"disabled\":true},{\"text\":\"DO-03\\nVALVE OPEN\\nGOOD\\nON\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false},{\"text\":\"Trả về tự động\",\"disabled\":true},{\"text\":\"DO-04\\nALARM BUZZER\\nGOOD\\nOFF\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false},{\"text\":\"Trả về tự động\",\"disabled\":true},{\"text\":\"AO-01\\nVFD SPEED\\nGOOD\\n58.9 %\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false},{\"text\":\"Trả về tự động\",\"disabled\":true},{\"text\":\"AO-02\\nHEATING VALVE\\nGOOD\\n23.7 %\\nCore\\n10:06:01\",\"disabled\":false},{\"text\":\"Chạy thử\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/commissioning."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/inputs",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/inputs\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nCấu hình I/O\\nInputs\\nCấu hình UI Inputs\\n\\n16 Universal Input tự nhận dạng, không jumper\\n\\nTổng quan\\nSao chép sang kênh khác\\nLưu\\nUI Channels\\nUI-01\\nSUPPLY AIR TEMP\\nUI-02\\nDUCT PRESSURE\\nUI-03\\nROOM HUMIDITY\\nUI-04\\nOUTDOOR TEMP\\nUI-05\\nFILTER SWITCH\\nUI-06\\nFIRE ALARM CONTACT\\nUI-07\\nDAMPER POTENTIOMETER\\nUI-08\\nPULSE METER\\nUI-09\\nRETURN AIR TEMP\\nUI-10\\nCO2 SENSOR\\nUI-11\\nCHILLED WATER TEMP\\nUI-12\\nSUPPLY FAN STATUS\\nUI-13\\nMOTION SENSOR\\nUI-14\\nLIGHT LEVEL\\nUI-15\\nWATER LEAK CONTACT\\nUI-16\\nSPARE UNIVERSAL INPUT\\nUI-01 - SUPPLY AIR TEMP\\nTAG\\nKÊNH\\nLABEL\\nBật kênh\\nGOOD\\nGIÁ TRỊ\\n29.0 C\\nCập nhật: 0s trước\\nĐiện & Cảm biến\\nScaling & Đơn vị\\nXử lý tín hiệu\\nHiệu chuẩn\\nCảnh báo & Lưu trữ\\nChẩn đoán\\nElectrical Mode\\nKhông dùng\\nĐiện áp 0-10V\\nĐiện áp/dòng (2-10V hoặc 4-20mA)\\nĐiện trở\\nchưa xác nhận\\nTiếp điểm khô\\nBiến trở\\nchưa xác nhận\\nÁnh sáng/chuyển động\\nchưa xác nhận\\nĐếm xung\\nchưa xác nhận\\n\\nGợi ý theo bảng đấu nối field device: NTC10K/NTC20K → Điện trở · 4-20mA hoặc 2-10V → Điện áp/dòng · 0-10V → Điện áp 0-10V · dry-contact → Tiếp điểm khô.\\n\\nSensor Profile\\nNTC10k\\nNTC20k\\n\\nPT100/PT1000 chưa lắp trên Rev A (ADR-010) — không chọn được ở đây.\\n\\nXem theo thanh ghi (u0-u7)\\nLưu\",\"links\":[{\"text\":\"Tổng quan\",\"url\":\"/\"}],\"buttons\":[{\"text\":\"Tổng quan\",\"disabled\":false},{\"text\":\"Sao chép sang kênh khác\",\"disabled\":false},{\"text\":\"Lưu\",\"disabled\":false},{\"text\":\"UI-01\\nSUPPLY AIR TEMP\",\"disabled\":false},{\"text\":\"UI-02\\nDUCT PRESSURE\",\"disabled\":false},{\"text\":\"UI-03\\nROOM HUMIDITY\",\"disabled\":false},{\"text\":\"UI-04\\nOUTDOOR TEMP\",\"disabled\":false},{\"text\":\"UI-05\\nFILTER SWITCH\",\"disabled\":false},{\"text\":\"UI-06\\nFIRE ALARM CONTACT\",\"disabled\":false},{\"text\":\"UI-07\\nDAMPER POTENTIOMETER\",\"disabled\":false},{\"text\":\"UI-08\\nPULSE METER\",\"disabled\":false},{\"text\":\"UI-09\\nRETURN AIR TEMP\",\"disabled\":false},{\"text\":\"UI-10\\nCO2 SENSOR\",\"disabled\":false},{\"text\":\"UI-11\\nCHILLED WATER TEMP\",\"disabled\":false},{\"text\":\"UI-12\\nSUPPLY FAN STATUS\",\"disabled\":false},{\"text\":\"UI-13\\nMOTION SENSOR\",\"disabled\":false},{\"text\":\"UI-14\\nLIGHT LEVEL\",\"disabled\":false},{\"text\":\"UI-15\\nWATER LEAK CONTACT\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/inputs."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/outputs",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/outputs\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nCấu hình I/O\\nOutputs\\nCấu hình Outputs\\n\\n4 AO + 4 DO theo hook backend hiện có\\n\\nTổng quan\\nLưu\\nKênh Output\\nAO\\nAO-01\\nVFD Speed\\nAO-02\\nHeating Valve\\nAO-03\\nCooling Valve\\nAO-04\\nDamper Position\\nDO\\nDO-01\\nPump Start\\nDO-02\\nFan Start\\nDO-03\\nValve Open\\nDO-04\\nAlarm Buzzer\\nAO-01 - VFD Speed\\n\\nAnalog Output - signal type, safe value, manual force\\n\\nSummary\\nWizard\\nAdvanced\\nTAG\\nCHANNEL\\nLABEL\\nMODE\\n0-10V\\nRAW\\n5.7 V\\n\\nAO / AO-01\\n\\nVFD Speed\\nOFF\\nInterval\\n15s\\nRetention\\n180 days\\nGeneration\\n1\\nLogging policy control\\nConfigure\\n\\nCapacity: 0 KiB reserved of 2.0 GiB; 2.0 GiB free.\\n\\nDữ liệu live\\nĐặt lại\\nGIÁ TRỊ\\n571 %\\n% MỞ\\n57.0 %\\nRAW OUTPUT\\n5.7 V\\nNHỎ NHẤT\\n571 %\\nLỚN NHẤT\\n571 %\\nTRUNG BÌNH\\n571 %\\nXu hướng live\\nAO-01\\n10:06:03\\n0\\n150\\n300\\n450\\n600\\nHistorical values with quality, source, and storage tier\\nTime\\tVFD Speed\\tRaw\\n10:06:03\\t\\n571 %\\n— · — · —\\n\\t\\n5.7 V\\nManual output\\nForce\\nGỡ\",\"links\":[{\"text\":\"Tổng quan\",\"url\":\"/\"}],\"buttons\":[{\"text\":\"Tổng quan\",\"disabled\":false},{\"text\":\"Lưu\",\"disabled\":false},{\"text\":\"AO-01\\nVFD Speed\",\"disabled\":false},{\"text\":\"AO-02\\nHeating Valve\",\"disabled\":false},{\"text\":\"AO-03\\nCooling Valve\",\"disabled\":false},{\"text\":\"AO-04\\nDamper Position\",\"disabled\":false},{\"text\":\"DO-01\\nPump Start\",\"disabled\":false},{\"text\":\"DO-02\\nFan Start\",\"disabled\":false},{\"text\":\"DO-03\\nValve Open\",\"disabled\":false},{\"text\":\"DO-04\\nAlarm Buzzer\",\"disabled\":false},{\"text\":\"Summary\",\"disabled\":false},{\"text\":\"Wizard\",\"disabled\":false},{\"text\":\"Advanced\",\"disabled\":false},{\"text\":\"Configure\",\"disabled\":false},{\"text\":\"Đặt lại\",\"disabled\":false},{\"text\":\"Force\",\"disabled\":false},{\"text\":\"Gỡ\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/outputs."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/virtual-points",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/virtual-points\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nCấu hình I/O\\nĐiểm ảo\\nVirtual Points\\n\\nVP backend-only, chỉ hiện khi đã tạo.\\n\\nTạo VP\\nNhân bản\\nTổng quan\\nLưu\\nOFF\\n3/256\\n1S DIAGNOSTIC\\n2/128\\n100MS DIAGNOSTIC\\n0/64\\n10MS DIAGNOSTIC\\n0/16\\nVP đã tạo\\nVP1\\nRoom Setpoint\\nFLOAT\\nVP2\\nOccupancy Request\\nBOOLEAN\\nVP3\\nMode Index\\nINTEGER\\nVP4\\nMode Text\\nSTRING\\nVP5\\nLast Change\\nDATETIME\\nVP1 - Room Setpoint\\n\\nFLOAT | 1000ms diagnostic log\\n\\nSummary\\nWizard\\nAdvanced\\nXoá\\nTag\\nKênh\\nSlot Core\\nLabel\\nSignal Type\\nBoolean\\nInteger\\nFloat\\nString\\nDateTime\\nMultistate\\nEnabled\\nWritable\\nSau khi khởi động lại\\nGiữ giá trị cuối\\nVề giá trị khởi tạo\\n\\nVP / VP1\\n\\nRoom Setpoint\\nOFF\\nInterval\\n15s\\nRetention\\n180 days\\nGeneration\\n1\\nLogging policy control\\nConfigure\\n\\nDatabase logging is independent from the Virtual Point diagnostic log settings.\\n\\nCapacity: 0 KiB reserved of 2.0 GiB; 2.0 GiB free.\\n\\nLive Data\\nĐặt lại\\nVALUE\\n24.0 degC\\nQUALITY\\ngood\\nNHỎ NHẤT\\n24.0 2 = °C / °F Độ C hoặc độ F\\nLỚN NHẤT\\n24.0 2 = °C / °F Độ C hoặc độ F\\nTRUNG BÌNH\\n24.0 2 = °C / °F Độ C hoặc độ F\\nĐƠN VỊ\\n2 = °C / °F Độ C hoặc độ F\\nDIAGNOSTIC LOG\\n1000ms\\nBiểu đồ trực tiếp\\nVP1\\n10:06:04\\n0\\n6\\n12\\n18\\n24\\nHistorical values with quality, source, and storage tier\\nTime\\tVP1\\n10:06:04\\t\\n24 2 = °C / °F Độ C hoặc độ F\\n— · — · —\\nWrite Value\\nValue\\nWrite\",\"links\":[{\"text\":\"Tổng quan\",\"url\":\"/\"}],\"buttons\":[{\"text\":\"Tạo VP\",\"disabled\":false},{\"text\":\"Nhân bản\",\"disabled\":false},{\"text\":\"Tổng quan\",\"disabled\":false},{\"text\":\"Lưu\",\"disabled\":false},{\"text\":\"VP1\\nRoom Setpoint\\nFLOAT\",\"disabled\":false},{\"text\":\"VP2\\nOccupancy Request\\nBOOLEAN\",\"disabled\":false},{\"text\":\"VP3\\nMode Index\\nINTEGER\",\"disabled\":false},{\"text\":\"VP4\\nMode Text\\nSTRING\",\"disabled\":false},{\"text\":\"VP5\\nLast Change\\nDATETIME\",\"disabled\":false},{\"text\":\"Summary\",\"disabled\":false},{\"text\":\"Wizard\",\"disabled\":false},{\"text\":\"Advanced\",\"disabled\":false},{\"text\":\"Xoá\",\"disabled\":false},{\"text\":\"Configure\",\"disabled\":false},{\"text\":\"Đặt lại\",\"disabled\":false},{\"text\":\"Write\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/virtual-points."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/user-parameters",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/user-parameters\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tham số người dùng\\nDEMO\\n\\nMock - chưa nối backend\\n\\nLưu\\nTham số người dùng\\nSummary\\nWizard\\nAdvanced\\nGhi chú\\nLưu\",\"links\":[],\"buttons\":[{\"text\":\"Lưu\",\"disabled\":false},{\"text\":\"Summary\",\"disabled\":false},{\"text\":\"Wizard\",\"disabled\":false},{\"text\":\"Advanced\",\"disabled\":false},{\"text\":\"Lưu\",\"disabled\":false}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/user-parameters."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/alarms",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/alarms\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Cảnh báo\\n\\nTheo dõi, lọc và xác nhận cảnh báo\\n\\n3\\nĐang hoạt động\\n0\\nChưa xác nhận\\n0\\nShelved\\n5\\nĐang hiển thị\\nCHỈ SỐ HỆ CẢNH BÁO (ISA-18.2)\\n10m\\n1h\\n24h\\n7d\\nCảnh báo mới / 10 phút\\n0\\nNgưỡng ISA-18.2: > 10\\nTrung bình / giờ\\n0.00\\nTổng trong cửa sổ\\n0\\nĐang bị treo\\n0\\nCẢNH BÁO LẶP NHIỀU NHẤT\\n\\nKhông có cảnh báo nào trong cửa sổ này.\\n\\nMục lặp nhiều thường là ngưỡng đặt sát quá hoặc thiếu vùng trễ, không phải một sự cố lặp lại.\\n\\ntất cả 5\\nactive 3\\nchưa xác nhận 0\\nđã xác nhận 3\\ncleared 0\\nshelved 0\\nXoá lọc\\n21:31:02 23/5/2025\\nCRITICAL\\nUI-05 Filter Switch\\nTRIP HH 1\\nUI-05 · ON · trip=HH threshold=1 current=ON (High-high); occurrence=1\\nXem điểm nguồn →\\nXem xu hướng quanh thời điểm bật →\\nAck\\nOff\\n21:29:45 23/5/2025\\nHIGH\\nUI-02 Pressure High\\nTRIP H 8\\nUI-02 · 9.8 bar · trip=H threshold=8 current=9.8 (High); occurrence=1\\nXem điểm nguồn →\\nXem xu hướng quanh thời điểm bật →\\nAck\\nOff\\n21:27:18 23/5/2025\\nINFO\\nDO-03 Pump Start\\nDO-03 · ON · Output switched on\\nXem điểm nguồn →\\nXem xu hướng quanh thời điểm bật →\\nAcked\\nOff\\nReturn\\n21:25:03 23/5/2025\\nINFO\\nSYSTEM\\nSYSTEM · admin · admin signed in\\nAcked\\nOff\\n21:20:11 23/5/2025\\nINFO\\nCOMMUNICATION\\nSYSTEM · OK · Modbus RTU connected\\nAcked\\nOff\\nLịch sử cảnh báo\\n\\n20 bản ghi mới nhất khớp bộ lọc\\n\\nMở toàn bộ\\nTải lại\\nText\\nAlarm\\nall\\nAL-001 - UI-05 Filter Switch\\nAL-002 - UI-02 Pressure High\\nAL-003 - DO-03 Pump Start\\nAL-004 - SYSTEM\\nAL-005 - COMMUNICATION\\nAL-006 - UI-10 CO2 Sensor\\nAL-007 - AO-02 Heating Valve\\nAL-008 - UI-15 Water Leak Contact\\nALM-001 - Supply air temperature\\nALM-002 - Duct pressure range\\nALM-003 - Fan runtime hours\\nALM-004 - Outdoor temperature spare\\nName\\nall\\nAO-02 Heating Valve\\nCOMMUNICATION\\nDO-03 Pump Start\\nDuct pressure range\\nFan runtime hours\\nOutdoor temperature spare\\nSupply air temperature\\nSYSTEM\\nUI-02 Pressure High\\nUI-05 Filter Switch\\nUI-10 CO2 Sensor\\nUI-15 Water Leak Contact\\nFrom\\nTo\\nSeverity\\nall\\ncritical\\nhigh\\nmedium\\nlow\\ninfo\\nstarted\\nacked\\nreturned\\nended\\nsetting_created\\nsetting_changed\\nsetting_deleted\\nstatus: all\\nactive\\nacked\\nnormal\\ncleared\\nunack\\nXoá lọc\\n19:44:08 23/5/2025\\nACKED\\nHIGH\\nUI-15 Water Leak Contact\\nUI-15 / OFF / Leak input acknowledged durin\"}\n```\nPage navigated to http://127.0.0.1:4193/alarms."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/alarms/history",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/alarms/history\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nCảnh báo\\nLịch sử\\nLịch sử cảnh báo\\n\\nToàn bộ bản ghi cảnh báo\\n\\nAlarm log\\nLịch sử cảnh báo\\n\\nToàn bộ bản ghi khớp bộ lọc\\n\\nTải lại\\nText\\nAlarm\\nall\\nAL-001 - UI-05 Filter Switch\\nAL-002 - UI-02 Pressure High\\nAL-003 - DO-03 Pump Start\\nAL-004 - SYSTEM\\nAL-005 - COMMUNICATION\\nAL-006 - UI-10 CO2 Sensor\\nAL-007 - AO-02 Heating Valve\\nAL-008 - UI-15 Water Leak Contact\\nALM-001 - Supply air temperature\\nALM-002 - Duct pressure range\\nALM-003 - Fan runtime hours\\nALM-004 - Outdoor temperature spare\\nName\\nall\\nAO-02 Heating Valve\\nCOMMUNICATION\\nDO-03 Pump Start\\nDuct pressure range\\nFan runtime hours\\nOutdoor temperature spare\\nSupply air temperature\\nSYSTEM\\nUI-02 Pressure High\\nUI-05 Filter Switch\\nUI-10 CO2 Sensor\\nUI-15 Water Leak Contact\\nFrom\\nTo\\nSeverity\\nall\\ncritical\\nhigh\\nmedium\\nlow\\ninfo\\nstarted\\nacked\\nreturned\\nended\\nsetting_created\\nsetting_changed\\nsetting_deleted\\nstatus: all\\nactive\\nacked\\nnormal\\ncleared\\nunack\\nXoá lọc\\n19:44:08 23/5/2025\\nACKED\\nHIGH\\nUI-15 Water Leak Contact\\nUI-15 / OFF / Leak input acknowledged during inspection\\noperator2\\n19:46:32 23/5/2025\\n20:21:49 23/5/2025\\nCLEARED\\nLOW\\nAO-02 Heating Valve\\nAO-02 / 0% / Output returned to normal range\\nadmin\\n20:39:20 23/5/2025\\n20:54:12 23/5/2025\\nCLEARED\\nMEDIUM\\nUI-10 CO2 Sensor\\nUI-10 / 1240 ppm / CO2 returned below threshold\\noperator1\\n21:05:44 23/5/2025\\n21:20:11 23/5/2025\\nACKED\\nINFO\\nCOMMUNICATION\\nSYSTEM / OK / Modbus RTU connected\\n-\\n21:25:03 23/5/2025\\nACKED\\nINFO\\nSYSTEM\\nSYSTEM / admin / admin signed in\\n-\\n21:27:18 23/5/2025\\nACKED\\nINFO\\nDO-03 Pump Start\\nDO-03 / ON / Output switched on\\n-\\n21:29:45 23/5/2025\\nACTIVE\\nHIGH\\nUI-02 Pressure High\\nUI-02 / 9.8 bar / trip=H threshold=8 current=9.8 (High); occurrence=1\\n-\\n21:31:02 23/5/2025\\nACTIVE\\nCRITICAL\\nUI-05 Filter Switch\\nUI-05 / ON / trip=HH threshold=1 current=ON (High-high); occurrence=1\\n-\"}\n```\nPage navigated to http://127.0.0.1:4193/alarms/history."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/alarm-settings",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/alarm-settings\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nCảnh báo\\nCấu hình\\nCấu hình cảnh báo\\n\\nThực thể cảnh báo ADR-013, nhiều nguồn, lưu qua backend API\\n\\nTải lại\\nLưu\\nAlarm entities\\n\\n4/64\\n\\nThêm\\nALM-001\\nSupply air temperature\\nON\\nALM-002\\nDuct pressure range\\nON\\nALM-003\\nFan runtime hours\\nON\\nALM-004\\nOutdoor temperature spare\\nOFF\\nALM-001 - Supply air temperature\\n\\n1 - Ngưỡng cao/thấp của ngõ vào\\n\\nXoá\\nID\\nNHÃN\\nLOẠI CẢNH BÁO\\n0 - Tắt\\n1 - Ngưỡng cao/thấp của ngõ vào\\n3 - Số giờ chạy tích luỹ\\n2 - Lệch khỏi giá trị đặt\\n4 - Giám sát trạng thái quạt\\n5 - Giám sát ngõ ra số\\n6 - Giám sát ngõ ra analog\\n7 - Giám sát chuỗi PI\\nMỨC ƯU TIÊN\\nLOW · theo dõi, không cần xử lý ngay\\nMEDIUM · xử lý trong ca\\nHIGH · xử lý ngay\\nCRITICAL · nguy cấp, dừng việc khác để xử lý\\nFLEXIBLE · mức tuỳ theo luật bên dưới\\nCÁCH XOÁ CẢNH BÁO\\nTự xoá khi điều kiện hết\\nNgười vận hành phải xác nhận\\nTRỄ KÍCH HOẠT (GIÂY)\\nĐiều kiện phải giữ liên tục đủ số giây này thì cảnh báo mới bật.\\nBật cảnh báo\\nNguồn kích hoạt\\n\\nCảnh báo bật khi BẤT KỲ nguồn nào thoả điều kiện. Mã điểm được suy ra từ loại nguồn và số kênh.\\n\\nThêm nguồn\\nLOẠI NGUỒN\\nUI\\nAO\\nDO\\nVP\\nMB_RTU\\nKÊNH\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n10\\n11\\n12\\n13\\n14\\n15\\n16\\nMÃ ĐIỂM\\nXoá\\nTham số\\nRẤT CAO (HH)\\nCAO (H)\\nTHẤP (L)\\nRẤT THẤP (LL)\\nVÙNG TRỄ (HYSTERESIS)\\nGiá trị phải quay lại quá ngưỡng đúng khoảng này thì cảnh báo mới tự xoá — chống rung quanh ngưỡng.\\nThử luật trước khi lưu\\n\\nChạy bằng chính engine cảnh báo của bộ điều khiển. Không ghi gì xuống thiết bị và không đụng cấu hình đang lưu.\\n\\nChạy thử\\nCHUỖI GIÁ TRỊ THỬ\\n8 giá trị, phân tách bằng dấu phẩy hoặc khoảng trắng.\\nCÁCH NHAU (GIÂY)\\nƯớc lượng theo lịch sử thật\\n\\nChạy luật đang soạn trên lịch sử của UI-01 để biết nó sẽ bật bao nhiêu lần mỗi ngày.\\n\\nSố ngày\\nƯớc lượng\\nCông bố lên BACnet (Event Enrollment)\\n2/8\\nNOTIFICATION CLASS\\nLớp thông báo BACnet (1-4) quyết định thiết bị giám sát nào nhận sự kiện này.\\n#1\\nTrạng thái cấu hình\\nĐÃ TẢI\\nHỢP LỆ\\n3 ĐANG BẬT\\n2/8 BACnet\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/alarm-settings."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/trends?points=UI-01",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/trends\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Xu hướng\\n\\nTrend Log dùng unified historian backend với trạng thái gap/partial rõ ràng.\\n\\nKhung nhìn\\n— Chưa có khung nhìn nào —\\nLưu khung nhìn\\nĐổi tên\\nXoá\\nBộ điểm + khoảng thời gian, lưu trên thiết bị theo tài khoản.\\nSeries\\nThêm trend\\nUI-01\\nSUPPLY AIR TEMP\\n33.7 C\\nXu hướng analog - 30 phút\\nDải min–max\\nXuất CSV\\nDấu sự kiện\\nAuto\\n30 phút\\n1 giờ\\n6 giờ\\n24 giờ\\nUI-01\\nTừ (giờ địa phương Asia/Saigon)\\nĐến (giờ địa phương Asia/Saigon)\\nÁp dụng tùy chọn\\nÔ chọn dùng giờ địa phương (Asia/Saigon); biểu đồ và bảng bên dưới hiển thị theo UTC.\\nPARTIAL\\nHistory is partial\\n\\nLegacy query vẫn authoritative; unified Trends chờ activation/cutover marker.\\n\\n1 history gap reported.\\n\\nGap details (1)\\n02:36:27\\n02:43:57\\n02:51:27\\n02:58:57\\n03:06:27\\nHistorical values with quality, source, and storage tier\\nTime (UTC)\\tUI-01 - SUPPLY AIR TEMP\\n02:36:27 29/9/2026\\t\\nNo value C\\nGAP · legacy_query_gap_evidence_unavailable · —\\n\\n03:06:27 29/9/2026\\t\\nNo value C\\nGAP · legacy_query_gap_evidence_unavailable · —\\nThống kê series đang hiển thị\\nTREND\\tGIÁ TRỊ HIỆN TẠI\\tGIÁ TRỊ TB\\tGIÁ TRỊ MIN\\tGIÁ TRỊ MAX\\tĐƠN VỊ\\tMẪU\\tHIỂN THỊ\\nUI-01 - SUPPLY AIR TEMP\\t0\\t0\\t0\\t0\\tC\\t2\\t\\nON\"}\n```\nPage navigated to http://127.0.0.1:4193/trends."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/scheduler",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/scheduler\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nLịch vận hành\\nLịch vận hành\\n\\nLịch tuần · ngoại lệ · publish có kiểm chứng\\n\\nKhông tải được danh sách lịch\\n\\n502 Bad Gateway\\n\\nThử lại\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/scheduler."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/scheduler/runtime",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/scheduler/runtime\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nLịch vận hành\\nTrạng thái chạy\\nKhông tải được trạng thái lịch\\n\\n502 Bad Gateway\\n\\nThử lại\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/scheduler/runtime."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nModbus RTU\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Tổng quan\\n\\nGiám sát trạng thái các cổng RS485 và thiết bị trường Modbus RTU. (Cập nhật lúc 10:06:30 AM)\\n\\nLàm mới\\nTự động ⟳ 5s ON\\niobus chưa publish telemetry lần nào. Các số đo runtime bên dưới hiện \\\"—\\\" — đó là chưa biết, không phải bằng 0.\\nTổng Device\\n0\\nOnline\\n—\\nOffline\\nXem danh sách →\\n—\\nLỗi cấu hình\\n0\\nChưa có bus RS485 nào được cấu hình.\\nSự kiện giao tiếp gần đây\\nXem tất cả diagnostics →\\nThời gian\\tBus\\tDevice ID\\tSự kiện\\nChưa quan sát được lần chuyển trạng thái nào.\\nCấu trúc Bus → Thiết bị → Point\\nTham số serial (baud/parity/stop bits) thuộc bus, không thuộc thiết bị.\\n\\nChưa cấu hình bus hoặc thiết bị Modbus RTU nào.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/ports",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/ports\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nModbus RTU\\nBus / Cổng\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Cổng RS-485\\n\\nKhung truyền thuộc về sợi dây, không thuộc thiết bị. Mỗi cổng cấu hình và áp riêng; mọi thiết bị trên cổng tự động dùng theo.\\n\\nBoard không khai báo cổng RS-485 nào.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/ports."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/devices",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/devices\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nModbus RTU\\nThiết bị\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Quản lý Thiết bị (Devices)\\n\\nQuản lý vòng đời thiết bị trường Modbus RTU, thông số bus/serial và chu kỳ poll.\\n\\nThêm thiết bị mới\\nDEVICE ID\\nTÊN THIẾT BỊ\\nCỔNG RS-485\\nRS485-1 (/dev/rs485-1)\\nRS485-2 (/dev/rs485-2)\\nKhung truyền kế thừa từ cổng đã chọn ·\\nSửa ở trang Cổng RS-485\\nSLAVE ID\\nCHU KỲ POLL (MS)\\nTIMEOUT (MS)\\nSỐ LẦN PHÁT LẠI\\nLỖI LIÊN TIẾP ⇒ OFFLINE\\nGhi nhiều coil một lần (FC15)\\n\\nCác coil liền kề đổi cùng lúc được ghi bằng MỘT lệnh FC15 thay vì mỗi coil một lệnh FC05 — ví dụ 8 relay của một module thành 1 giao dịch. Chỉ bật khi datasheet thiết bị có FC15 (0x0F); thiết bị không hỗ trợ sẽ từ chối mọi lệnh ghi đã gom. Điểm bật xác nhận sau khi ghi vẫn được ghi riêng từng coil.\\n\\nKích hoạt (Enabled)\\nThêm thiết bị mới\\nTÌM\\nCỔNG\\nTất cả cổng\\nRS485-1\\nRS485-2\\nLIÊN LẠC\\nTất cả trạng thái\\nĐang liên lạc\\nMất liên lạc\\nChưa liên lạc lần nào\\n0 thiết bị\\nID\\tTên hiển thị\\tRS485 Port\\tSlave\\tPoll / Timeout / Phát lại\\tOffline Params\\tLiên lạc\\tThử kết nối\\tTrạng thái\\tThao tác\\n\\nChưa có thiết bị Modbus RTU nào.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/devices."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/points",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/points\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nModbus RTU\\nĐiểm\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Quản lý Point\\n\\nÁnh xạ thanh ghi Modbus RTU sang Point Table của Core. Mỗi lần lưu đều validate, tăng revision và áp cấu hình có rollback.\\n\\nThêm Point mới\\nPOINT ID\\nTHIẾT BỊ\\nChọn thiết bị\\nTAG NAME\\nTÊN HIỂN THỊ\\nLOẠI THANH GHI\\nCoil\\nDiscrete Input\\nInput Register\\nHolding Register\\nXÁC NHẬN SAU KHI GHI\\nChỉ dùng được với điểm ghi được\\nNHÓM POLL\\nNhanh\\nBình thường\\nChậm\\nNGƯỠNG STALE (MS)\\nQUY ƯỚC ĐỊA CHỈ\\nOffset protocol (0-based)\\nTham chiếu datasheet (4xxxx…)\\nĐỊA CHỈ THANH GHI\\n\\nOffset protocol 0 · datasheet 40001\\n\\nKIỂU DỮ LIỆU\\nbool\\nint16\\nuint16\\nint32\\nuint32\\nfloat32\\nTHỨ TỰ BYTE\\nBig-endian byte\\nLittle-endian byte\\nTHỨ TỰ WORD\\nHigh word → Low word\\nLow word → High word\\nHỆ SỐ NHÂN\\nBÙ (OFFSET)\\nĐƠN VỊ\\nQUYỀN ĐỌC/GHI\\nRead\\nRead/Write\\nGIÁ TRỊ MẶC ĐỊNH\\nGIÁ TRỊ AN TOÀN\\nKích hoạt (Enabled)\\nThêm Point\\nDấu chân register\\nholding_register 0 (1 register)\\nMẫu thô\\tGiá trị quy đổi\\n0\\t0\\n1\\t1\\n100\\t100\\n1000\\t1000\\nNhập / Xuất danh sách Point\\nXuất CSV\\nXuất JSON\\nNhập file…\\nFile nhập vào bản nháp; bấm \\\"Áp dụng\\\" ở băng trạng thái để phát xuống thiết bị.\\nPoint ID / Tag\\tTên\\tRegister\\tKiểu / endian\\tScale + offset\\tQuality\\tR/W\\tThao tác\\n\\nChưa có Modbus RTU Point nào.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/points."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/mapping",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/mapping\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nModbus RTU\\nÁnh xạ\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Mapping\\n\\nBảng ánh xạ Point → register của bản nháp, kèm lỗi chặn apply và ước lượng tải từng bus.\\n\\nTất cả bus\\nLàm mới\\nBảng ánh xạ register\\nPoint ID\\tTag\\tBus / Slave\\tVùng register\\tKiểu\\tR/W\\tTrạng thái\\nChưa có Point nào trong bản nháp.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/mapping."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/diagnostics",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/diagnostics\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nModbus RTU\\nChẩn đoán\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Diagnostics\\n\\nBộ đếm CRC / timeout / phát lại theo từng slave, lấy trực tiếp từ telemetry iobus. (Cập nhật lúc 10:06:34 AM)\\n\\nLàm mới\\nTự động ⟳ 5s ON\\nCRC / timeout / retry diagnostics\\nThiết bị\\tBus / Slave\\tLiên lạc\\tPoll / lỗi\\tTimeout\\tCRC\\tPhát lại\\tGhi lỗi\\tGhi bị bỏ\\tException\\tLỗi liên tiếp\\n\\nChưa có telemetry Modbus RTU từ iobus.\\n\\nKhung truyền gần nhất\\n\\nGhi lại giao dịch mà chu kỳ quét bình thường đã thực hiện — màn hình này không tự phát gì ra bus.\\n\\nTải lại\\nTheo dõi liên tục\\n\\n502 Bad Gateway\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/diagnostics."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/diagnostics",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/diagnostics\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nChẩn đoán\\nChẩn đoán\\n\\nSố đo hệ thống, dịch vụ và hạ tầng. Metric không có nguồn thật hiện dấu — thay vì một con số đoán.\\n\\nSao chép gói chẩn đoán\\nSỨC KHOẺ THEO PHÂN HỆ\\ncontroller\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nlocal_io\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nmodbus\\nUNKNOWN\\nChưa cấu hình\\nNguồn: simulator · 1s\\nnetwork\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nhistorian\\nUNKNOWN\\ndemo\\nNguồn: simulator · 1s\\nCPU\\n23%\\n1.51 GHz\\nBỘ NHỚ\\n48%\\n3100 MB / 8192 MB\\nNHIỆT ĐỘ\\n38.6°C\\nUPTIME\\n12d 04:33:40\\nDỊCH VỤ\\ncore\\nOK\\nuptime 7d 00:00:00\\nscan 8 ms\\niobus\\nOK\\nuptime 6d 23:58:20\\nscan 12 ms\\nweb\\nOK\\nuptime 6d 23:56:40\\nscan 3 ms\\nIOP\\nOK\\nuptime 6d 23:55:00\\nscan 15 ms\\nbacnet\\nOK\\nuptime 6d 23:51:40\\nscan 18 ms\\nIOP / SCAN\\nOverall\\nok\\nĐộ trễ IOP\\n15 ms\\nTrạng thái WebSocket\\nconnected\\nSự kiện point gần nhất\\n0s\\nTRẠNG THÁI TRUYỀN THÔNG\\nEthernet / IPv4\\n192.168.1.100\\nĐANG HOẠT ĐỘNG\\nRS-485 / Bus 1\\nUNKNOWN\\nTẮT CÓ CHỦ ĐÍCH\\nBACnet/IP\\nChưa bật trong cấu hình sản phẩm\\nTẮT CÓ CHỦ ĐÍCH\\nSƠ ĐỒ BỘ ĐIỀU KHIỂN\\nMở rộng\\nMK-DDC-24\\n29 I/O | 5 Modbus | 2 WARN | 0 FAULT | 0s\\nAO\\nI\\nAO01\\nI\\nAO02\\nI\\nAO03\\nI\\nAO04\\nDO\\nI\\nDO01\\nI\\nDO02\\nO\\nDO03\\nO\\nDO04\\nUI\\nI\\nUI01\\n?\\nUI02\\nI\\nUI03\\nI\\nUI04\\nI\\nUI05\\nO\\nUI06\\nI\\nUI07\\nI\\nUI08\\nI\\nUI09\\nI\\nUI10\\nI\\nUI11\\nI\\nUI12\\nI\\nUI13\\nI\\nUI14\\nI\\nUI15\\n!\\nUI16\\nLAN1\\nLAN2\\nPower\\nLAN1\\nLAN2\\nRS485\\nStatus\\nMK-DDC-24\\nDirect Digital Controller\\nClick a terminal to inspect point details\\nI/O Summary\\nUI 16 | AO 4 | DO 4\\nCPU\\n23%\\nNormal\\nMemory\\n48%\\nNormal\\nTemp\\n38.6°C\\nNormal\\nSystem WARN\\nBACnet 192.168.1.100 | ID 47808\\nCổng RS485 / Modbus 5 dev | 1 deg | 1 offline\\nI=ON/signal | O=OFF | !=no signal | ?=warning\\n60 PHÚT GẦN NHẤT\\n\\nVòng nhớ trong dịch vụ web, tính từ 10:06:55 29/9/\"}\n```\nPage navigated to http://127.0.0.1:4193/diagnostics."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/activity",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/activity\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Nhật ký hoạt động\\n\\nAi đã làm gì trên thiết bị này, lúc nào và kết quả ra sao. Dữ liệu lấy nguyên văn từ kho audit, không suy diễn.\\n\\nLàm mới\\nLoại - Tất cả\\nNgười dùng\\nHệ thống\\nTừ\\nĐến\\nXoá lọc\\nXuất CSV\\nKhông có sự kiện nào khớp bộ lọc\\n\\nKho giữ tối đa 0 bản ghi gần nhất.\\n\\nĐang giữ 0/0 bản ghi. Bản ghi cũ hơn đã bị xoá theo chính sách lưu trữ.\"}\n```\nPage navigated to http://127.0.0.1:4193/activity."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/network",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/network\",\"width\":1440,\"client\":1430,\"scroll\":1430,\"text\":\"Tổng quan\\nHệ thống\\nMạng\\nMạng\\n\\nEthernet an toàn qua netcfg · BACnet/IP lên BMS · Modbus RTU xuống thiết bị phụ\\n\\nETH UP\\nDDC24\\nThiết bị\\n47808\\nBACnet/IP UDP\\n3/5 online\\nSlave Modbus\\n60%\\nSức khoẻ poll\\nETHERNET - Giao dịch an toàn\\n\\nTrạng thái active lấy từ kernel qua mkddc-netcfg; thay đổi phải Stage → Apply → Confirm, nếu không sẽ tự rollback.\\n\\nLiên kết Ethernet chưa sẵn sàng; hãy cắm cáp Ethernet trước khi Apply.\\nACTIVE / KERNEL\\nInterface\\neth0\\nAdmin\\nUnknown\\nCarrier\\nUnknown\\nKernel link\\nup\\nAddress\\n192.168.1.100/24\\nGateway\\n192.168.1.1\\nDNS\\n—\\nMode\\nstatic\\nReason\\nUnknown\\nCONFIGURED PROFILE\\nState\\nNo configured profile\\nPENDING CANDIDATE\\nState\\nNo pending candidate\\nEDITABLE DRAFT\\n\\nCandidate có thể chỉnh sửa; không phải bản sao realtime của ACTIVE / KERNEL.\\n\\nInterface\\neth0\\nChế độ\\nIPv4 tĩnh\\nDHCP\\nIPv4\\nSubnet mask\\nGateway\\n\\nBản nháp trùng với cấu hình đang chạy — không có gì để lưu.\\n\\nKiểm tra\\nLưu thay đổi\\nNORTHBOUND — BACnet/IP lên BMS\\n\\nCấu hình nhận dạng BACnet và WiFi; Ethernet IPv4 được thay đổi ở giao dịch an toàn phía trên.\\n\\nLưu BACnet/WiFi\\nDevice Name\\nBACnet Device ID\\nBACnet Device Name\\nBACnet/IP Port\\nBMS Link\\n192.168.1.100 → UDP/47808\\nONLINE\\nWiFi\\nON\\nTên thiết bị\\nDDC24\\nSerial\\nDDC24\\nFirmware\\n0.1.0\\nVai trò\\nBACnet/IP server\\nSOUTHBOUND — RS-485 Modbus RTU Master\\n\\nDDC-24 chủ động poll slave thiết bị phụ: module mở rộng I/O, remote HMI, meter, VFD.\\n\\nĐịa chỉ\\tSlave / Hồ sơ\\tTốc độ baud\\tTrạng thái poll\\tTỉ lệ lỗi\\tPoll gần nhất\\n1\\t\\nKINEXUS-EXT-IO-01\\nEXT I/O\\n\\t38.400 bps\\t\\nONLINE\\t\\n0.2%\\n10/5000\\n\\t18 ms\\n5\\t\\nREMOTE-HMI-Lobby\\nRemote HMI\\n\\t38.400 bps\\t\\nONLINE\\t\\n0.5%\\n25/5000\\n\\t24 ms\\n12\\t\\nPM-212 Energy Meter\\nMeter\\n\\t9.\"}\n```\nPage navigated to http://127.0.0.1:4193/settings/network."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/time",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/time\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nHệ thống\\nThời gian\\nThời gian/Ngày\\n\\nCấu hình và trạng thái thời gian controller\\n\\nLàm mới trạng thái\\nLưu\\nGiờ thiết bị hiện tại\\n2026-09-29T03:06:57.315Z\\n2026-09-29T03:06:57.308Z · Asia/Ho_Chi_Minh\\nNTP ON\\nNguồn\\npool.ntp.org\\nĐộ lệch\\n1.8 ms\\nĐồng bộ cuối\\n2026-09-29T03:06:57.308Z (0s)\\nRTC\\n2026-09-29T03:06:57.308Z\\nNTP\\nBật NTP\\nMáy chủ NTP (phân cách bằng dấu phẩy)\\nTimezone & đặt thủ công\\nTimezone\\nAsia/Ho_Chi_Minh\\nUTC\\nAsia/Bangkok\\nAsia/Singapore\\nĐặt giờ thủ công\"}\n```\nPage navigated to http://127.0.0.1:4193/settings/time."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/device",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/device\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nHệ thống\\nThiết bị\\nThiết bị\\n\\nĐịnh danh thiết bị, lưu trong device.conf\\n\\nHoàn tác\\nLưu\\nThông tin thiết bị\\nTên thiết bị\\nDevice ID (BACnet)\\nVị trí lắp đặt\\nMô tả\\nAbout\\nModel\\nDDC24\\nFirmware\\n0.1.0\\nSerial\\nDDC24\"}\n```\nPage navigated to http://127.0.0.1:4193/settings/device."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/users",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/users\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nHệ thống\\nNgười dùng\\nNgười dùng\\n\\nQuản trị tài khoản RBAC — mọi thay đổi đều được ghi audit log\\n\\nThêm người dùng\\nTÊN ĐĂNG NHẬP\\tVAI TRÒ\\tĐĂNG NHẬP GẦN NHẤT\\tPHIÊN ĐANG MỞ\\tTHAO TÁC\\nadminBẠN\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\noperator1\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\nguest\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\nPhiên đang mở chỉ tính từ lần khởi động dịch vụ web gần nhất (10:06:58 29/9/2026). Dấu vết đăng nhập lấy từ nhật ký hoạt động, giữ tối đa 0 sự kiện — vết cũ hơn sẽ không còn.\"}\n```\nPage navigated to http://127.0.0.1:4193/settings/users."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/display",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/display\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Tổng quan\\nHệ thống\\nHiển thị\\nHiển thị\\n\\nNgôn ngữ, mật độ hiển thị và ghi chú theme ISA-101\\n\\nLưu\\nNgôn ngữ\\n\\nÁp dụng cho nhãn giao diện demo.\\n\\nTiếng Việt\\nNhãn tiếng Việt cho phòng máy\\nEnglish\\nEnglish labels for demo review\\nTheme\\n\\nLevel B hybrid cố định theo ADR-009.\\n\\nISA-101 Level B hybrid\\n\\nNền xám sáng trung tính, chữ tối. Màu trạng thái theo quy ước SCADA: xanh = ON/normal, xám = OFF, vàng = cảnh báo, đỏ = lỗi.\\n\\nÂm báo cảnh báo\\n\\nLớp nhấp nháy luôn bật và không tắt được; âm thanh là lớp tăng cường, mặc định TẮT.\\n\\nTrạng thái kênh âm thanh\\nTẮT\\nBật và kiểm tra âm\\nTắt âm báo\\n\\nTuỳ chọn lưu trên trình duyệt này, theo từng thiết bị và từng tài khoản — chưa đồng bộ xuống bo. Trên màn hình treo tường, kênh âm thanh sẽ ở trạng thái \\\"bị trình duyệt chặn\\\" cho tới khi có người chạm vào màn hình; đó là giới hạn của nền tảng, không phải lỗi cấu hình.\\n\\nMật độ hiển thị\\n\\nDemo local, chưa ghi xuống thiết bị.\\n\\nThoải mái\\nKhoảng cách rộng cho vận hành tại bàn trực.\\nGọn\\nMật độ cao hơn cho màn hình giám sát.\"}\n```\nPage navigated to http://127.0.0.1:4193/settings/display."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/help",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/help\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Trợ giúp\\n\\nHướng dẫn nhanh và câu hỏi thường gặp\\n\\nBắt đầu vận hành\\n\\nKiểm tra trạng thái hệ thống và các dịch vụ trước khi thực hiện thay đổi cấu hình.\\n\\nCấu hình điểm\\n\\nUI, AO và DO giữ tag kỹ thuật cố định; chỉnh tên hiển thị qua trường Label. Virtual Point có thể chỉnh cả tag và Label.\\n\\nQuyền và an toàn\\n\\nCác thao tác ghi, force và thay đổi cấu hình yêu cầu quyền phù hợp; luôn kiểm tra trạng thái an toàn trước khi ghi.\\n\\nCâu hỏi thường gặp\\nLàm sao xem toàn bộ cảnh báo?\\n\\nChọn Alarm ở thanh bên hoặc biểu tượng chuông trên header để mở trang Alarm.\\n\\nVì sao dữ liệu chưa cập nhật?\\n\\nKiểm tra badge SYSTEM và trạng thái các dịch vụ; khi WebSocket kết nối lại, dữ liệu sẽ tự đồng bộ.\\n\\nTôi có thể tìm tài liệu chi tiết ở đâu?\\n\\nMở phần tài liệu dự án hoặc liên hệ quản trị viên để được cấp hướng dẫn phù hợp với vai trò.\\n\\nCần hỗ trợ thêm? Liên hệ quản trị viên hệ thống.\"}\n```\nPage navigated to http://127.0.0.1:4193/help."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/diagram",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/diagram\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Sơ đồ điều khiển\\n\\nSơ đồ xem trước hệ thống\\n\\nSơ đồ điều khiển\\nMK-DDC-24\\n29 I/O | 5 Modbus | 2 WARN | 0 FAULT | 10:07:01\\nAO\\nI\\nAO01\\nI\\nAO02\\nI\\nAO03\\nI\\nAO04\\nDO\\nO\\nDO01\\nI\\nDO02\\nO\\nDO03\\nI\\nDO04\\nUI\\nI\\nUI01\\n?\\nUI02\\nI\\nUI03\\nI\\nUI04\\nI\\nUI05\\nO\\nUI06\\nI\\nUI07\\nI\\nUI08\\nI\\nUI09\\nI\\nUI10\\nI\\nUI11\\nI\\nUI12\\nI\\nUI13\\nI\\nUI14\\nI\\nUI15\\n!\\nUI16\\nLAN1\\nLAN2\\nPower\\nLAN1\\nLAN2\\nRS485\\nStatus\\nMK-DDC-24\\nDirect Digital Controller\\nClick a terminal to inspect point details\\nI/O Summary\\nUI 16 | AO 4 | DO 4\\nCPU\\n23%\\nNormal\\nMemory\\n48%\\nNormal\\nTemp\\n38.6°C\\nNormal\\nSystem WARN\\nBACnet 192.168.1.100 | ID 47808\\nCổng RS485 / Modbus 5 dev | 1 deg | 1 offline\\nI=ON/signal | O=OFF | !=no signal | ?=warning\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/diagram."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/aux",
+    "viewport": "desktop",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/aux\",\"width\":1440,\"client\":1440,\"scroll\":1440,\"text\":\"Hàm phụ trợ\\n\\nTrình tạo cụm khối logic theo thiết kế Rev A\\n\\nChọn hàm\\n\\nChọn hàm để xem cấu hình\\n\\nFU1 Enable/Disable\\nBật/tắt thiết bị dựa trên điểm enable\\nFU2 Occupied/Unoccupied\\nChuyển chế độ hoạt động theo lịch\\nFU3 Heating/Cooling switch\\nChuyển đổi Heating/Cooling\\nFU4 Setpoint compensation\\nREV A PARTIAL\\nBù trừ setpoint theo nhiệt độ ngoài trời (Rev A Partial)\\nFU5 Economizer\\nREV A PARTIAL\\nĐiều khiển damper lấy gió tươi\\nCấu hình hàm\\n\\nChưa chọn hàm\\n\\nVui lòng chọn hàm ở bảng bên trái.\"}\n```\nPage navigated to http://127.0.0.1:4193/eng/aux."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"DDC24-AC\",\"text\":\"DDC24-AC\\nFAULT\\n\\nTrạng thái chưa rõ (mã demo)\\n\\nCRITICAL 1\\nHIGH 1\\nMEDIUM 0\\nLàm mới\\nXuất ảnh chụp\\nKết nối\\nTrực tuyến\\nDữ liệu mới nhất\\n0s\\nẢnh chụp\\n0s\\nCảnh báo chưa xác nhận\\n0\\nPhân hệ cũ nhất\\nBộ điều khiển · 0s\\nBộ điều khiển\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nI/O tại chỗ\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nModbus RTU\\nUNKNOWN\\nChưa cấu hình\\nsimulator · 0s\\nMạng\\nGOOD\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nLịch sử dữ liệu\\nUNKNOWN\\nTrạng thái chưa rõ (mã demo)\\nsimulator · 0s\\nCẦN XỬ LÝ\\nTất cả cảnh báo\\nCRITICAL\\nUI-05 Filter Switch\\nUI-05 · 21:31:02 23/5/2025\\nXem chi tiết\\nHIGH\\nUI-02 Pressure High\\nUI-02 · 21:29:45 23/5/2025\\nXem chi tiết\\nMEDIUM\\nDUCT PRESSURE — STALE\\nUI-02 · 10:07:27 29/9/2026\\nXem chi tiết\\nMEDIUM\\nSPARE UNIVERSA\",\"overflow\":[{\"tag\":\"TABLE\",\"cls\":\"w-full min-w-[420px] text-xs\",\"text\":\"LoạiGoodUncertainBadStaleOfflineTổngDO400004UI14101016AO400004Virtual500005\",\"right\":458},{\"tag\":\"THEAD\",\"cls\":\"\",\"text\":\"LoạiGoodUncertainBadStaleOfflineTổng\",\"right\":458},{\"tag\":\"TR\",\"cls\":\"border-b border-[var(--c-border)] text-left text-[10px] uppercase text-[var(--c-text-dim)]\",\"text\":\"LoạiGoodUncertainBadStaleOfflineTổng\",\"right\":458},{\"tag\":\"TH\",\"cls\":\"py-2 pr-2 text-right font-semibold\",\"text\":\"Offline\",\"right\":417},{\"tag\":\"TH\",\"cls\":\"py-2 text-right font-semibold\",\"text\":\"Tổng\",\"right\":458},{\"tag\":\"TBODY\",\"cls\":\"\",\"text\":\"DO400004UI14101016AO400004Virtual500005\",\"right\":458}]}\n```\nPage navigated to http://127.0.0.1:4193/."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/monitor?group=local",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/monitor?group=local\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Monitor I/O\",\"text\":\"Monitor I/O\\n\\nGiám sát trạng thái điểm I/O\\n\\nTỔNG SỐ ĐIỂM\\n29\\nUI 16 | DO 4 | AO 4\\nĐIỂM NHỊ PHÂN ĐANG ON\\n6\\n6/10 · 60%\\nĐIỂM UI/AO BÌNH THƯỜNG\\n23\\n92%\\nĐIỂM LỖI / MẤT TÍN HIỆU\\n2\\n7%\\nKhung nhìn\\n— Chưa có khung nhìn nào —\\nLưu khung nhìn\\nĐổi tên\\nXoá\\nLưu trên thiết bị theo tài khoản đang đăng nhập.\\nNguồn - Tất cả\\nI/O tại chỗ\\nĐiểm ảo\\nModbus RTU\\nThiết bị - Tất cả\\nChưa gán (29)\\nNhóm I/O - Tất cả\\nUI\\nDO\\nAO\\nẢo\\nModbus RTU\\nChất lượng - Tất cả\\nGood\\nUncertain\\nBad\\nStale\\nOffline\\nTrạng thái - Tất cả\\nĐang ép tay\\nĐang lỗi\\nMất liên lạc\\nGhi được\\nĐang ghi lịch sử\\nLàm mới\\nDO - DIGITAL OUTPUT (4)\\nĐIỂM\\nTÊN ĐIỂM\\nTRẠNG THÁI\\nTHỜI GIAN CẬP NHẬT\\nCÒN LẠI\\nDO-01\\nPUMP START\\nON\\n10:08:26\\nDO-02\\nFAN START\\nOFF\\n10:08:26\\nDO-03\\nVALVE OPEN\\nON\\n10:08:26\\nDO-04\\nALARM BUZZER\\nOFF\\n10:08:26\\nUI - UNI\",\"overflow\":[{\"tag\":\"SPAN\",\"cls\":\"\",\"text\":\"Trạng thái\",\"right\":396},{\"tag\":\"SPAN\",\"cls\":\"\",\"text\":\"Thời gian cập nhật\",\"right\":524},{\"tag\":\"SPAN\",\"cls\":\"\",\"text\":\"Còn lại\",\"right\":628},{\"tag\":\"SPAN\",\"cls\":\"inline-flex items-center gap-2 rounded px-1 font-semibold\",\"text\":\"ON\",\"right\":396},{\"tag\":\"SPAN\",\"cls\":\"mono text-[var(--c-text-dim)]\",\"text\":\"10:08:26\",\"right\":524},{\"tag\":\"SPAN\",\"cls\":\"\",\"text\":\"\",\"right\":628}]}\n```\nPage navigated to http://127.0.0.1:4193/monitor?group=local."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/commissioning",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/commissioning\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Chạy thử\",\"text\":\"Tổng quan\\nChạy thử\\nChạy thử\\n\\nGhi trực tiếp ra AO/DO qua core — mọi lệnh đều được ghi audit log\\n\\nTự nhả sau\\n1 min\\n5 min\\n15 min\\n30 min\\nTrả tất cả về tự động (0)\\n\\nCác lệnh trên trang này tác động trực tiếp lên cơ cấu chấp hành đang đấu nối: van, damper, contactor, biến tần. Chỉ dùng khi đã cô lập thiết bị hoặc đã báo cho người vận hành tại chỗ.\\n\\nĐiều kiện tiên quyết\\nLiên lạc với bộ điều khiển\\nCore đang trả lời\\nCó output để chạy thử\\n8 điểm AO/DO\\nĐủ quyền ghi\\nVai trò admin\\nKhông còn điểm kẹt ép tay từ phiên trước\\nMọi output đang thuộc điều khiển tự động\\nXem vết audit các lần chạy thử →\\nKiểm thử output\\nDO-01\\nPUMP START\\nGOOD\\nON\\nCore\\n10:08:27\\nGiá trị ghi\\n— chọn —\\nON\\nOFF\\nChạy thử\\nTrả về tự động\\n\\nChưa chạy thử\\n\\nDO-02\\nFAN START\\nGOOD\\nOFF\\nCore\\n10:08:27\\n\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/commissioning."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/inputs",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/inputs\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Cấu hình UI Inputs\",\"text\":\"Tổng quan\\nCấu hình I/O\\nInputs\\nCấu hình UI Inputs\\n\\n16 Universal Input tự nhận dạng, không jumper\\n\\nTổng quan\\nSao chép sang kênh khác\\nLưu\\nUI Channels\\nUI-01\\nSUPPLY AIR TEMP\\nUI-02\\nDUCT PRESSURE\\nUI-03\\nROOM HUMIDITY\\nUI-04\\nOUTDOOR TEMP\\nUI-05\\nFILTER SWITCH\\nUI-06\\nFIRE ALARM CONTACT\\nUI-07\\nDAMPER POTENTIOMETER\\nUI-08\\nPULSE METER\\nUI-09\\nRETURN AIR TEMP\\nUI-10\\nCO2 SENSOR\\nUI-11\\nCHILLED WATER TEMP\\nUI-12\\nSUPPLY FAN STATUS\\nUI-13\\nMOTION SENSOR\\nUI-14\\nLIGHT LEVEL\\nUI-15\\nWATER LEAK CONTACT\\nUI-16\\nSPARE UNIVERSAL INPUT\\nUI-01 - SUPPLY AIR TEMP\\nTAG\\nKÊNH\\nLABEL\\nBật kênh\\nGOOD\\nGIÁ TRỊ\\n22.8 C\\nCập nhật: 0s trước\\nĐiện & Cảm biến\\nScaling & Đơn vị\\nXử lý tín hiệu\\nHiệu chuẩn\\nCảnh báo & Lưu trữ\\nChẩn đoán\\nElectrical Mode\\nKhông dùng\\nĐiện áp 0-10V\\nĐiện áp/dòng (2-10V hoặc 4-20mA)\\nĐiện\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/inputs."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/outputs",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/outputs\",\"width\":425,\"client\":390,\"scroll\":425,\"heading\":\"Cấu hình Outputs\",\"text\":\"Tổng quan\\nCấu hình I/O\\nOutputs\\nCấu hình Outputs\\n\\n4 AO + 4 DO theo hook backend hiện có\\n\\nTổng quan\\nLưu\\nKênh Output\\nAO\\nAO-01\\nVFD Speed\\nAO-02\\nHeating Valve\\nAO-03\\nCooling Valve\\nAO-04\\nDamper Position\\nDO\\nDO-01\\nPump Start\\nDO-02\\nFan Start\\nDO-03\\nValve Open\\nDO-04\\nAlarm Buzzer\\nAO-01 - VFD Speed\\n\\nAnalog Output - signal type, safe value, manual force\\n\\nSummary\\nWizard\\nAdvanced\\nTAG\\nCHANNEL\\nLABEL\\nMODE\\n0-10V\\nRAW\\n6.6 V\\n\\nAO / AO-01\\n\\nVFD Speed\\nOFF\\nInterval\\n15s\\nRetention\\n180 days\\nGeneration\\n1\\nLogging policy control\\nConfigure\\n\\nCapacity: 0 KiB reserved of 2.0 GiB; 2.0 GiB free.\\n\\nDữ liệu live\\nĐặt lại\\nGIÁ TRỊ\\n660 %\\n% MỞ\\n66.0 %\\nRAW OUTPUT\\n6.6 V\\nNHỎ NHẤT\\n660 %\\nLỚN NHẤT\\n660 %\\nTRUNG BÌNH\\n660 %\\nXu hướng live\\nAO-01\\n10:08:28\\n0\\n200\\n400\\n600\\n800\\nHistorical values with quality\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/outputs."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/virtual-points",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/virtual-points\",\"width\":532,\"client\":390,\"scroll\":532,\"heading\":\"Virtual Points\",\"text\":\"Tổng quan\\nCấu hình I/O\\nĐiểm ảo\\nVirtual Points\\n\\nVP backend-only, chỉ hiện khi đã tạo.\\n\\nTạo VP\\nNhân bản\\nTổng quan\\nLưu\\nOFF\\n3/256\\n1S DIAGNOSTIC\\n2/128\\n100MS DIAGNOSTIC\\n0/64\\n10MS DIAGNOSTIC\\n0/16\\nVP đã tạo\\nVP1\\nRoom Setpoint\\nFLOAT\\nVP2\\nOccupancy Request\\nBOOLEAN\\nVP3\\nMode Index\\nINTEGER\\nVP4\\nMode Text\\nSTRING\\nVP5\\nLast Change\\nDATETIME\\nVP1 - Room Setpoint\\n\\nFLOAT | 1000ms diagnostic log\\n\\nSummary\\nWizard\\nAdvanced\\nXoá\\nTag\\nKênh\\nSlot Core\\nLabel\\nSignal Type\\nBoolean\\nInteger\\nFloat\\nString\\nDateTime\\nMultistate\\nEnabled\\nWritable\\nSau khi khởi động lại\\nGiữ giá trị cuối\\nVề giá trị khởi tạo\\n\\nVP / VP1\\n\\nRoom Setpoint\\nOFF\\nInterval\\n15s\\nRetention\\n180 days\\nGeneration\\n1\\nLogging policy control\\nConfigure\\n\\nDatabase logging is independent from the Virtual Point diagnostic log settings\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/virtual-points."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/alarms",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/alarms\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Cảnh báo\",\"text\":\"Cảnh báo\\n\\nTheo dõi, lọc và xác nhận cảnh báo\\n\\n3\\nĐang hoạt động\\n0\\nChưa xác nhận\\n0\\nShelved\\n5\\nĐang hiển thị\\nCHỈ SỐ HỆ CẢNH BÁO (ISA-18.2)\\n10m\\n1h\\n24h\\n7d\\nCảnh báo mới / 10 phút\\n0\\nNgưỡng ISA-18.2: > 10\\nTrung bình / giờ\\n0.00\\nTổng trong cửa sổ\\n0\\nĐang bị treo\\n0\\nCẢNH BÁO LẶP NHIỀU NHẤT\\n\\nKhông có cảnh báo nào trong cửa sổ này.\\n\\nMục lặp nhiều thường là ngưỡng đặt sát quá hoặc thiếu vùng trễ, không phải một sự cố lặp lại.\\n\\ntất cả 5\\nactive 3\\nchưa xác nhận 0\\nđã xác nhận 3\\ncleared 0\\nshelved 0\\nXoá lọc\\n21:31:02 23/5/2025\\nCRITICAL\\nUI-05 Filter Switch\\nTRIP HH 1\\nUI-05 · ON · trip=HH threshold=1 current=ON (High-high); occurrence=1\\nXem điểm nguồn →\\nXem xu hướng quanh thời điểm bật →\\nAck\\nOff\\n21:29:45 23/5/2025\\nHIGH\\nUI-02 Pressure High\\nTRIP H 8\\nUI-02 · 9.8 bar · t\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/alarms."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/alarms/history",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/alarms/history\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Lịch sử cảnh báo\",\"text\":\"Tổng quan\\nCảnh báo\\nLịch sử\\nLịch sử cảnh báo\\n\\nToàn bộ bản ghi cảnh báo\\n\\nAlarm log\\nLịch sử cảnh báo\\n\\nToàn bộ bản ghi khớp bộ lọc\\n\\nTải lại\\nText\\nAlarm\\nall\\nAL-001 - UI-05 Filter Switch\\nAL-002 - UI-02 Pressure High\\nAL-003 - DO-03 Pump Start\\nAL-004 - SYSTEM\\nAL-005 - COMMUNICATION\\nAL-006 - UI-10 CO2 Sensor\\nAL-007 - AO-02 Heating Valve\\nAL-008 - UI-15 Water Leak Contact\\nALM-001 - Supply air temperature\\nALM-002 - Duct pressure range\\nALM-003 - Fan runtime hours\\nALM-004 - Outdoor temperature spare\\nName\\nall\\nAO-02 Heating Valve\\nCOMMUNICATION\\nDO-03 Pump Start\\nDuct pressure range\\nFan runtime hours\\nOutdoor temperature spare\\nSupply air temperature\\nSYSTEM\\nUI-02 Pressure High\\nUI-05 Filter Switch\\nUI-10 CO2 Sensor\\nUI-15 Water Leak Contact\\nFrom\\nTo\\nSeverity\\nall\\ncri\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/alarms/history."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/alarm-settings",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/alarm-settings\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Cấu hình cảnh báo\",\"text\":\"Tổng quan\\nCảnh báo\\nCấu hình\\nCấu hình cảnh báo\\n\\nThực thể cảnh báo ADR-013, nhiều nguồn, lưu qua backend API\\n\\nTải lại\\nLưu\\nAlarm entities\\n\\n4/64\\n\\nThêm\\nALM-001\\nSupply air temperature\\nON\\nALM-002\\nDuct pressure range\\nON\\nALM-003\\nFan runtime hours\\nON\\nALM-004\\nOutdoor temperature spare\\nOFF\\nALM-001 - Supply air temperature\\n\\n1 - Ngưỡng cao/thấp của ngõ vào\\n\\nXoá\\nID\\nNHÃN\\nLOẠI CẢNH BÁO\\n0 - Tắt\\n1 - Ngưỡng cao/thấp của ngõ vào\\n3 - Số giờ chạy tích luỹ\\n2 - Lệch khỏi giá trị đặt\\n4 - Giám sát trạng thái quạt\\n5 - Giám sát ngõ ra số\\n6 - Giám sát ngõ ra analog\\n7 - Giám sát chuỗi PI\\nMỨC ƯU TIÊN\\nLOW · theo dõi, không cần xử lý ngay\\nMEDIUM · xử lý trong ca\\nHIGH · xử lý ngay\\nCRITICAL · nguy cấp, dừng việc khác để xử lý\\nFLEXIBLE · mức tuỳ theo luật bên dưới\\nCÁCH XOÁ CẢN\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/alarm-settings."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/trends?points=UI-01",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/trends\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Xu hướng\",\"text\":\"Xu hướng\\n\\nTrend Log dùng unified historian backend với trạng thái gap/partial rõ ràng.\\n\\nKhung nhìn\\n— Chưa có khung nhìn nào —\\nLưu khung nhìn\\nĐổi tên\\nXoá\\nBộ điểm + khoảng thời gian, lưu trên thiết bị theo tài khoản.\\nSeries\\nThêm trend\\nUI-01\\nSUPPLY AIR TEMP\\n23.6 C\\nXu hướng analog - 30 phút\\nDải min–max\\nXuất CSV\\nDấu sự kiện\\nAuto\\n30 phút\\n1 giờ\\n6 giờ\\n24 giờ\\nUI-01\\nTừ (giờ địa phương Asia/Saigon)\\nĐến (giờ địa phương Asia/Saigon)\\nÁp dụng tùy chọn\\nÔ chọn dùng giờ địa phương (Asia/Saigon); biểu đồ và bảng bên dưới hiển thị theo UTC.\\nPARTIAL\\nHistory is partial\\n\\nLegacy query vẫn authoritative; unified Trends chờ activation/cutover marker.\\n\\n1 history gap reported.\\n\\nGap details (1)\\n02:38:31\\n02:46:01\\n02:53:31\\n03:01:01\\n03:08:31\\nHistorical values with quality\",\"overflow\":[{\"tag\":\"TABLE\",\"cls\":\"w-full border-collapse text-left text-xs\",\"text\":\"Historical values with quality, source, and storage tierTime (UTC)UI-01 - S\",\"right\":420},{\"tag\":\"THEAD\",\"cls\":\"bg-[var(--c-surface-2)]\",\"text\":\"Time (UTC)UI-01 - SUPPLY AIR TEMP\",\"right\":420},{\"tag\":\"TR\",\"cls\":\"\",\"text\":\"Time (UTC)UI-01 - SUPPLY AIR TEMP\",\"right\":420},{\"tag\":\"TH\",\"cls\":\"px-3 py-2\",\"text\":\"UI-01 - SUPPLY AIR TEMP\",\"right\":420},{\"tag\":\"TBODY\",\"cls\":\"\",\"text\":\"02:38:31 29/9/2026No value CGAP · legacy_query_gap_evidence_unavailable · —\",\"right\":420},{\"tag\":\"TR\",\"cls\":\"border-t border-[var(--c-border)]\",\"text\":\"02:38:31 29/9/2026No value CGAP · legacy_query_gap_evidence_unavailable · —\",\"right\":420}]}\n```\nPage navigated to http://127.0.0.1:4193/trends."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/scheduler",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/scheduler\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Lịch vận hành\",\"text\":\"Tổng quan\\nLịch vận hành\\nLịch vận hành\\n\\nLịch tuần · ngoại lệ · publish có kiểm chứng\\n\\nKhông tải được danh sách lịch\\n\\n502 Bad Gateway\\n\\nThử lại\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/scheduler."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/scheduler/runtime",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/scheduler/runtime\",\"width\":390,\"client\":390,\"scroll\":390,\"text\":\"Tổng quan\\nLịch vận hành\\nTrạng thái chạy\\nKhông tải được trạng thái lịch\\n\\n502 Bad Gateway\\n\\nThử lại\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/scheduler/runtime."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Tổng quan\\n\\nGiám sát trạng thái các cổng RS485 và thiết bị trường Modbus RTU. (Cập nhật lúc 10:08:33 AM)\\n\\nLàm mới\\nTự động ⟳ 5s ON\\niobus chưa publish telemetry lần nào. Các số đo runtime bên dưới hiện \\\"—\\\" — đó là chưa biết, không phải bằng 0.\\nTổng Device\\n0\\nOnline\\n—\\nOffline\\nXem danh sách →\\n—\\nLỗi cấu hình\\n0\\nChưa có bus RS485 nào được cấu hình.\\nSự kiện giao tiếp gần đây\\nXem tất cả diagnostics →\\nThời gian\\tBus\\tDevice \",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/ports",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/ports\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nBus / Cổng\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Cổng RS-485\\n\\nKhung truyền thuộc về sợi dây, không thuộc thiết bị. Mỗi cổng cấu hình và áp riêng; mọi thiết bị trên cổng tự động dùng theo.\\n\\nBoard không khai báo cổng RS-485 nào.\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/ports."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/devices",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/devices\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nThiết bị\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Quản lý Thiết bị (Devices)\\n\\nQuản lý vòng đời thiết bị trường Modbus RTU, thông số bus/serial và chu kỳ poll.\\n\\nThêm thiết bị mới\\nDEVICE ID\\nTÊN THIẾT BỊ\\nCỔNG RS-485\\nRS485-1 (/dev/rs485-1)\\nRS485-2 (/dev/rs485-2)\\nKhung truyền kế thừa từ cổng đã chọn ·\\nSửa ở trang Cổng RS-485\\nSLAVE ID\\nCHU KỲ POLL (MS)\\nTIMEOUT (MS)\\nSỐ LẦN PHÁT LẠI\\nLỖI LIÊN TIẾP ⇒ OFFLINE\\nGhi nhiều coil một lần (FC15)\\n\\nCác coil liền kề đổi cù\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/devices."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/points",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/points\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nĐiểm\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Quản lý Point\\n\\nÁnh xạ thanh ghi Modbus RTU sang Point Table của Core. Mỗi lần lưu đều validate, tăng revision và áp cấu hình có rollback.\\n\\nThêm Point mới\\nPOINT ID\\nTHIẾT BỊ\\nChọn thiết bị\\nTAG NAME\\nTÊN HIỂN THỊ\\nLOẠI THANH GHI\\nCoil\\nDiscrete Input\\nInput Register\\nHolding Register\\nXÁC NHẬN SAU KHI GHI\\nChỉ dùng được với điểm ghi được\\nNHÓM POLL\\nNhanh\\nBình thường\\nChậm\\nNGƯỠNG STALE (MS)\\nQUY ƯỚC ĐỊA CHỈ\\nOffset protoco\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/points."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/mapping",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/mapping\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nÁnh xạ\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Mapping\\n\\nBảng ánh xạ Point → register của bản nháp, kèm lỗi chặn apply và ước lượng tải từng bus.\\n\\nTất cả bus\\nLàm mới\\nBảng ánh xạ register\\nPoint ID\\tTag\\tBus / Slave\\tVùng register\\tKiểu\\tR/W\\tTrạng thái\\nChưa có Point nào trong bản nháp.\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/mapping."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/modbus-rtu/diagnostics",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/modbus-rtu/diagnostics\",\"width\":527,\"client\":390,\"scroll\":527,\"heading\":\"Modbus RTU Management\",\"text\":\"Tổng quan\\nModbus RTU\\nChẩn đoán\\nModbus RTU Management\\n\\nCấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.\\n\\nTổng quan\\nCổng RS-485\\nThiết bị\\nPoints\\nMapping\\nDiagnostics\\nKhông có thay đổi chờ áp dụng\\nRevision đã lưu: 0\\niobus đang chạy: — (không liên lạc được)\\nBỏ thay đổi\\nLưu nháp\\nÁp dụng xuống thiết bị\\nModbus RTU · Diagnostics\\n\\nBộ đếm CRC / timeout / phát lại theo từng slave, lấy trực tiếp từ telemetry iobus. (Cập nhật lúc 10:08:36 AM)\\n\\nLàm mới\\nTự động ⟳ 5s ON\\nCRC / timeout / retry diagnostics\\nThiết bị\\tBus / Slave\\tLiên lạc\\tPoll / lỗi\\tTimeout\\tCRC\\tPhát lại\\tGhi lỗi\\tGhi bị bỏ\\tException\\tLỗi liên tiếp\\n\\nChưa có telemetry Modbus RTU từ iobus.\\n\\nKhung truyền gần nhất\\n\\nGhi lại giao dịch mà chu kỳ quét bình thường đã thực h\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/modbus-rtu/diagnostics."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/diagnostics",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/diagnostics\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Chẩn đoán\",\"text\":\"Tổng quan\\nChẩn đoán\\nChẩn đoán\\n\\nSố đo hệ thống, dịch vụ và hạ tầng. Metric không có nguồn thật hiện dấu — thay vì một con số đoán.\\n\\nSao chép gói chẩn đoán\\nSỨC KHOẺ THEO PHÂN HỆ\\ncontroller\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nlocal_io\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nmodbus\\nUNKNOWN\\nChưa cấu hình\\nNguồn: simulator · 1s\\nnetwork\\nGOOD\\ndemo\\nNguồn: simulator · 1s\\nhistorian\\nUNKNOWN\\ndemo\\nNguồn: simulator · 1s\\nCPU\\n23%\\n1.51 GHz\\nBỘ NHỚ\\n48%\\n3100 MB / 8192 MB\\nNHIỆT ĐỘ\\n38.6°C\\nUPTIME\\n12d 04:33:09\\nDỊCH VỤ\\ncore\\nOK\\nuptime 7d 00:00:00\\nscan 8 ms\\niobus\\nOK\\nuptime 6d 23:58:20\\nscan 12 ms\\nweb\\nOK\\nuptime 6d 23:56:40\\nscan 3 ms\\nIOP\\nOK\\nuptime 6d 23:55:00\\nscan 15 ms\\nbacnet\\nOK\\nuptime 6d 23:51:40\\nscan 18 ms\\nIOP / SCAN\\nOverall\\nok\\nĐộ trễ IOP\\n15 ms\\nTrạng thái WebSocket\\nconnected\\nSự ki\",\"overflow\":[{\"tag\":\"svg\",\"cls\":{},\"text\":\"MK-DDC-2429 I/O | 5 Modbus | 2 WARN | 0 FAULT | 0sAOIAO01IAO02IAO03IAO04DOI\",\"right\":759},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":759},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":742},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":735},{\"tag\":\"line\",\"cls\":{},\"text\":\"\",\"right\":742},{\"tag\":\"line\",\"cls\":{},\"text\":\"\",\"right\":742}]}\n```\nPage navigated to http://127.0.0.1:4193/diagnostics."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/activity",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/activity\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Nhật ký hoạt động\",\"text\":\"Nhật ký hoạt động\\n\\nAi đã làm gì trên thiết bị này, lúc nào và kết quả ra sao. Dữ liệu lấy nguyên văn từ kho audit, không suy diễn.\\n\\nLàm mới\\nLoại - Tất cả\\nNgười dùng\\nHệ thống\\nTừ\\nĐến\\nXoá lọc\\nXuất CSV\\nKhông có sự kiện nào khớp bộ lọc\\n\\nKho giữ tối đa 0 bản ghi gần nhất.\\n\\nĐang giữ 0/0 bản ghi. Bản ghi cũ hơn đã bị xoá theo chính sách lưu trữ.\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/activity."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/network",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/network\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Mạng\",\"text\":\"Tổng quan\\nHệ thống\\nMạng\\nMạng\\n\\nEthernet an toàn qua netcfg · BACnet/IP lên BMS · Modbus RTU xuống thiết bị phụ\\n\\nETH UP\\nDDC24\\nThiết bị\\n47808\\nBACnet/IP UDP\\n3/5 online\\nSlave Modbus\\n60%\\nSức khoẻ poll\\nETHERNET - Giao dịch an toàn\\n\\nTrạng thái active lấy từ kernel qua mkddc-netcfg; thay đổi phải Stage → Apply → Confirm, nếu không sẽ tự rollback.\\n\\nLiên kết Ethernet chưa sẵn sàng; hãy cắm cáp Ethernet trước khi Apply.\\nACTIVE / KERNEL\\nInterface\\neth0\\nAdmin\\nUnknown\\nCarrier\\nUnknown\\nKernel link\\nup\\nAddress\\n192.168.1.100/24\\nGateway\\n192.168.1.1\\nDNS\\n—\\nMode\\nstatic\\nReason\\nUnknown\\nCONFIGURED PROFILE\\nState\\nNo configured profile\\nPENDING CANDIDATE\\nState\\nNo pending candidate\\nEDITABLE DRAFT\\n\\nCandidate có thể chỉnh sửa; không phải bản sao realtime của ACTIVE / KERNEL.\",\"overflow\":[{\"tag\":\"TABLE\",\"cls\":\"w-full min-w-[860px] border-collapse text-sm\",\"text\":\"Địa chỉSlave / Hồ sơTốc độ baudTrạng thái pollTỉ lệ lỗiPoll gần nhất1KINEXU\",\"right\":899},{\"tag\":\"THEAD\",\"cls\":\"bg-[var(--c-surface-2)] text-xs text-[var(--c-text-dim)]\",\"text\":\"Địa chỉSlave / Hồ sơTốc độ baudTrạng thái pollTỉ lệ lỗiPoll gần nhất\",\"right\":899},{\"tag\":\"TR\",\"cls\":\"\",\"text\":\"Địa chỉSlave / Hồ sơTốc độ baudTrạng thái pollTỉ lệ lỗiPoll gần nhất\",\"right\":899},{\"tag\":\"TH\",\"cls\":\"border-r border-[var(--c-border)] px-3 py-3 text-left font-semibold last:border-r-0\",\"text\":\"Tốc độ baud\",\"right\":491},{\"tag\":\"TH\",\"cls\":\"border-r border-[var(--c-border)] px-3 py-3 text-left font-semibold last:border-r-0\",\"text\":\"Trạng thái poll\",\"right\":655},{\"tag\":\"TH\",\"cls\":\"border-r border-[var(--c-border)] px-3 py-3 text-left font-semibold last:border-r-0\",\"text\":\"Tỉ lệ lỗi\",\"right\":764}]}\n```\nPage navigated to http://127.0.0.1:4193/settings/network."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/time",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/time\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Thời gian/Ngày\",\"text\":\"Tổng quan\\nHệ thống\\nThời gian\\nThời gian/Ngày\\n\\nCấu hình và trạng thái thời gian controller\\n\\nLàm mới trạng thái\\nLưu\\nGiờ thiết bị hiện tại\\n2026-09-29T03:08:38.814Z\\n2026-09-29T03:08:38.812Z · Asia/Ho_Chi_Minh\\nNTP ON\\nNguồn\\npool.ntp.org\\nĐộ lệch\\n1.8 ms\\nĐồng bộ cuối\\n2026-09-29T03:08:38.812Z (0s)\\nRTC\\n2026-09-29T03:08:38.812Z\\nNTP\\nBật NTP\\nMáy chủ NTP (phân cách bằng dấu phẩy)\\nTimezone & đặt thủ công\\nTimezone\\nAsia/Ho_Chi_Minh\\nUTC\\nAsia/Bangkok\\nAsia/Singapore\\nĐặt giờ thủ công\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/settings/time."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/device",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/device\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Thiết bị\",\"text\":\"Tổng quan\\nHệ thống\\nThiết bị\\nThiết bị\\n\\nĐịnh danh thiết bị, lưu trong device.conf\\n\\nHoàn tác\\nLưu\\nThông tin thiết bị\\nTên thiết bị\\nDevice ID (BACnet)\\nVị trí lắp đặt\\nMô tả\\nAbout\\nModel\\nDDC24\\nFirmware\\n0.1.0\\nSerial\\nDDC24\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/settings/device."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/users",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/users\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Người dùng\",\"text\":\"Tổng quan\\nHệ thống\\nNgười dùng\\nNgười dùng\\n\\nQuản trị tài khoản RBAC — mọi thay đổi đều được ghi audit log\\n\\nThêm người dùng\\nTÊN ĐĂNG NHẬP\\tVAI TRÒ\\tĐĂNG NHẬP GẦN NHẤT\\tPHIÊN ĐANG MỞ\\tTHAO TÁC\\nadminBẠN\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\noperator1\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\nguest\\t\\nviewer\\noperator\\nengineer\\nadmin\\n\\t\\nKhông rõ\\n\\t\\n0\\n\\t\\nĐặt lại mật khẩu\\nXoá\\n\\nPhiên đang mở chỉ tính từ lần khởi động dịch vụ web gần nhất (10:08:39 29/9/2026). Dấu vết đăng nhập lấy từ nhật ký hoạt động, giữ tối đa 0 sự kiện — vết cũ hơn sẽ không còn.\",\"overflow\":[{\"tag\":\"TABLE\",\"cls\":\"w-full border-collapse text-left text-xs\",\"text\":\"Tên đăng nhậpVai tròĐăng nhập gần nhấtPhiên đang mởThao tácadminbạnviewerop\",\"right\":541},{\"tag\":\"THEAD\",\"cls\":\"sticky top-0 z-10 bg-[var(--c-surface-2)] text-[10px] uppercase text-[var(--c-text-dim)]\",\"text\":\"Tên đăng nhậpVai tròĐăng nhập gần nhấtPhiên đang mởThao tác\",\"right\":541},{\"tag\":\"TR\",\"cls\":\"\",\"text\":\"Tên đăng nhậpVai tròĐăng nhập gần nhấtPhiên đang mởThao tác\",\"right\":541},{\"tag\":\"TH\",\"cls\":\"border-b border-[var(--c-border)] px-3 py-2 font-semibold\",\"text\":\"Thao tác\",\"right\":541},{\"tag\":\"TBODY\",\"cls\":\"\",\"text\":\"adminbạnvieweroperatorengineeradminKhông rõ0Đặt lại mật khẩuXoáoperator1vie\",\"right\":541},{\"tag\":\"TR\",\"cls\":\"border-b border-[var(--c-border)] transition last:border-0\",\"text\":\"adminbạnvieweroperatorengineeradminKhông rõ0Đặt lại mật khẩuXoá\",\"right\":541}]}\n```\nPage navigated to http://127.0.0.1:4193/settings/users."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/settings/display",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/settings/display\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Hiển thị\",\"text\":\"Tổng quan\\nHệ thống\\nHiển thị\\nHiển thị\\n\\nNgôn ngữ, mật độ hiển thị và ghi chú theme ISA-101\\n\\nLưu\\nNgôn ngữ\\n\\nÁp dụng cho nhãn giao diện demo.\\n\\nTiếng Việt\\nNhãn tiếng Việt cho phòng máy\\nEnglish\\nEnglish labels for demo review\\nTheme\\n\\nLevel B hybrid cố định theo ADR-009.\\n\\nISA-101 Level B hybrid\\n\\nNền xám sáng trung tính, chữ tối. Màu trạng thái theo quy ước SCADA: xanh = ON/normal, xám = OFF, vàng = cảnh báo, đỏ = lỗi.\\n\\nÂm báo cảnh báo\\n\\nLớp nhấp nháy luôn bật và không tắt được; âm thanh là lớp tăng cường, mặc định TẮT.\\n\\nTrạng thái kênh âm thanh\\nTẮT\\nBật và kiểm tra âm\\nTắt âm báo\\n\\nTuỳ chọn lưu trên trình duyệt này, theo từng thiết bị và từng tài khoản — chưa đồng bộ xuống bo. Trên màn hình treo tường, kênh âm thanh sẽ ở trạng thái \\\"bị trình duyệt chặn\\\" \",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/settings/display."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/help",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/help\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Trợ giúp\",\"text\":\"Trợ giúp\\n\\nHướng dẫn nhanh và câu hỏi thường gặp\\n\\nBắt đầu vận hành\\n\\nKiểm tra trạng thái hệ thống và các dịch vụ trước khi thực hiện thay đổi cấu hình.\\n\\nCấu hình điểm\\n\\nUI, AO và DO giữ tag kỹ thuật cố định; chỉnh tên hiển thị qua trường Label. Virtual Point có thể chỉnh cả tag và Label.\\n\\nQuyền và an toàn\\n\\nCác thao tác ghi, force và thay đổi cấu hình yêu cầu quyền phù hợp; luôn kiểm tra trạng thái an toàn trước khi ghi.\\n\\nCâu hỏi thường gặp\\nLàm sao xem toàn bộ cảnh báo?\\n\\nChọn Alarm ở thanh bên hoặc biểu tượng chuông trên header để mở trang Alarm.\\n\\nVì sao dữ liệu chưa cập nhật?\\n\\nKiểm tra badge SYSTEM và trạng thái các dịch vụ; khi WebSocket kết nối lại, dữ liệu sẽ tự đồng bộ.\\n\\nTôi có thể tìm tài liệu chi tiết ở đâu?\\n\\nMở phần tài liệu dự án hoặc \",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/help."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/diagram",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/diagram\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Sơ đồ điều khiển\",\"text\":\"Sơ đồ điều khiển\\n\\nSơ đồ xem trước hệ thống\\n\\nSơ đồ điều khiển\\nMK-DDC-24\\n29 I/O | 5 Modbus | 2 WARN | 0 FAULT | 10:08:42\\nAO\\nI\\nAO01\\nI\\nAO02\\nI\\nAO03\\nI\\nAO04\\nDO\\nI\\nDO01\\nI\\nDO02\\nO\\nDO03\\nO\\nDO04\\nUI\\nI\\nUI01\\n?\\nUI02\\nI\\nUI03\\nI\\nUI04\\nI\\nUI05\\nI\\nUI06\\nI\\nUI07\\nI\\nUI08\\nI\\nUI09\\nI\\nUI10\\nI\\nUI11\\nO\\nUI12\\nO\\nUI13\\nI\\nUI14\\nO\\nUI15\\n!\\nUI16\\nLAN1\\nLAN2\\nPower\\nLAN1\\nLAN2\\nRS485\\nStatus\\nMK-DDC-24\\nDirect Digital Controller\\nClick a terminal to inspect point details\\nI/O Summary\\nUI 16 | AO 4 | DO 4\\nCPU\\n23%\\nNormal\\nMemory\\n48%\\nNormal\\nTemp\\n38.6°C\\nNormal\\nSystem WARN\\nBACnet 192.168.1.100 | ID 47808\\nCổng RS485 / Modbus 5 dev | 1 deg | 1 offline\\nI=ON/signal | O=OFF | !=no signal | ?=warning\",\"overflow\":[{\"tag\":\"svg\",\"cls\":{},\"text\":\"MK-DDC-2429 I/O | 5 Modbus | 2 WARN | 0 FAULT | 10:08:42AOIAO01IAO02IAO03IA\",\"right\":915},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":915},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":894},{\"tag\":\"rect\",\"cls\":{},\"text\":\"\",\"right\":887},{\"tag\":\"line\",\"cls\":{},\"text\":\"\",\"right\":894},{\"tag\":\"line\",\"cls\":{},\"text\":\"\",\"right\":894}]}\n```\nPage navigated to http://127.0.0.1:4193/eng/diagram."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/aux",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/aux\",\"width\":390,\"client\":390,\"scroll\":390,\"heading\":\"Hàm phụ trợ\",\"text\":\"Hàm phụ trợ\\n\\nTrình tạo cụm khối logic theo thiết kế Rev A\\n\\nChọn hàm\\n\\nChọn hàm để xem cấu hình\\n\\nFU1 Enable/Disable\\nBật/tắt thiết bị dựa trên điểm enable\\nFU2 Occupied/Unoccupied\\nChuyển chế độ hoạt động theo lịch\\nFU3 Heating/Cooling switch\\nChuyển đổi Heating/Cooling\\nFU4 Setpoint compensation\\nREV A PARTIAL\\nBù trừ setpoint theo nhiệt độ ngoài trời (Rev A Partial)\\nFU5 Economizer\\nREV A PARTIAL\\nĐiều khiển damper lấy gió tươi\\nCấu hình hàm\\n\\nChưa chọn hàm\\n\\nVui lòng chọn hàm ở bảng bên trái.\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/aux."
+        }
+      ]
+    }
+  },
+  {
+    "route": "/eng/user-parameters",
+    "viewport": "mobile",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Script ran on page and returned:\n```json\n{\"route\":\"/eng/user-parameters\",\"width\":434,\"client\":390,\"scroll\":434,\"heading\":\"Tham số người dùng\",\"text\":\"Tham số người dùng\\nDEMO\\n\\nMock - chưa nối backend\\n\\nLưu\\nTham số người dùng\\nSummary\\nWizard\\nAdvanced\\nGhi chú\\nLưu\",\"overflow\":[]}\n```\nPage navigated to http://127.0.0.1:4193/eng/user-parameters."
+        }
+      ]
+    }
+  }
+]

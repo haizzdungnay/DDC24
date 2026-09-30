@@ -1,23 +1,25 @@
 # DDC-24 — Review giao diện và mã nguồn frontend
 
 **ID:** REC-DDC-UI-REVIEW-20260929
-**Phiên bản:** 1.0
+**Phiên bản:** 1.1
 **Trạng thái:** In Review — hồ sơ quan sát, chưa phê duyệt thay đổi sản phẩm
 **Cập nhật:** 2026-09-29
 **Chủ quản:** Product Owner và nhóm frontend
-**Nguồn đã rà:** `origin/main@265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3`
+**Nguồn đã rà:** lượt Programming 1.0 tại `265f1a8bfe2bcf1bc9548f0979e4334f3d6437b3`; lượt mở rộng 1.1 tại `origin/main@101d1fdf54c827519d196572484afbb366f9a7c4` (fetch ngày 2026-09-29).
 
 ## 1. Kết luận dễ hiểu
+
+**Khách hàng chính đã chốt: đơn vị tích hợp BMS, cần cấu hình và chạy thử nhanh.** Hướng phát triển: chọn thiết bị → tái sử dụng cấu hình → kiểm I/O → tìm nguyên nhân → bàn giao có hồ sơ. Phần mở rộng ở §9–12 ghi 29 tuyến trang, hai lỗi mới và bốn khoảng thiếu về trải nghiệm.
 
 **Nên cải thiện theo thứ tự: nhận đúng thiết bị → giữ vùng làm việc dùng được → thao tác bàn phím đầy đủ → theo dõi lệnh ổn định → giảm số việc người dùng phải tự nhớ.**
 
 Giao diện đã có nền để phát triển: chia các bước lập trình, ánh xạ, kiểm tra và vận hành; tách bản nháp khỏi bản đang chạy; có trạng thái chỉ đọc trên điện thoại; có thư viện, bàn làm việc và chẩn đoán theo ngữ cảnh. Nên phát triển tiếp các thành phần này.
 
-Review tìm được **5 finding: 3 mục P1 và 2 mục P2**. Ba mục đã tái hiện trên Chrome, một mục tái hiện bằng test hook trên host, một mục xác nhận qua source. Chúng chưa được sửa trong phiên review này. [Bảng đề xuất riêng](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md) chuyển các finding thành việc cụ thể, có chi phí dự kiến và tiêu chí nghiệm thu.
+Lượt Programming 1.0 tìm được **5 finding: 3 mục P1 và 2 mục P2**. Ba mục đã tái hiện trên Chrome, một mục tái hiện bằng test hook trên host, một mục xác nhận qua source. Chúng chưa được sửa trong phiên review này. [Bảng đề xuất riêng](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md) chuyển các finding thành việc cụ thể, có chi phí dự kiến và tiêu chí nghiệm thu.
 
 P1 ở đây nghĩa là cần ưu tiên xử lý trước khi nghiệm thu phần giao diện liên quan; P2 là lỗi thao tác hoặc vòng đời cần xử lý trong đợt cải thiện tiếp theo. Đây là phân loại review, không tự sửa ma trận release của dự án.
 
-## 2. Phạm vi và độ tin cậy
+## 2. Phạm vi và độ tin cậy — lượt Programming 1.0
 
 Checkout ban đầu là `main@cb690dfb`, chậm hơn main đã fetch 81 commit và có CHANGELOG đang sửa. Review dùng worktree riêng `/tmp/ddc-ui-review-20260929` tại commit nêu trên; không thay đổi source frontend của checkout người dùng. Các liên kết source trong finding ghim commit để không dẫn nhầm bản local cũ.
 
@@ -184,8 +186,106 @@ Log và ảnh được lưu tại [bằng chứng audit](assets/ui-review-2026-0
 - Thử với 5 kỹ sư, gồm người mới và người đang dùng sản phẩm: tìm đúng điểm từ hai thiết bị, sửa một dây sai, xác định nguyên nhân đầu ra bị giữ, đọc lại lệnh đang xử lý, mở modal bằng bàn phím. Dùng fixture an toàn trước, rồi lane backend thật cho các hợp đồng cần xác nhận.
 - Đo thời gian, số lần chuyển trang, số lần hỏi trợ giúp và chọn nhầm nguồn; ghi median và từng lượt. Mục tiêu đề xuất: 5/5 phân biệt đúng thiết bị, không có mutation ngoài ý định, không thoát focus modal, không tràn ngang trang. So cùng người/cùng task trước–sau, đổi thứ tự phiên để giảm tác động học lại. Mẫu 5 người giúp tìm vấn đề, không đủ để tuyên bố hiệu quả thống kê toàn thị trường.
 
+## 9. Mở rộng rà soát: nhiều trang và tính năng
+
+### 9.1 Nguồn và cách kiểm
+
+Lượt này dùng worktree riêng `/tmp/ddc-ui-expanded-20260929`, đúng lockfile của main `101d1fdf`. Không lấy checkout local `cb690dfb` làm hiện trạng mới. Không sửa source FE hay contract sản phẩm. Các finding Programming §4 và số đo §7 là hồ sơ của lượt 1.0; các file gây UI-F01..05 không đổi trong delta đến baseline mới, nhưng **không chạy lại toàn bộ phép tái hiện cũ**. Không tự đóng finding vì main có PR về hiệu năng.
+
+Main mới đã thêm `useSharedPoll`, `useLivePoints`, `visibleInterval`, `useShellAlarms`, tối ưu `useApi`, sửa vị trí Frame Monitor và nhịp Watch. Đây là nền cần tái sử dụng khi refactor. Vẫn có các consumer dùng `useApi(getPoints)` riêng; phải đo request thực trước khi kết luận toàn ứng dụng đã dùng chung một nguồn đọc.
+
+Chrome DevTools MCP khảo sát **29 tuyến × 2 kích thước = 58 lượt quan sát**: desktop 1440×900 và mobile 390×844. Chạy Vite loopback, `VITE_DDC_MODE=demo`, `VITE_AUTH_MODE=mock`. Dữ liệu là mô phỏng; một số client vẫn gọi backend nên `/schedules`, `/history`, `/modbus/frames` trả 502. Các lỗi này giới hạn kiểm luồng thành công; **không được suy là backend sản phẩm hỏng**. Sau đổi viewport, auth mock mất phiên; đã đăng nhập lại, loại các lượt chỉ thấy Login khỏi tập 58 kết quả. [Dữ liệu khảo sát](assets/ui-review-2026-09-29/expanded/survey.json), [Console](assets/ui-review-2026-09-29/expanded/console-desktop.txt), [Network](assets/ui-review-2026-09-29/expanded/network-desktop.txt).
+
+Đã quan sát trang mặc định, trạng thái trống/lỗi có trong fixture, nhãn, điều hướng và bề rộng. Đây chưa là E2E mọi modal, mọi quyền, offline/reconnect hay thao tác ghi. Không gửi lệnh xuống thiết bị thật. Programming vẫn dùng bằng chứng riêng của lượt 1.0.
+
+### 9.2 Bảng hiện trạng theo trang
+
+Source ở bảng thuộc `apps/web-ui/src/features/`, trừ khi ghi khác; ghim toàn bộ tại [cây source main đã rà](https://github.com/Mekong-HCM/MK-DDC-24/tree/101d1fdf54c827519d196572484afbb366f9a7c4/apps/web-ui/src). “Có” nghĩa source/giao diện có khả năng này, không tự xác nhận target/HIL.
+
+| Trang / route | Source chính | Nền hiện có nên giữ | Cải thiện để tích hợp nhanh | Lớp kiểm / giới hạn |
+|---|---|---|---|---|
+| Tổng quan `/` | `dashboard/DashboardPage.tsx` | Health, alarm, override owner, ghim, xuất snapshot | Thêm bước tiếp theo của phiên cấu hình; giữ Dashboard vận hành | Chrome hai kích thước, dữ liệu demo |
+| Giám sát `/monitor` | `points/MonitorPage.tsx` | Filter nguồn/thiết bị/chất lượng, saved view, audit/trend link, bulk override | Mở thiết bị và phiếu kiểm cùng ngữ cảnh điểm | Chrome; bảng cuộn bên trong không phải tràn toàn trang |
+| Chạy thử `/eng/commissioning` | `points/CommissioningPage.tsx` | Prerequisite, TTL, xác nhận, trả tất cả, kết quả từng output | Phiếu bền vững cho input/output/Modbus; tách phản hồi thực địa | Chrome chỉ đọc + test; chưa kiểm cơ cấu thật |
+| Inputs `/eng/inputs` | `points/InputsPage.tsx` | Mode cảm biến, scaling, hiệu chuẩn, copy kênh, capability Rev A | Bảng kiểm dây và đối chiếu phép đo; mẫu theo loại cảm biến | Chrome trạng thái mặc định; chưa lưu cấu hình |
+| Outputs `/eng/outputs` | `points/OutputsPage.tsx` | Safe value, preview tín hiệu, AO/DO, quyền ghi | Thống nhất thô/đơn vị kỹ thuật/%; co toolbar mobile | Chrome; thấy 571% cùng 57% mở trong demo, cần đối chiếu fixture/contract, chưa quy lỗi target |
+| Điểm ảo `/eng/virtual-points` | `points/VirtualIoPage.tsx` | Nhiều kiểu dữ liệu, restartPolicy, logging, nhân bản | Ngữ cảnh thiết bị + hiển thị đơn vị gọn; mobile không tràn | Chrome; có nhãn đơn vị dài và tiếng Anh xen kẽ |
+| Cảnh báo `/alarms` | `operations/AlarmsPage.tsx` | Ack/shelve/reason, metrics, link điểm và trend quanh sự kiện | Hướng dẫn kiểm tra, ghim vào phiếu thiết bị | Chrome không Ack/shelve |
+| Lịch sử `/alarms/history` | cùng file trên | Filter event/thời gian/mức độ | Timeline chung alarm–lệnh–read-back; vẫn giữ dữ liệu gốc | Chrome; không kiểm retention trên bo |
+| Luật cảnh báo `/eng/alarm-settings` | `operations/AlarmSettingsPage.tsx` | Hysteresis, nhiều nguồn, thử luật, backtest, BACnet enrollment | Mẫu theo thiết bị và lời giải thích; tái dùng engine hiện có | Chrome + source; chưa chạy thử engine thật |
+| Xu hướng `/trends` | `operations/TrendsPage.tsx` | Historian, gap/partial, generation, CSV, marker, saved view | Sửa thống kê null; một click mở bộ lệnh/phản hồi của thiết bị | Chrome + tái hiện host UI-F07; demo đi nhánh legacy |
+| Danh sách lịch `/eng/scheduler` | `scheduler/SchedulerGridPage.tsx` | Quản lý lịch, publish/read-back theo source | Mẫu lịch và phiếu xác minh theo thiết bị | Chrome **chỉ trạng thái lỗi 502**; thành công chưa kiểm |
+| Lịch đang chạy `/eng/scheduler/runtime` | `scheduler/SchedulerRuntimePage.tsx` | Chuỗi nguồn→giá trị→priority→target→write-result, override reason | Đưa chuỗi này vào trang thiết bị; không làm engine mới | Source + Chrome lỗi 502 |
+| Modbus tổng quan `/eng/modbus-rtu` | `modbus-rtu/pages/OverviewPage.tsx` | Bus/slave/point, telemetry unknown, cảnh báo cấu hình | Dẫn đến việc cần làm theo bus hoặc thiết bị | Chrome cấu hình trống |
+| Cổng Modbus `/eng/modbus-rtu/ports` | `modbus-rtu/pages/PortsPage.tsx` | Serial ở cấp bus, riêng từng cổng | Checklist dây/baud/parity/address; không tự đổi cổng | Chrome trạng thái không có cổng demo |
+| Thiết bị Modbus `/eng/modbus-rtu/devices` | `modbus-rtu/pages/DevicesPage.tsx` | Probe, retry/timeout, trạng thái chưa từng poll, FC15 | Mẫu thiết bị có provenance + hướng dẫn lý do lỗi | Chrome không có slave; probe thật chưa kiểm |
+| Điểm Modbus `/eng/modbus-rtu/points` | `modbus-rtu/pages/PointsPage.tsx` | Template, CSV/JSON import/export, địa chỉ/endian/scale preview, write verify | Trình hướng dẫn ráp các bước đã có và ca kiểm mẫu | Chrome cấu hình trống; không đề xuất “thêm import/template” như tính năng chưa có |
+| Ánh xạ Modbus `/eng/modbus-rtu/mapping` | `modbus-rtu/pages/MappingPage.tsx` | Bản nháp, lỗi chặn apply, ước lượng tải bus | Liên kết lỗi đúng hàng; nối sang mapping Programming | Chrome trống |
+| Chẩn đoán Modbus `/eng/modbus-rtu/diagnostics` | `modbus-rtu/pages/DiagnosticsPage.tsx`, `components/FrameMonitor.tsx` | CRC/timeout/retry, chưa từng poll, passive frame monitor | Một gói bằng chứng theo lỗi; giữ capture không tự phát bus | Chrome telemetry trống, Frame Monitor 502 |
+| Chẩn đoán `/diagnostics` | `dashboard/DiagnosticsPage.tsx` | Metric có nguồn, dịch vụ, sơ đồ terminal, xuất gói | Giải thích dấu hiệu và đường mở đúng điểm/phiếu | Chrome demo; không đo hiệu năng bo |
+| Hoạt động `/activity` | `dashboard/ActivityPage.tsx` | Filter actor/action/object, CSV | Nối commandId/sessionId khi contract mới có | Chrome trống demo |
+| Mạng `/settings/network` | `network/NetworkPage.tsx` | Stage→Apply→Confirm→rollback, north/southbound | Preflight tích hợp BMS, xem khác biệt, chỉ rõ mất kết nối dự kiến | Chrome chỉ đọc; không đổi IP |
+| Giờ `/settings/time` | `network/TimeSettingsPage.tsx` | NTP, timezone, RTC, drift | Đưa kiểm giờ vào preflight và timestamp hồ sơ | Chrome chỉ đọc |
+| Thiết bị `/settings/device` | `network/SettingsPage.tsx` | Tên, vị trí, BACnet Device ID | Chuẩn đặt tên + kiểm trùng ID tại cấp được hỗ trợ | Chrome không lưu; không có dữ liệu toàn mạng để chứng minh không trùng |
+| Người dùng `/settings/users` | `auth/UsersPage.tsx` | RBAC, reset/delete, session/audit info | Preset bàn giao theo vai; xác minh quyền sau cấp | Chrome admin mặc định; ma trận quyền toàn bộ chưa chạy |
+| Hiển thị `/settings/display` | `network/DisplaySettingsPage.tsx` | Tiếng Việt/Anh, theme, mật độ, âm báo có lý do browser block | Ngôn ngữ nhất quán; tách lưu trình duyệt và lưu controller | Chrome + source; nhiều setting còn local theo mô tả trang |
+| Trợ giúp `/help` | `dashboard/HelpPage.tsx` | Topic theo route, nội dung an toàn | Checklist tích hợp theo tác vụ với liên kết thật | Chrome; chưa thử người dùng mới |
+| Sơ đồ `/eng/diagram` | `dashboard/DiagramPage.tsx` | Sơ đồ terminal, mở Monitor | Giữ sơ đồ controller; bổ sung sơ đồ thiết bị ở cấp khác | Chrome; hình to cuộn trong vùng riêng |
+| Hàm phụ `/eng/aux` | `dashboard/AuxFunctionsPage.tsx` | Demo cụm logic FU | Ghi rõ capability; không bán như thư viện production | Chrome demo; route bị quarantine theo contract |
+| Tham số `/eng/user-parameters` | `points/UserParametersPage.tsx` | Wizard/advanced, bảo vệ bản nháp | Không đưa vào luồng chuẩn khi chưa có capability | Chrome demo; route quarantine, không suy thành thiếu tính năng Rev A |
+
+## 10. Finding mới và khoảng thiếu có giá trị cạnh tranh
+
+### UI-F06 — P1: toàn trang mobile tràn ngang ở nhiều feature
+
+**Triệu chứng:** layout viewport 390 px nhưng `documentElement.scrollWidth` lên 527 px ở cả sáu tuyến Modbus, 425 px ở Outputs và 532 px ở Virtual Points. Tham số demo cũng 434 px nhưng nằm ngoài menu sản phẩm; không tính như blocker Rev A. Thanh tab Modbus có Mapping/Diagnostics nằm ngoài phần nhìn thấy, ảnh cho thấy chữ bị cắt ở cạnh phải.
+
+**Source:** `ModbusRtuLayout.tsx:60` dùng flex không wrap/khung cuộn; tab cuối có right 527,28 px. `OutputsPage.tsx:245` và `VirtualIoPage.tsx` có cụm action không đủ co/wrap. Đây là các vị trí cần đo lại trong sửa layout, chưa khẳng định chỉ một class giải quyết hết.
+
+**Bằng chứng:** [ảnh Modbus](assets/ui-review-2026-09-29/expanded/modbus-points-mobile.png), [ảnh VP](assets/ui-review-2026-09-29/expanded/virtual-mobile.png), [58 phép đo](assets/ui-review-2026-09-29/expanded/survey.json). Dashboard/Monitor/Trend/Network/Users có bảng hoặc hình cuộn **bên trong**, document vẫn 390 px; không gộp các vùng đó thành lỗi toàn trang.
+
+**Tác động:** kỹ sư dùng điện thoại khó tìm chẩn đoán và thao tác kế tiếp. Mở rộng UI-P02/UI-P06: container min-width phù hợp, toolbar wrap/dock, tab cuộn trong vùng có dấu chỉ; giữ tên điểm/thiết bị/TTL luôn nhìn thấy. Nghiệm thu ở 390/768/1440 px: document không rộng hơn client; mọi tab tới được bằng chạm/bàn phím, không cắt hành động an toàn.
+
+### UI-F07 — P1: mẫu thiếu bị thống kê như số 0
+
+**Source:** [TrendsPage.tsx:646](https://github.com/Mekong-HCM/MK-DDC-24/blob/101d1fdf54c827519d196572484afbb366f9a7c4/apps/web-ui/src/features/operations/TrendsPage.tsx#L646). `Number(sample[item.key])` biến `null` thành `0`, rồi `Number.isFinite` giữ lại. Fallback cũng dùng 0 khi thiếu điểm. Chart/table mẫu ghi GAP/No value nhưng tổng hợp hiện current/avg/min/max = 0 và 2 mẫu.
+
+**Tái hiện mới:** hai mẫu null, kỳ vọng số mẫu hợp lệ 0, thực tế 2; [test tái hiện](assets/ui-review-2026-09-29/expanded/gap-repro.test.tsx.txt), [log FAIL](assets/ui-review-2026-09-29/expanded/gap-repro.txt), [ảnh](assets/ui-review-2026-09-29/expanded/trend-gap-mobile.png). Lỗi host thuộc hàm thống kê dùng chung; browser hiện lỗi trên nhánh demo/legacy. Chưa xác định tần suất trên unified historian thật.
+
+**Tác động:** người dùng có thể nhầm mất mẫu thành nhiệt độ/áp suất/công suất bằng 0. Đề nghị lọc null/undefined/chuỗi rỗng trước đổi kiểu; thống kê không có mẫu hiện “Không có dữ liệu” và số mẫu 0; live current tách khỏi thống kê lịch sử. Test phải phân biệt số 0 thật, null, chuỗi rỗng, BAD/gap và series đã xóa; chính sách BAD/UNCERTAIN cần theo contract historian, không tự xóa số đo hợp lệ.
+
+### Khoảng thiếu sản phẩm — không gọi là lỗi runtime đã chứng minh
+
+| Mã | Hiện trạng có chứng cứ source | Việc người tích hợp còn phải tự làm | Đề xuất nối tiếp |
+|---|---|---|---|
+| UI-G01 | `CommissioningPage.tsx:159` giữ `outcomes` trong useState; trang chỉ chọn AO/DO và không có xuất phiếu | Ghi giấy/Excel, nhớ điểm đã kiểm, gộp kết quả local/Modbus/input | UI-P09, kế thừa CP-01; backend audit hiện có không đồng nghĩa phiếu chạy thử đầy đủ |
+| UI-G02 | `Point.equipment` + filter `equip` theo ADR-042 đã có; Monitor/alarm/trend/scheduler có một số deep-link | Tự ráp lệnh, override, alarm, schedule và phản hồi của cùng AHU | UI-P10; mở rộng CP-04/07, không thay ID/tag hiện có |
+| UI-G03 | App routes và Settings chưa có một màn đóng phiên/backup/restore thống nhất; đã có xuất snapshot/audit/Modbus | Gom nhiều file; xác nhận đã nhả lệnh; so revision khi thay controller | UI-P13; CP-05 cần khảo sát backend/tool backup hiện có trước viết mới |
+| UI-G04 | Chạy thử nằm trong CommandPalette và trang quyền người dùng, ẩn khỏi NavRail có chủ ý; demo nhiều nguồn dữ liệu chưa nhất quán | Kỹ sư mới khó thấy luồng chính; dễ tin demo phản ánh capability/metric thật | UI-P14/16; thay entry-point là quyết định Product và ADR-032, không sửa menu tùy tiện |
+
+**Quan sát cần xác minh thêm:** demo Outputs hiện giá trị kỹ thuật 571% cùng 57% mở; Diagnostics vẽ 5 Modbus trong sơ đồ trong khi Overview Modbus trống; Display và VP còn nhãn Anh/đơn vị quá dài. Lượt này chưa chứng minh lỗi production hay sai firmware. UI-P16 yêu cầu fixture thống nhất đơn vị/capability và test contract trước dùng làm demo bán hàng.
+
+## 11. Kiểm chứng mới trên baseline mở rộng
+
+| Kiểm | Kết quả | Giới hạn |
+|---|---|---|
+| `npm ci --no-audit --no-fund` | PASS, đúng lockfile | Không đổi dependency |
+| Vitest chọn lọc source hiện có | **12 file / 169 test PASS**, 22,66 s | Shared polling, alarm shell, Commissioning, Trend, alarm deep-link, Network, Time, Modbus layout/diagnostics, route contract |
+| Tái hiện UI-F07 | **1/1 FAIL**, mong 0 mẫu, nhận 2 | Đây là bằng chứng lỗi, không là gate PASS; test tạm đã gỡ khỏi worktree và giữ bản sao trong evidence |
+| `npm run lint` | PASS, UI strings PASS | Không đồng nghĩa nhãn đã dễ hiểu/đồng nhất |
+| `npm run build` | PASS; Programming gzip **76,85 KiB / 165 KiB** | HOST build, không phải bundle đang chạy trên bo |
+| Chrome DevTools | 58 lượt, 29 tuyến, desktop/mobile; 5 ảnh hiện trạng | Scheduler thành công và Frame Monitor có dữ liệu chưa kiểm vì backend fixture thiếu |
+| Source/runtime/contract | Source rà và fixture hiển thị | Không có backend thật, target, HIL, reboot/soak hoặc usability benchmark đối thủ |
+
+Log mới nằm trong thư mục [expanded](assets/ui-review-2026-09-29/expanded/); kết quả kiểm docs và render concept ghi trong [EVIDENCE](assets/ui-review-2026-09-29/EVIDENCE.md). Không nâng `RELEASE_READY` từ báo cáo này. Các lỗi UI đã xác nhận và proposal vẫn cần Issue/owner, thiết kế được duyệt, bản sửa và bằng chứng đúng cấp trước khi đóng.
+
+## 12. Kết luận cho Product
+
+Ưu tiên một gói **cấu hình → kiểm I/O → tìm lỗi → bàn giao** theo thiết bị. Đợt đầu sửa lỗi định danh/layout/focus/poll và số liệu null; sau đó pilot phiếu chạy thử cùng ngữ cảnh thiết bị. Tái dùng các công cụ Modbus, Scheduler, Historian, Programming đang có. Bảng đối thủ, tám đề xuất mở rộng, refactor và bản trực quan ở [báo cáo đề xuất §6–11](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md#6-mục-tiêu-cạnh-tranh-đã-chốt).
+
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-09-29 | Review source ghim commit, tái hiện 5 finding theo lớp bằng chứng, đối chiếu authority và bàn giao đề xuất riêng; chưa sửa FE hay đánh giá release |
+| 1.1 | 2026-09-29 | Mở rộng 29 tuyến trên main 101d1fdf; ghi UI-F06/07, UI-G01..04; 58 quan sát Chrome, 169 test hiện có PASS và 1 phép tái hiện FAIL; giữ giới hạn demo/target |
