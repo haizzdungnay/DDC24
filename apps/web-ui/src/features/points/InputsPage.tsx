@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { DraftDiffTable } from '../../shared/components/DraftDiffTable'
 import { Modal } from '../../shared/components/Modal'
@@ -1369,6 +1370,27 @@ function LiveDataItem({ label, value }: { label: string; value: string }) {
 
 function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, LiveTrendSample[]>>({})
+
+  useEffect(() => {
+    if (!pointId) return
+    let cancelled = false
+    fetchRecentTrendSamples([pointId], 120_000, 60).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setBuffers((current) => {
+        const existing = current[pointId] ?? []
+        if (existing.length === 0) {
+          return { ...current, [pointId]: initialSamples as LiveTrendSample[] }
+        }
+        const byTs = new Map<number, LiveTrendSample>()
+        for (const s of initialSamples as LiveTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-60) }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pointId])
 
   useEffect(() => {
     if (!point) return

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { fetchActivity } from '../../shared/api/overview'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { buildSnapshot, downloadJson, snapshotFilename } from '../../shared/diagnosticsExport'
 import { Modal } from '../../shared/components/Modal'
@@ -820,8 +821,25 @@ function TrendPreview() {
      phân biệt "producer vừa phát giá trị mới" với "trình duyệt vừa tick". */
   const lastSampledAtRef = useRef<Record<string, string>>({})
   useEffect(() => {
-    setSamples([])
     lastSampledAtRef.current = {}
+    if (!selected.length) {
+      setSamples([])
+      return
+    }
+    let cancelled = false
+    fetchRecentTrendSamples(selected, TREND_WINDOW_MS, TREND_SAMPLE_LIMIT).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setSamples((current) => {
+        if (current.length === 0) return initialSamples
+        const byTs = new Map<number, TrendSample>()
+        for (const s of initialSamples) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of current) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-TREND_SAMPLE_LIMIT)
+      })
+    })
+    return () => {
+      cancelled = true
+    }
   }, [selected])
 
   /* F-UX-14 (`REV-FE-UIUX-UC-2026-08-18` §7.1) — lấy mẫu theo producer, không
@@ -881,7 +899,12 @@ function TrendPreview() {
         time: new Date(stampMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         ...values
       }))
-    setSamples((previous) => [...previous, ...rows].slice(-TREND_SAMPLE_LIMIT))
+    setSamples((previous) => {
+      const byTs = new Map<number, TrendSample>()
+      for (const s of previous) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+      for (const s of rows) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+      return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-TREND_SAMPLE_LIMIT)
+    })
   }, [chosen])
 
   function toggle(id: string) {

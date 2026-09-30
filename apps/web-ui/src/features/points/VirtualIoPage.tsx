@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, normalizePointTag, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
@@ -569,6 +570,27 @@ type VpTrendSample = TrendSample & { raw: number }
 
 function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, VpTrendSample[]>>({})
+
+  useEffect(() => {
+    if (!pointId) return
+    let cancelled = false
+    fetchRecentTrendSamples([pointId], 120_000, 60).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setBuffers((current) => {
+        const existing = current[pointId] ?? []
+        if (existing.length === 0) {
+          return { ...current, [pointId]: initialSamples as VpTrendSample[] }
+        }
+        const byTs = new Map<number, VpTrendSample>()
+        for (const s of initialSamples as VpTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-60) }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pointId])
 
   useEffect(() => {
     if (!point) return
