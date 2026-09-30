@@ -127,12 +127,14 @@ describe('unified Trends presentation', () => {
   })
 
   it('uses the live point value for the realtime table while preserving historian values for Custom', () => {
-    const livePoint = { ...point, value: 42 }
+    const livePoint = { ...point, value: 42, quality: 'good' as const }
     const series = [{ key: 'VP2::g1', pointId: 'VP2', generation: 1, label: 'Fan enable', color: '#123456', stepped: true }]
-    const samples: TrendSample[] = [{ time: '2026-07-20T00:00:15.000Z', __ts: Date.parse('2026-07-20T00:00:15Z'), 'VP2::g1': 7 }]
+    const samples: TrendSample[] = [{ time: '2026-07-20T00:00:15.000Z', __ts: Date.parse('2026-07-20T00:00:15Z'), 'VP2::g1': 7, 'VP2::g1:quality': 'BAD' }]
 
     expect(buildTrendRows(series, [livePoint], samples, true)[0].current).toBe(42)
+    expect(buildTrendRows(series, [livePoint], samples, true)[0].quality).toBe('good')
     expect(buildTrendRows(series, [livePoint], samples, false)[0].current).toBe(7)
+    expect(buildTrendRows(series, [livePoint], samples, false)[0].quality).toBe('bad')
   })
 
   it('adds a one-second live chart tail to presets without changing cache statistics or Custom', () => {
