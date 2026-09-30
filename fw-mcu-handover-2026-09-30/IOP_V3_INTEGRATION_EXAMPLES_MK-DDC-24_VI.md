@@ -14,6 +14,8 @@
 
 **Phạm vi:** hành vi giao diện quan sát được ở hai profile Rev A và khi mất liên lạc; không quy định pinout, RTOS, DMA hoặc driver bên trong MCU
 
+**Tra cứu từng lệnh:** [Sổ tay 16 CMD và frame ví dụ đầy đủ CRC](IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md).
+
 ## 1. Cách đọc
 
 `SEQ` trong mỗi **chuỗi giao dịch** tăng cho request mới; các vector `Vxx` trong ICD §15.1 là **vector độc lập** và có thể dùng SEQ khác chuỗi ví dụ. Payload nhiều byte dùng big-endian. `AO5..AO8 = 0` trên profile 4/4 là 8 byte `00`, không phải cắt bớt `SET_AO`. `MASK = 0x0F` là phủ mọi DO của 4/4; `MASK = 0xFF` là phủ mọi DO của 8/8.

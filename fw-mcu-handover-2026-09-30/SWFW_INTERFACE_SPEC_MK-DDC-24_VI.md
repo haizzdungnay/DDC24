@@ -15,6 +15,8 @@
 
 ---
 
+**Tra cứu từng lệnh:** [Sổ tay 16 CMD và frame ví dụ đầy đủ CRC](IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md).
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

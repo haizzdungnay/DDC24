@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Changed — Gói tích hợp IOP V3.0 R3 kèm sổ tay lệnh (2026-09-30)
+
+- **Phạm vi:** cập nhật bản bàn giao và ZIP từ commit nguồn `70e9f19980d2`, gồm 18 file; thêm sổ tay 16 CMD và liên kết tra cứu, giữ các tài liệu/byte V3.0 hiện hành.
+- **Kiểm chứng:** 17/17 dòng manifest PASS; 18/18 mục ZIP khớp file gói; 69 link nội bộ hợp lệ; 41 frame, 4 đầu vào lỗi, 2 digest trong bản gói PASS với Python và C99/C11/C++11/C++17. Dựng bằng SHA đầy đủ hoặc viết tắt cho cùng ZIP 90 687 byte, SHA-256 `e42fa387d1f0a03928969512941769d9440f6d7fb83e5b942cbec664684fc18f`.
+- **Giới hạn:** nội dung sẵn để hai team review; gói chưa gửi/chưa ký, kiểm cặp P1 và phần cứng P2/P3 chưa chạy.
+
 ### Added — Sổ tay toàn bộ lệnh tích hợp IOP V3.0 (2026-09-30)
 
 - **Phạm vi:** thêm `IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md`: đủ 16 CMD, payload/bitfield, 41 frame request/response đầy đủ CRC cho hai profile, 4 đầu vào lỗi, giải mã dữ liệu/cấu hình và luồng khởi động/RESYNC/retry/mất poll. Liên kết từ ICD, ví dụ và chỉ mục; chuẩn bị bản gói R3.
