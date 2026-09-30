@@ -7,7 +7,7 @@ import { historyClient, historyCsvUrl, historyPresetDurationMs, historySeriesKey
 import { HISTORIAN_V2_TRENDS_ENABLED } from '../../shared/config'
 import { Button } from '../../shared/components/Button'
 import { DataTable, Column } from '../../shared/components/DataTable'
-import { HistoryStateBanner, type HistoryPresentationState } from '../../shared/components/HistoryStateBanner'
+import { type HistoryPresentationState } from '../../shared/components/HistoryStateBanner'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { SavedViewBar } from '../../shared/components/SavedViewBar'
@@ -19,14 +19,15 @@ import { useSavedViews } from '../../shared/hooks/useSavedViews'
 import { findSavedView } from '../../shared/savedViews'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
-import type { Point, TrendSample, VirtualPoint } from '../../shared/types'
-import { canonicalOutputPointId, canonicalVirtualPointId, cn, isFreshIso, mergePointsById, pointDisplayTag } from '../../shared/utils'
+import type { Point, PointQuality, TrendSample, VirtualPoint } from '../../shared/types'
+import { canonicalOutputPointId, canonicalVirtualPointId, cn, isFreshIso, mergePointsById, normalizeQuality, pointDisplayTag } from '../../shared/utils'
 import { filterTrendPoints, filterTrendSamplesByRange, parseTrendCustomRange, localDateTimeInputValue, localTimeZoneLabel, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
 import { buildTrendMarkers } from './trendMarkers'
 
 interface TrendRow {
   id: string
   name: string
+  quality: PointQuality
   current: number
   avg: number
   min: number
@@ -436,6 +437,7 @@ export function TrendsPage() {
 
   const columns: Array<Column<TrendRow>> = [
     { key: 'trend', header: 'Trend', render: (row) => <span className="font-semibold">{row.name}</span> },
+    { key: 'quality', header: pick('Chất lượng', 'Quality'), render: (row) => <StatusBadge state={row.quality} /> },
     { key: 'current', header: pick('Giá trị hiện tại', 'Current'), render: (row) => <span className="mono">{row.current}</span> },
     { key: 'avg', header: pick('Giá trị TB', 'Average'), render: (row) => <span className="mono">{row.avg}</span> },
     { key: 'min', header: pick('Giá trị min', 'Minimum'), render: (row) => <span className="mono">{row.min}</span> },
@@ -569,7 +571,6 @@ export function TrendsPage() {
             </span>
             {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
           </div>
-          {historyPresentation && <HistoryStateBanner state={historyPresentation.state} gaps={historyPresentation.gaps} detail={historyPresentation.detail ?? (!HISTORIAN_V2_TRENDS_ENABLED ? pick('Legacy query vẫn authoritative; unified Trends chờ activation/cutover marker.', 'Legacy query remains authoritative; unified Trends awaits the activation/cutover marker.') : undefined)} onRetry={historyPresentation.state === 'unavailable' ? () => { void historyState.refetch() } : undefined} />}
           {showMarkers && markerResult.omitted > 0 && (
             <div role="status" className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs text-[var(--c-text-dim)]">
               {pick(
@@ -655,9 +656,28 @@ export function buildTrendRows(series: TrendSeries[], points: Point[], samples: 
       ? liveCurrent
       : values.length ? values[values.length - 1] : fallback
     const aggregateValues = values.length ? values : [current]
+
+    let qualityRaw: unknown = undefined
+    if (useLiveCurrent && point?.quality) {
+      qualityRaw = point.quality
+    } else {
+      for (let i = samples.length - 1; i >= 0; i--) {
+        const q = samples[i][item.key + ':quality']
+        if (q !== undefined && q !== null && q !== '') {
+          qualityRaw = q
+          break
+        }
+      }
+      if (qualityRaw === undefined) {
+        qualityRaw = point?.quality
+      }
+    }
+    const quality = normalizeQuality(qualityRaw)
+
     return {
       id: item.key,
       name: item.label,
+      quality,
       current: Number(current.toFixed(useLiveCurrent ? 3 : 1)),
       avg: Number((sum / Math.max(1, values.length)).toFixed(1)),
       min: Number(Math.min(...aggregateValues).toFixed(1)),
