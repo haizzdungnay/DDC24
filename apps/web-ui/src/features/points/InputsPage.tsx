@@ -1249,6 +1249,11 @@ function DiagnosticsTab({
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)
   const { data, reset } = useAiLiveTrend(pointId, point)
+  const latestTs = data[data.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 120_000, latestTs]
+  }, [latestTs])
   const booleanInput = isDigitalContact(config.signalType) || typeof point?.value === 'boolean'
   const values = booleanInput ? [] : data.map((sample) => sample.raw)
   const stats = values.length > 0
@@ -1302,6 +1307,8 @@ function DiagnosticsTab({
             height={260}
             series={[{ key: pointId, label: config.label || pointId, color: 'var(--c-accent)', unit }]}
             rawUnit={rawCell?.unit}
+            showDots
+            xDomain={xDomain}
           />
           {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu live cho kênh này.', 'No live data for this channel yet.')}</div>}
         </section>
@@ -1372,11 +1379,13 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     // lên trục thời gian bằng giờ máy trạm — biểu đồ sẽ nói dối về độ tươi.
     if (!point.updatedAt) return
     const time = formatTime(point.updatedAt)
+    const stampMs = Date.parse(point.updatedAt)
+    const ts = Number.isFinite(stampMs) ? stampMs : 0
     setBuffers((current) => {
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-60)
+      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-60)
       return { ...current, [pointId]: next }
     })
   }, [pointId, point])

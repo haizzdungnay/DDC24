@@ -215,6 +215,14 @@ export function TrendsPage() {
     () => appendLiveTrendSample(samples, series, selectedPoints, HISTORIAN_V2_TRENDS_ENABLED && !customRange, liveTailNowMs),
     [customRange, liveTailNowMs, samples, selectedPoints, series]
   )
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (customRange) {
+      return [customRange.fromMs, customRange.toMs]
+    }
+    const toMs = Math.max(liveTailNowMs, historyState.data?.toMs ?? 0)
+    if (!toMs) return undefined
+    return [toMs - rangeMinutes * 60_000, toMs]
+  }, [customRange, historyState.data?.toMs, liveTailNowMs, rangeMinutes])
   const tableRows = useMemo(() => buildTrendRows(series, selectedPoints, samples, HISTORIAN_V2_TRENDS_ENABLED && !customRange), [customRange, samples, selectedPoints, series])
   const historyPresentation = historyPresentationState(historyState.data, historyState.error)
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
@@ -591,7 +599,7 @@ export function TrendsPage() {
                 : historyState.error
                   ? <StateBlock state="error" title={pick('Không tải được historian', 'Could not load historian')} detail={historyState.error.message} />
                 : series.length && chartSamples.length > 1
-                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" showBand={showBand} markers={showMarkers ? markerResult.markers : []} showTable={false} />
+                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" showBand={showBand} markers={showMarkers ? markerResult.markers : []} showTable={false} xDomain={xDomain} />
                 : <StateBlock state="empty" title={series.length ? pick('Không có mẫu trong khoảng đã chọn', 'No history in the selected range') : pick('Chọn ít nhất một điểm trend', 'Select at least one trend point')} detail={series.length ? pick('Backend không trả sample khả dụng; gap evidence ở banner phía trên.', 'The backend returned no available samples; see the gap evidence above.') : undefined} />}
           </Panel>
         </div>

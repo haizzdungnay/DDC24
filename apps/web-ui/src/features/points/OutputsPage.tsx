@@ -497,6 +497,11 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
       return engineering === null ? sample : { ...sample, raw: engineering, [output.id]: engineering }
     })
   }, [signalData, output])
+  const latestTs = data[data.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 120_000, latestTs]
+  }, [latestTs])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
@@ -542,7 +547,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
             <h3 className="text-sm font-semibold text-[var(--c-text)]">{t('outputsLiveTrend')}</h3>
             <span className="text-xs font-semibold text-[var(--c-text-dim)]">{output.id}</span>
           </div>
-          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} rawUnit={modeRawUnit} />
+          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} rawUnit={modeRawUnit} showDots xDomain={xDomain} />
         </section>
       </div>
 
@@ -801,7 +806,9 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
     lastKeyRef.current = nextKey
     setBuffers((current) => {
       const existing = current[pointId] ?? []
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-outputTrendLimit) }
+      const stampMs = point.updatedAt ? Date.parse(point.updatedAt) : 0
+      const ts = Number.isFinite(stampMs) ? stampMs : 0
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-outputTrendLimit) }
     })
   }, [pointId, point])
 
