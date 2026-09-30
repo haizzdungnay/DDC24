@@ -10,6 +10,7 @@
 
 ### Changed — Phát hành hồ sơ tích hợp IOP V3.0 lên GitHub (2026-09-30)
 
+- **Bằng chứng đi kèm:** đưa 13 file log được dẫn trong hồ sơ/manifest vào Git bằng danh sách tường minh dù rule chung bỏ qua `*.log`; kiểm manifest hiệu năng 11/11 và manifest UI PASS.
 - **Phạm vi:** đồng bộ `main@729b3a35`, giữ cả hai phía của CHANGELOG; commit các hồ sơ UI/hiệu năng còn trong workspace thành nhóm riêng và đưa đủ 18 file `fw-mcu-handover-2026-09-30/` lên nhánh/PR. Hai log UI chỉ bỏ dòng trống cuối file và cập nhật checksum; giữ số đo lịch sử.
 - **Kiểm chứng mới:** C++ cấu hình đủ Modbus/BACnet/HMI, build PASS; CTest 1 752 PASS, 2 SKIP trên 1 754 mục; Go vet và test 21 package PASS; Vitest 278 file/3 597 test PASS; docs ISO, 41 frame/4 đầu vào lỗi/2 digest, manifest gói PASS.
 - **Lỗi nền:** FE lint FAIL 9 lỗi, FE build FAIL 5 lỗi TypeScript; 6 file liên quan giống `origin/main` từng byte, ghi finding #848. Không đổi code FE để xử lý trong PR tài liệu. CI GitHub bị tắt, không có kết quả CI xanh.
