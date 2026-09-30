@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Changed — Quy trình gỡ conflict PR vào rule agent; `WF-CLEAN-001` 1.6 (2026-09-30)
+
+- **Phạm vi:** `AGENTS.md`, `CLAUDE.md` (mục mới "Quy trình gỡ conflict của một PR", nội dung giống nhau ở hai file), `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (`§8.4` bước 9, lên 1.6).
+- **Lý do:** rule cũ chỉ ghi "conflict thì xử lý an toàn, CHANGELOG giữ cả hai bên". Khi gỡ conflict PR #844, `main` (PR #845) đã chuyển quy đổi giá trị lịch lên `evaluate_schedule` theo từng target. Giữ phía PR vẫn build được, vẫn hết dấu conflict, nhưng ép `active_value = 50` của AO lên 100 %. Rule cũ không chặn được lựa chọn đó.
+- **Nội dung rule:** gỡ trong worktree tách riêng (không đụng cây chung); merge chứ không rebase hay force-push; đọc commit bên `main` để hiểu ý định trước khi chọn; soát cả file git tự gộp; cấm `--ours`/`--theirs` cả file mã nguồn; CHANGELOG giữ cả hai phía và thêm mục ghi quyết định gộp khi mục của PR không còn đúng; kiểm đột biến khi chọn một phía; commit merge ghi rõ từng quyết định; xác nhận `MERGEABLE`; dọn worktree. Gỡ xong không tự merge PR.
+- **Kiểm chứng:** `scripts/verify-project.sh --component docs` exit 0 (quét 503 file `.md`, 0 liên kết hỏng, 0 hồ sơ lệch metadata/lịch sử, EXPECT khớp); `git diff --check` sạch. Chỉ đổi tài liệu, không chạy lại C++/Go/FE.
+
 ### Fixed — Check không còn chặn binding đầu ra theo chất lượng live của điểm đích; deploy `main` lên bo lab (Issue #840, 2026-09-29)
 
 - **Phạm vi:**
