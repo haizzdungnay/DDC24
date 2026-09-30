@@ -62,6 +62,10 @@ logs/*
 # giữ cục bộ để gửi ra ngoài, không đẩy lên GitHub tránh trùng lặp nội dung.
 /audit-handover-*/
 
+# Gói bàn giao FW MCU cho team MCU riêng (thư mục + file zip) — cùng lý do:
+# bản sao chụp tài liệu đã có trong docs/ và contracts/, giữ cục bộ để gửi ra ngoài.
+/fw-mcu-handover-*
+
 # Artifacts và công cụ phát triển cục bộ (local dev, không commit)
 # Tránh vô tình commit biến môi trường cá nhân, ảnh chụp màn hình debug UI,
 # script test thủ công, scratch worktrees và script khởi chạy cục bộ chứa đường dẫn máy riêng.

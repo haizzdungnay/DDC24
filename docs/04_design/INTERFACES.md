@@ -21,9 +21,11 @@ kế trong nhiệm vụ này. Nội dung ST/IR bên dưới được giữ như 
 development component host-only; nó không phải Programming interface production
 được phê duyệt và không chứng minh Programming đã implement.
 
-## Kinexus-IOP v2
+## Kinexus-IOP: runtime v2.0, hợp đồng tích hợp v3.0 Draft
 
 Nguồn thực thi: `contracts/iop/iop_protocol.h`.
+
+Hợp đồng hành vi mục tiêu cho team SOM và team MCU riêng: [ICD `IOP-SPEC-MK-DDC-24-VI` V3.0](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và [header V3 nháp](../01_specs/iop_protocol_v3_DRAFT.h) (chi tiết Draft 2026-09-30). [ADR-064](../adr/ADR-064-iop-v3-hai-bien-the.md) đã chốt **V3.0 duy nhất** cho 4/4 và 8/8; không giữ V2.x làm fallback. Bảng dưới chỉ ghi **source/runtime V2.0 còn tồn tại** để lập việc chuyển đổi, không là hợp đồng cho MCU mới. Header chính phải thay đồng bộ sau khi ICD được ký, trước P1.
 
 | Contract | Giá trị hiện hành |
 |---|---|

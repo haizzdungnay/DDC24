@@ -17,7 +17,9 @@
 | [Requirements](02_requirements/REQUIREMENTS.md) | yêu cầu có ID và tiêu chí chấp nhận |
 | [System](03_architecture/SYSTEM.md) | kiến trúc hệ thống và deployment topology |
 | [Interfaces](04_design/INTERFACES.md) | IOP, SHM, cấu hình và API contracts |
-| [Firmware](04_design/FIRMWARE.md) | baseline MCU, sampling, actuation, IOP và watchdog |
+| [Firmware](04_design/FIRMWARE.md) | baseline MCU, sampling, actuation, IOP và watchdog; ranh giới với team MCU riêng |
+| [Yêu cầu FW MCU](01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) | `FW-REQ-MK-DDC-24-VI` v3.1: yêu cầu hộp đen giao cho team MCU riêng, cổng nghiệm thu G-MCU-1..3; Draft, chờ ký |
+| [ICD SOM ↔ MCU](01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | `IOP-SPEC-MK-DDC-24-VI` v3.0: frame, lệnh, trạng thái, thời gian, lỗi, phiên bản, vector và bài kiểm tích hợp Kinexus-IOP v3.0; Draft, chờ ký |
 | [Software](04_design/SOFTWARE.md) | thiết kế các service và component runtime |
 | [Hardware](04_design/HARDWARE.md) | baseline điện tử, I/O và ràng buộc thiết kế |
 | [Verification](05_verification/VERIFICATION.md) | chiến lược test, ma trận và release gates |

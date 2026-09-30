@@ -8,6 +8,19 @@
 
 ## [Unreleased]
 
+### Added — Gói tài liệu tích hợp SOM ↔ MCU v3.0 cho team HW và FW MCU (2026-09-30)
+
+- **Phạm vi:** dựng lại gói cục bộ `fw-mcu-handover-2026-09-30/` và `.zip` theo lựa chọn (a) của chủ dự án. Gói cũ chưa gửi; bản mới có đúng ba file nội dung: `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md` (ICD v3.0), `FW_REQUIREMENTS_MK-DDC-24_VI.md` (v3.1) và `iop_protocol_v3_DRAFT.h`, cộng README phân vai phản hồi HW/FW/SOM, nguồn gốc SHA-256 và manifest. Bỏ toàn bộ phần HW 4/4, tham khảo v2, kiểm chứng/bối cảnh cũ khỏi gói. `.gitignore` giữ gói/zip ở máy cục bộ như bản sao bàn giao, không coi là contract runtime.
+- **Giới hạn:** bản nháp để HW/FW MCU/SOM/Safety rà soát, chưa ký và chưa gửi; thiếu hồ sơ HW chuẩn 8/8. `contracts/iop/iop_protocol.h` v2.0 và source runtime vẫn là hiện trạng; P1/P2/P3, HIL và release chưa có bằng chứng từ gói này.
+- **Kiểm chứng:** 3 file nội dung + 3 file hỗ trợ, 17 link nội bộ hợp lệ; vector §15.1 và header trong gói trùng nguồn. `sha256sum -c MANIFEST.sha256` đạt 5/5, `unzip -t` đạt 6/6; zip 41 615 byte, SHA-256 `dd7dc73b2856e2d85a2edea609ab05a0fcaf8fc77b85af64816d54f5bcaccca6`.
+
+### Changed — Hợp đồng nháp IOP v3.0 cho hai biến thể (2026-09-30)
+
+- **Quyết định:** chủ dự án chọn PA-B/IOP v3.0, gộp v2.1, dùng một layout tối đa 8 AO/8 DO cho cả 16/4/4 và 16/8/8; số kênh thực lắp khai trong `HANDSHAKE_RESP`. Ghi [ADR-064](docs/adr/ADR-064-iop-v3-hai-bien-the.md) ở trạng thái Accepted cho phiên bản/phạm vi và làm rõ [ADR-010](docs/adr/ADR-010-iop-v2-poll-capability-map.md) chỉ mô tả runtime v2 hiện tại; team MCU riêng tự thiết kế bên trong. Chi tiết ICD và yêu cầu FW vẫn Draft, cần các team ký.
+- **ICD và yêu cầu:** viết lại tại chỗ `IOP-SPEC-MK-DDC-24-VI` v3.0 và `FW-REQ-MK-DDC-24-VI` v3.1, thêm header byte nháp tại `docs/01_specs/`. ICD có 21 vector, 16 bài kiểm và 6 mục quyết định còn chờ; FW-REQ có 74 yêu cầu hiệu lực (69 MUST, 5 SHOULD), 5 hoãn Rev B. Sửa thứ tự kiểm CRC/LEN, từ chối output khi sai biến thể, buộc cấu hình và poll hợp lệ trước khi rời safe; nêu rõ giới hạn khả thi AO/DO nguyên khối cần Safety/HW/MCU xác nhận.
+- **Truy vết:** cập nhật decision log, yêu cầu hệ thống, ma trận truy vết, hub/README, banner tài liệu MCU cũ và record rà soát. Các mô tả v2.1 trong record được giữ như snapshot lịch sử; runtime, SHM, iobus và fake MCU chưa được chuyển v3.
+- **Kiểm chứng:** header biên dịch sạch bằng GCC C99/C11, G++ C++11/C++17 và ARM Cortex-M0+ C99/C11 (`-Wall -Wextra -Werror -pedantic`). CRC/LEN của 21/21 vector khớp bản tính độc lập, 2/2 `CFG_DIGEST` khớp `zlib.crc32`; `python3 scripts/docs_iso_harness.py --expect` PASS (507 Markdown, 0 link/anchor hỏng, 0 ID trùng).
+
 ### Changed — Deploy PR #844 lên bo lab: Core khoá RELEASE, schedule-sim, sim-worker, web, FE (2026-09-29)
 
 - **Phạm vi:** bo `OK1126B-buildroot`, qua WAN `:2223`. Hồ sơ mới `docs/07_records/test-evidence/fw-som/2026-09-29-foxlinx-deploy-pr844-schedule-ao.md` (`EV-FWSOM-DEPLOY-844-TARGET` 1.0), log gốc ở `deploy-pr844-20260929/`.

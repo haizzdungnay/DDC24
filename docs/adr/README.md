@@ -9,7 +9,7 @@
 > Bản chuẩn hoá 2026-07-22 từng gán chúng vào `ADR-013`/`ADR-014`, nhưng hai số đó đã bị hai ADR alarm ở
 > [`docs/02_design/adr/`](../02_design/adr/) chiếm từ 2026-07-02 và đang được `contracts/openapi/openapi.yaml` viện dẫn.
 
-> **Owner:** Tech Lead / Architect | **Last Updated:** 2026-08-11
+> **Owner:** Tech Lead / Architect | **Last Updated:** 2026-09-30
 
 ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Context, Decision, Consequences, Status.
 
@@ -26,7 +26,7 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-007](ADR-007-web-stack-go.md) | Web Stack: Go (không Python) | Accepted |
 | [ADR-008](ADR-008-bms-edge-positioning-and-revA-component-set.md) | BMS Edge Positioning + Rev A Component Set | Accepted |
 | [ADR-009](ADR-009-isa101-hmi-and-nav-restructure.md) | ISA-101 HMI & Nav Restructure | Accepted |
-| [ADR-010](ADR-010-iop-v2-poll-capability-map.md) | IOP v2.0: Poll + Capability Map | Accepted |
+| [ADR-010](ADR-010-iop-v2-poll-capability-map.md) | IOP V2.0: Poll + Capability Map, chỉ còn lịch sử/source hiện có | Bị ADR-064 thay cho mục tiêu tích hợp |
 | [ADR-011](ADR-011-bacnet-reliability-quality-mapping.md) | BACnet Reliability/Quality Mapping | Accepted |
 | [ADR-012](ADR-012-ao-channel-config-model.md) | AO Channel Config Model | Accepted |
 | [ADR-013](../02_design/adr/ADR-013-alarm-entity-model.md) | Alarm Entity Model | Accepted — hồ sơ ở `docs/02_design/adr/` |
@@ -55,3 +55,4 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-061](ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md) | Chu kỳ bộ điều khiển 10 ms, bộ chu kỳ Program {10…50000} ms, I/O mở rộng spec riêng | Accepted |
 | [ADR-062](ADR-062-programming-intent-enable-di-cung-activate.md) | Intent Enable đã lưu đi cùng ACTIVATE, áp tại safe boundary kích hoạt gói (F13 về 0 ms) | Accepted |
 | [ADR-063](ADR-063-programming-ngan-sach-tung-program.md) | Ngân sách thời gian từng Program: `budget_us` tới instance, quy lỗi vượt ngân sách về đúng Program, cảnh báo admission ở Check (CR T63-302 của Plan 63) | **Proposed** — chờ cổng G-D2 trên Issue #809 |
+| [ADR-064](ADR-064-iop-v3-hai-bien-the.md) | IOP V3.0 duy nhất cho cả biến thể 16/4/4 và 16/8/8; gói review chỉ gồm tài liệu tích hợp | **Accepted** cho phiên bản/phạm vi; ICD chi tiết chờ ký |

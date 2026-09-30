@@ -1,15 +1,16 @@
 # 05 — IOP / UART Implementation Guide (hợp đồng MCU ↔ SOM)
 ## MK-DDC-24 — IOP v2.0 (ADR-010 — Breaking change từ v1.1, 2026-06-25)
 
+> ⚠️ **SUPERSEDED một phần cho tích hợp mới (2026-09-30).** Chủ dự án chọn **IOP V3.0 duy nhất** theo [ADR-064](../adr/ADR-064-iop-v3-hai-bien-the.md); hợp đồng cần hai team ký là [ICD V3.0](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md). Các mục §1–§9, §11.2, §12.2 và §13–§15 là lịch sử V2.x, không được dùng hoặc giữ làm fallback. Hằng số v1 còn sót ở §9 (`0x0101`), §13–§14 (timeout 10 ms, fault 100 ms) cũng không được dùng. §10, §11.1, §12.1 và §16 chỉ còn giá trị tham khảo phía SOM, phải đối chiếu ICD V3.0 trước khi triển khai.
+
 > **Document ID:** IMPL-IOP-MK-DDC-24-VI
 > **Phiên bản:** 2.0 | 2026-06-25 (IOP v2.0: IO_RESP 34B→74B, KX_N_UI 8→16, FAULT_FLAGS restructured, HANDSHAKE_RESP 6B→8B+BOARD_CAP_MAP — xem ADR-010)
-> **Trạng thái:** Active — IOP v2.0
-> **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master) — **CẢ HAI bắt buộc đọc**
-> **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) —
-> mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
-> [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và file này là
-> **diễn giải**: lệch header → **header thắng**, sửa docs theo
-> ([16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md)).
+> **Trạng thái hiện nay:** Lịch sử V2.0; không là hợp đồng tích hợp mới
+> **Owner lịch sử:** Dev 1 (MCU slave) + Dev 2 (SOM master); team mới đọc ICD V3.0
+> **Source V2.0 còn tồn tại:** [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h).
+> Byte mục tiêu V3.0 nằm ở [header nháp](../01_specs/iop_protocol_v3_DRAFT.h) đi cùng ICD;
+> chỉ sau khi ký mới thay header runtime. Quy tắc "header V2 thắng ICD" bên dưới là lịch sử,
+> không áp dụng cho tích hợp V3.0.
 
 > ⚠️ File này là **HỢP ĐỒNG implement**. Nếu code MCU và code SOM bất đồng, sửa cho khớp
 > `iop_protocol.h`. **KHÔNG fork/sửa 1 bên.** Đổi hợp đồng = bump `IOP_VER_*` +

@@ -1,8 +1,11 @@
 # FW ADC Sampling - Universal Input 16CH
 
-> **Document:** FW-ADC-SAMPLING | Rev 1.1 | 2026-06-30
+> **Document:** FW-ADC-SAMPLING | Rev 1.2 | 2026-09-30
 > **Scope:** STM32 firmware sampling sequence for 16 UI Rev A
 > **Related:** HW-DES-03-UI, HW-DES-05-MCU, IOP_PROTOCOL
+
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+> Riêng ngữ nghĩa dữ liệu gửi cho SOM: `UI_RAW` là trung bình kể từ lần poll trước, không lọc thêm trên MCU; debounce dry-contact làm ở SOM (ICD §6.1, §6.6). §5 dưới đây vì vậy không còn hiệu lực về phần giao tiếp.
 
 ---
 
@@ -147,5 +150,6 @@ Required firmware instrumentation:
 |---|---|---|
 | 1.0 | 2026-06-23 | Initial 16-channel sampling sequence. |
 | 1.1 | 2026-06-30 | Separated 1 ms acquisition, 2 ms IOP poll/response, and 10-100 ms application update rates. |
+| 1.2 | 2026-09-30 | Gắn nhãn tham khảo cho team MCU riêng; ngữ nghĩa dữ liệu giao tiếp theo ICD `IOP-SPEC-MK-DDC-24-VI` v2.0. |
 
-**Document ID:** FW-ADC-SAMPLING | Rev 1.1 | 2026-06-30
+**Document ID:** FW-ADC-SAMPLING | Rev 1.2 | 2026-09-30

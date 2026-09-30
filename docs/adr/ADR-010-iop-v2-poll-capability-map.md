@@ -4,9 +4,11 @@
 |--------|---------|
 | **ID** | ADR-010 |
 | **Ngày** | 2026-06-25 |
-| **Status** | Accepted |
+| **Status** | Bị ADR-064 thay thế cho tích hợp mục tiêu (2026-09-30); hồ sơ lịch sử của source V2.0 |
 | **Người quyết định** | Owner (chuongpham06011989pt@gmail.com) |
 | **Thay thế** | IOP v1.1 (shared/iop_protocol.h@Contract Freeze 2026-06-11) |
+
+> **Hiện trạng 2026-09-30:** [ADR-064 — IOP V3.0 cho hai biến thể](ADR-064-iop-v3-hai-bien-the.md) đã **thay lựa chọn phiên bản và layout mục tiêu**. ADR này chỉ mô tả source V2.0 vẫn còn trong `contracts/iop/iop_protocol.h` và lý do lịch sử; V2.x không được dùng cho tích hợp mới hoặc làm phương án dự phòng. Source SOM cần chuyển đồng bộ sang V3.0 trước P1. Các đường dẫn `shared/` và `services/` bên dưới là lịch sử tại thời điểm ra quyết định, không phải path triển khai hiện tại.
 
 ---
 
@@ -139,4 +141,6 @@ bit 5-15 reserved
 
 | Rev | Ngày | Nội dung |
 |-----|------|---------|
+| 1.2 | 2026-09-30 | ADR-064 đã được chủ dự án chấp nhận cho V3.0 duy nhất; ADR-010 chỉ còn lịch sử của source V2.0. |
+| 1.1 | 2026-09-30 | Ghi quan hệ với ADR-064 Proposed và phân biệt contract v2 đang chạy với ICD v3 nháp. |
 | 1.0 | 2026-06-25 | Initial — Status=Accepted (owner verbal approval) |
