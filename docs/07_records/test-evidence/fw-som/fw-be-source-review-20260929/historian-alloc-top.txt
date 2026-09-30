@@ -1,0 +1,28 @@
+File: app.test
+Build ID: a888e2f4e765f609f29ea66b8a22c367be81efd7
+Type: alloc_space
+Time: 2026-09-29 13:12:20 +07
+Showing nodes accounting for 2508.63MB, 98.35% of 2550.68MB total
+Dropped 77 nodes (cum <= 12.75MB)
+Showing top 20 nodes out of 29
+      flat  flat%   sum%        cum   cum%
+  722.85MB 28.34% 28.34%  1489.66MB 58.40%  mkddc-web/internal/historian.buildHistorianQueryResult
+  605.81MB 23.75% 52.09%   691.31MB 27.10%  mkddc-web/internal/historian.foldHistorianTierBaseRows
+  358.22MB 14.04% 66.13%   818.12MB 32.07%  mkddc-web/internal/app.(*HistorianQueryStoreBackend).ReadTier
+  215.75MB  8.46% 74.59%   259.25MB 10.16%  mkddc-web/internal/app.(*HistorianQueryStoreBackend).readHotIdentity
+  173.51MB  6.80% 81.40%   173.51MB  6.80%  mkddc-web/internal/app.DecodeArchiveBlock
+   84.54MB  3.31% 84.71%    84.54MB  3.31%  database/sql.driverArgsConnLocked
+   74.50MB  2.92% 87.63%    74.50MB  2.92%  fmt.Sprintf
+   57.50MB  2.25% 89.88%      118MB  4.63%  mkddc-web/internal/historian.historianBucketKey (inline)
+   42.29MB  1.66% 91.54%   200.16MB  7.85%  mkddc-web/internal/app.(*HistorianQueryStoreBackend).readArchiveIdentity
+   36.91MB  1.45% 92.99%    36.91MB  1.45%  io.ReadAll
+      36MB  1.41% 94.40%    43.50MB  1.71%  modernc.org/sqlite.(*rows).Next
+   35.70MB  1.40% 95.80%  2537.52MB 99.48%  mkddc-web/internal/app.BenchmarkHistorianQueryEightSeries24hAuto
+      29MB  1.14% 96.94%       43MB  1.69%  mkddc-web/internal/historian.historianIdentityKey (inline)
+   17.54MB  0.69% 97.63%    17.54MB  0.69%  mkddc-web/internal/app.EncodeArchiveBlock
+      14MB  0.55% 98.17%   115.54MB  4.53%  mkddc-web/internal/app.(*HistorianStore).InsertHotBatch
+       4MB  0.16% 98.33%    99.04MB  3.88%  database/sql.(*DB).execDC
+    0.50MB  0.02% 98.35%    78.49MB  3.08%  mkddc-web/internal/app.(*HistorianStore).CommitArchiveBlock
+         0     0% 98.35%    95.04MB  3.73%  database/sql.(*DB).execDC.func2
+         0     0% 98.35%    43.50MB  1.71%  database/sql.(*Rows).Next
+         0     0% 98.35%    43.50MB  1.71%  database/sql.(*Rows).Next.func1

@@ -1,0 +1,42 @@
+=== 1. Baseline file ===
+exist: 17/17
+support: 5/5
+
+=== 2. Link / whitespace / fence ===
+local link missing : 0
+anchor missing     : 0
+trailing whitespace: 0
+code fence lệch    : 0 []
+docs/** link missing: 0 (quét 512 file .md)
+
+=== 3. Duplicate document ID ===
+duplicate doc ID: 0
+
+=== 4. Đếm ID ===
+SRS requirement ID (canonical, unique): 89
+VS-PROG trong VVP: 47
+RSK-PROG trong Risk Register: 23
+UC-PROG trong UI/UX: 17
+UJ-PROG trong UI/UX: 8
+UJ-PROG trong Product Spec: 0
+UJ-PROG trong Trace: 8
+Asset trực quan Programming: 10
+UX-REQ trong UI/UX: 29
+UD-PROG trong Decision Register: 17
+
+=== 5. Trace D/I/T/P/R ===
+trace rows có D/I/T/P/R: 89
+vi phạm P=Y khi T=N hoặc R=Y khi P=N: 0 []
+
+=== 6. TBD / BLOCKED ===
+dòng chứa TBD/BLOCKED/TARGET-PENDING: 112
+
+=== 7. Đường dẫn tài liệu trong code span ===
+code-span docs/** không tồn tại: 0
+
+=== 8. Metadata vs bảng Lịch sử sửa đổi ===
+hồ sơ lệch metadata/lịch sử: 0
+
+=== KẾT LUẬN ===
+PASS — mọi phép kiểm bắt buộc đạt
+EXPECT: khớp toàn bộ ngưỡng

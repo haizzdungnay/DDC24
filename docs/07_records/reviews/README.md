@@ -1,9 +1,9 @@
 # Hồ sơ rà soát — chỉ mục
 
 **ID:** REC-REVIEW-INDEX-001
-**Phiên bản:** 1.33
+**Phiên bản:** 1.37
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-29 (đăng ký review source giao diện, bằng chứng Chrome/host và bảng đề xuất cải thiện; giữ trạng thái Đề xuất và không thay release gate)
+**Cập nhật:** 2026-09-30 (đăng ký record rà tài liệu thiết kế FW SOM ↔ FW MCU và phương án ghép nối); 2026-09-29 (mở rộng review 29 tuyến giao diện, đối chiếu 7 hãng/hệ sinh thái, refactor và concept cho tích hợp BMS; không thay release gate; bổ sung review hiệu năng source FW SOM/BE và benchmark Historian)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -31,8 +31,10 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
-| [Review giao diện và source frontend DDC-24](DDC24_UI_SOURCE_REVIEW_2026-09-29.md) | 2026-09-29 | In Review; source tại `265f1a8b`, host và Chrome fixture (`REC-DDC-UI-REVIEW-20260929`) | 5 finding: định danh Mapping mobile, tổng chiều rộng panel, modal focus, vòng poll Commission và bàn phím thanh kéo; source frontend chưa sửa; không đánh giá release. |
-| [Bảng đề xuất cải thiện giao diện DDC-24](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md) | 2026-09-29 | 8 đề xuất chờ Product review (`REC-DDC-UI-PROPOSAL-20260929`) | Lợi ích, ưu tiên, công, rủi ro, source owner, nghiệm thu và thứ tự triển khai; kèm [ảnh/log bằng chứng](assets/ui-review-2026-09-29/EVIDENCE.md), chưa là design authority. |
+| [Rà soát thiết kế FW SOM ↔ FW MCU và phương án ghép nối](DDC24_FW_SOM_MCU_PAIR_INTEGRATION_REVIEW_2026-09-30.md) | 2026-09-30 | Bản 1.2. Record rà **tài liệu** (không review mã) tại `e34d0a2f`; chủ dự án đã chốt [ADR-064/PA-B](../../adr/ADR-064-iop-v3-hai-bien-the.md) cho **V3.0 duy nhất**; [ICD v3.0](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và [FW-REQ v3.1](../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) vẫn Draft về chi tiết; source SOM V2.0 chưa đổi (`REC-DDC-FWSOM-MCU-PAIR-20260930`) | Snapshot 17 finding PAIR-01..17 và khuyến nghị v2.1 trước quyết định; §0–§6 là lịch sử. Lộ trình P0–P3 chưa chạy; 8/8 chưa có hồ sơ HW chuẩn |
+| [Hiện trạng và dư địa hiệu năng FW SOM / BE](DDC24_FW_SOM_BE_PERFORMANCE_SOURCE_REVIEW_2026-09-29.md) | 2026-09-29 | In Review, source `895444be` và HOST; không thay Design/release authority (`REC-DDC-FW-BE-PERF-20260929`) | Kiến trúc/logic Core–IOBus–Go, đối chiếu Plan 63, 10 finding; benchmark Historian 8 điểm/24 h: 1,12–1,15 s và khoảng 256 MiB tổng cấp phát/query trên HOST; phương án, metric, effort/risk và pilot |
+| [Review giao diện và source frontend DDC-24](DDC24_UI_SOURCE_REVIEW_2026-09-29.md) | 2026-09-29 | In Review v1.1; Programming tại `265f1a8b`, mở rộng tại `101d1fdf`, host và Chrome demo/fixture (`REC-DDC-UI-REVIEW-20260929`) | 7 finding UI (5 lượt Programming + 2 mới), 4 khoảng thiếu; 29 tuyến desktop/mobile; nguồn/bằng chứng/giới hạn rõ; chưa sửa source FE hoặc đánh giá release. |
+| [Bảng đề xuất cải thiện giao diện DDC-24](DDC24_UI_IMPROVEMENT_PROPOSALS_2026-09-29.md) | 2026-09-29 | 16 đề xuất chờ Product review, v1.1 (`REC-DDC-UI-PROPOSAL-20260929`) | 7 hãng/hệ sinh thái, 9 concept SVG, pilot tích hợp BMS và refactor theo ownership; lợi ích/công/rủi ro/nghiệm thu; kèm [ảnh/log bằng chứng](assets/ui-review-2026-09-29/EVIDENCE.md), chưa là design authority. |
 | [Rà soát kiến trúc, lời giải và đối chiếu DDC-24](DDC24_ARCHITECTURE_SOLUTION_COMPARATIVE_REVIEW_2026-09-26.md) | 2026-09-26; bổ sung 27/09 | Record source + nguồn chuẩn/hãng; release `NO-GO` (`REC-DDC-ARCH-COMP-20260926`) | Sơ đồ POU/Commission/output, so sánh hãng và **§9: chín đề xuất `CP-01..09` để Product review**, có lợi ích, phần nền hiện có, phép thử pilot và quyết định cần ký. |
 | [Finding và đề xuất kiến trúc DDC-24](DDC24_ARCHITECTURE_GAP_FINDINGS_PROPOSAL_2026-09-26.md) | 2026-09-26 | 7 finding có trạng thái và gate; record, chưa phải design authority (`REC-DDC-ARCH-GAP-20260926`) | Hồ sơ chu kỳ lệch profile; BACnet object thiếu nguồn; safe output khi đổi package; soak/HIL; 70 ms Commission; Modbus write result; ma trận audit trộn thời điểm. |
 | [Đánh giá mã nguồn DDC-24 qua sử dụng thực tế](DDC24_FIELD_USE_UPGRADE_FINDINGS_2026-09-27.md) | 2026-09-27; cập nhật 28/09 | 21 vấn đề cần nâng cấp/cải tiến; bản 1.4: PR #795, #797, #803, #804 đã merge và bo lab chạy `main@e3072983`; các mục còn lại chờ thiết kế/quyết định (#798–#802, #384); record, chưa phải design authority (`REC-DDC-FIELD-USE-20260927`) | Rút từ việc viết, triển khai và kiểm từng chu kỳ `PRG_DO16_MODBUS` trên bo: kiểu VP lệch 3 lớp, Trace báo sai nguồn/chu kỳ, Modbus không gộp FC15, trần slot, ngôn ngữ ST thiếu ARRAY/bit/hằng, thư viện thiếu khối DDC, PID bị chặn; kèm lộ trình |
@@ -205,3 +207,7 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.31 | 2026-09-28 | Nâng record hiệu năng v1.2 bằng audit OS/Core, API/Modbus và browser trên target; giữ riêng snapshot 04/09, chưa deploy phương án tối ưu hoặc nâng release gate |
 | 1.32 | 2026-09-28 | Đăng ký báo cáo riêng trình PM review/quyết định cải thiện hiệu năng Forlinx; giữ trạng thái In Review và D01–D07 chưa phê duyệt |
 | 1.33 | 2026-09-29 | Đăng ký review source giao diện, 5 finding với lớp bằng chứng và 8 đề xuất cải thiện để Product review; không sửa FE hay nâng release gate |
+| 1.34 | 2026-09-29 | Mở rộng hai record UI lên 1.1: 29 tuyến desktop/mobile, UI-F06/07, UI-G01..04, 7 đối thủ/hệ sinh thái, UI-P09..16 và 9 concept SVG; giữ riêng source/demo/target và trạng thái đề xuất |
+| 1.35 | 2026-09-29 | Đăng ký review source hiệu năng FW SOM/BE, benchmark Historian và phương án; giữ nguyên hồ sơ UI đang sửa và gate sản phẩm |
+| 1.36 | 2026-09-30 | Đăng ký record rà tài liệu thiết kế FW SOM ↔ FW MCU và phương án ghép nối (`REC-DDC-FWSOM-MCU-PAIR-20260930`, bản 1.1: phương án đã thành ICD và yêu cầu FW MCU Draft); record không đổi contract hay release gate |
+| 1.37 | 2026-09-30 | Trỏ record FW SOM ↔ MCU bản 1.2 tới ADR-064, ICD v3.0 và FW-REQ v3.1; giữ phương án v2.1 trong record làm snapshot lịch sử. |

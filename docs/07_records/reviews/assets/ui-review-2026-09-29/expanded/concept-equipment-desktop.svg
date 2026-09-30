@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="Hồ sơ thiết bị và nguyên nhân đầu ra"><title>Hồ sơ thiết bị và nguyên nhân đầu ra</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="1440" height="900" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="1440" height="66" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="24" y="31" font-size="20" font-weight="700" style="fill:#fff">DDC24 • Không gian tích hợp BMS</text>
+<text x="24" y="53" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa • chưa triển khai</text>
+<text x="1190" y="36" font-size="15" font-weight="400" style="fill:#fff">Kỹ sư • VI • Trợ giúp</text>
+<rect x="0" y="66" width="208" height="834" rx="0" fill="#e3eaef" stroke="#cbd6df"/>
+<text x="22" y="111" font-size="15" font-weight="400" style="fill:#162c3d">Tổng quan</text>
+<text x="22" y="159" font-size="15" font-weight="400" style="fill:#162c3d">Thiết bị / hệ thống</text>
+<text x="22" y="207" font-size="15" font-weight="400" style="fill:#162c3d">Cấu hình &amp; ánh xạ</text>
+<text x="22" y="255" font-size="15" font-weight="700" style="fill:#162c3d">Phiếu chạy thử</text>
+<text x="22" y="303" font-size="15" font-weight="400" style="fill:#162c3d">Cảnh báo &amp; xu hướng</text>
+<text x="22" y="351" font-size="15" font-weight="400" style="fill:#162c3d">Chẩn đoán</text>
+<text x="22" y="399" font-size="15" font-weight="400" style="fill:#162c3d">Hồ sơ bàn giao</text>
+<text x="22" y="447" font-size="15" font-weight="400" style="fill:#162c3d">Hệ thống</text>
+<text x="235" y="110" font-size="25" font-weight="700" style="fill:#162c3d">AHU-01 / Quạt cấp</text>
+<text x="235" y="144" font-size="15" font-weight="400" style="fill:#162c3d">Lệnh lịch: ON  /  Đầu ra thực tế: OFF  /  Dữ liệu: 2 giây trước</text>
+<rect x="235" y="170" width="1178" height="105" rx="10" fill="#fff2dd" stroke="#cbd6df"/>
+<text x="259" y="205" font-size="21" font-weight="700" style="fill:#162c3d">Quạt chưa chạy: lệnh tay đang giữ DO-02 = OFF</text>
+<text x="259" y="237" font-size="15" font-weight="400" style="fill:#162c3d">Nguồn giữ: operator1 • tự nhả còn 03:12 • đọc lại: Core; chưa có phản hồi tại hiện trường</text>
+<rect x="235" y="300" width="720" height="410" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="258" y="332" font-size="19" font-weight="700" style="fill:#162c3d">Chuỗi điều khiển — xem trước khi thao tác</text>
+<rect x="257" y="354" width="676" height="66" rx="10" fill="#f4f7f9" stroke="#cbd6df"/>
+<text x="274" y="380" font-size="17" font-weight="700" style="fill:#162c3d">Lịch tuần → ON</text>
+<text x="274" y="402" font-size="13" font-weight="400" style="fill:#162c3d">Giá trị mong muốn</text>
+<rect x="257" y="432" width="676" height="66" rx="10" fill="#f4f7f9" stroke="#cbd6df"/>
+<text x="274" y="458" font-size="17" font-weight="700" style="fill:#162c3d">Phân xử → lệnh tay thắng</text>
+<text x="274" y="480" font-size="13" font-weight="400" style="fill:#162c3d">Nguồn giữ và thời hạn</text>
+<rect x="257" y="510" width="676" height="66" rx="10" fill="#f4f7f9" stroke="#cbd6df"/>
+<text x="274" y="536" font-size="17" font-weight="700" style="fill:#162c3d">DO-02 → OFF</text>
+<text x="274" y="558" font-size="13" font-weight="400" style="fill:#162c3d">Giá trị Core đang báo</text>
+<rect x="257" y="588" width="676" height="66" rx="10" fill="#f4f7f9" stroke="#cbd6df"/>
+<text x="274" y="614" font-size="17" font-weight="700" style="fill:#162c3d">UI-12 → chưa xác nhận</text>
+<text x="274" y="636" font-size="13" font-weight="400" style="fill:#162c3d">Phản hồi vận hành / hiện trường</text>
+<rect x="977" y="300" width="436" height="410" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="999" y="334" font-size="19" font-weight="700" style="fill:#162c3d">Ngữ cảnh liên quan</text>
+<rect x="999" y="360" width="392" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="1011" y="388" font-size="14" font-weight="700" style="fill:#162c3d">Cảnh báo: phản hồi quạt</text>
+<rect x="999" y="423" width="392" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="1011" y="451" font-size="14" font-weight="700" style="fill:#162c3d">Xu hướng lệnh + phản hồi</text>
+<rect x="999" y="486" width="392" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="1011" y="514" font-size="14" font-weight="700" style="fill:#162c3d">Lịch đang áp dụng</text>
+<rect x="999" y="549" width="392" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="1011" y="577" font-size="14" font-weight="700" style="fill:#162c3d">Audit lệnh gần nhất</text>
+<rect x="999" y="612" width="392" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="1011" y="640" font-size="14" font-weight="700" style="fill:#162c3d">Cấu hình I/O và ánh xạ</text>
+<rect x="235" y="732" width="1178" height="113" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="257" y="764" font-size="16" font-weight="700" style="fill:#162c3d">Có thể trả về tự động sau khi kiểm điều kiện an toàn.</text>
+<text x="257" y="793" font-size="14" font-weight="400" style="fill:#162c3d">Mở xác nhận với đúng thiết bị, điểm, tác động; thao tác này có thể làm quạt khởi động.</text>
+<rect x="1070" y="755" width="320" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="1082" y="783" font-size="14" font-weight="700" style="fill:#fff">Xem trước trả về tự động</text>
+</svg>

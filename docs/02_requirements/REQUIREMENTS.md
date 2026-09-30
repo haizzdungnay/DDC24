@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-27 (đồng bộ Programming theo ADR-061/profile v2.2). Trước đó: 2026-09-11 (BACnet/IP Rev A)
+**Cập nhật:** 2026-09-30 (trỏ `FW-REQ-MCU-001/002` tới yêu cầu và ICD cho team MCU riêng). Trước đó: 2026-09-27 (đồng bộ Programming theo ADR-061/profile v2.2). Trước đó: 2026-09-11 (BACnet/IP Rev A)
 
 `Phải` là bắt buộc cho Rev A. Mỗi yêu cầu cần Verification Requirement trong
 [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại
@@ -132,7 +132,7 @@ nào dưới đây được kết luận đạt bằng kết quả chạy trên 
 | ID | Yêu cầu / tiêu chí chấp nhận | Phương pháp |
 |---|---|---|
 | SYS-REQ-001 | Thiết bị must tiếp tục control local khi Web UI/client không kết nối. | integration/fault injection |
-| SYS-REQ-002 | Base SKU must cung cấp đúng 16 UI + 4 AO + 4 DO; optional DI không được quảng bá như baseline. | inspection + I/O test |
+| SYS-REQ-002 | Base SKU PHẢI cung cấp 16 UI + 4 AO + 4 DO; biến thể 16 UI + 8 AO + 8 DO PHẢI dùng cùng IOP v3.0 và khai đúng số kênh khi được triển khai. DI không được quảng bá ở Rev A. ICD v3.0 còn Draft, chưa là bằng chứng HW 8/8. | kiểm tài liệu và I/O vật lý theo từng biến thể |
 | SYS-REQ-003 | Nếu duy trì component graph 28-node As-Built để tương thích/migration, hệ thống phải phân loại nó là legacy và không quảng bá như FBD hoặc Programming implementation. | inspection + compatibility test |
 | SYS-REQ-004 | Baseline giao tiếp toàn sản phẩm phải hỗ trợ BACnet/IP, Modbus TCP và hai Modbus RTU master theo cấu hình; BACnet/IP/Modbus TCP không phải Programming Point Rev A. | protocol test + scope inspection |
 | SYS-REQ-005 | HMI được bật theo build/SKU must dùng cùng dữ liệu và quyền điều khiển đã kiểm soát, không thay thế core. | build + integration |
@@ -147,7 +147,7 @@ nào dưới đây được kết luận đạt bằng kết quả chạy trên 
 | IF-REQ-002 | SHM consumers must dùng cùng magic/layout; đổi ABI must đổi magic và rebuild đồng bộ. | compile/layout test |
 | IF-REQ-003 | AO must đi qua ranh giới core/iobus bằng V hoặc mA hợp lệ và chỉ scale sang DAC một lần. | boundary test |
 | IF-REQ-004 | SOM network authority must cung cấp local versioned/bounded IPC cho `status/validate/stage/apply/confirm/rollback`, kiểm peer credential và trả transaction state/reason code ổn định. | contract + negative test |
-| SAFE-REQ-001 | MCU must đưa output về safe behavior nếu không nhận poll hợp lệ trong 200 ms. | HIL fault injection |
+| SAFE-REQ-001 | MCU PHẢI đưa output về safe nếu không nhận `GET_IO` hợp lệ trong phiên trong 200–205 ms (hoặc từ HANDSHAKE nếu chưa có `GET_IO`); giá trị safe theo cấu hình đã phê duyệt. | chèn lỗi HIL theo từng biến thể |
 | SAFE-REQ-002 | Giá trị output NaN, infinity hoặc ngoài dải must bị từ chối trước khi publish/actuate. | negative test |
 | SEC-REQ-001 | API must có authentication, role authorization và audit cho thay đổi cấu hình/force output. | security test |
 | SEC-REQ-002 | Secret must không được hard-code; production transport/config must dùng cơ chế bảo vệ được phê duyệt. | review + deployment test |
@@ -157,10 +157,10 @@ nào dưới đây được kết luận đạt bằng kết quả chạy trên 
 | HW-REQ-001 | Mạch UI must hỗ trợ mode đã công bố, với STM32 là SPI master duy nhất của hai ADS131M08. | schematic review + bench |
 | HW-REQ-002 | AO/DO/power/protection must đạt limit đã phê duyệt trước manufacturing release. | calculation + lab evidence |
 | HW-REQ-003 | HMI build must nhắm JD9852 MIPI DSI, FT5436 I²C và DRM/KMS `/dev/dri/card0`. | inspection + target test |
-| FW-REQ-MCU-001 | MCU must implement IOP v2 parser/serializer và I/O drivers theo `shared/iop_protocol.h`. | host vectors + target protocol/HIL |
-| FW-REQ-MCU-002 | MCU must force approved safe outputs nếu không có master traffic hợp lệ trong 200 ms. | target/HIL đo timeout và output |
+| FW-REQ-MCU-001 | Mục tiêu tích hợp: MCU PHẢI thực hiện IOP v3.0 và driver I/O theo [`FW-REQ-MK-DDC-24-VI` v3.1](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md), [ICD v3.0](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và header nháp đi kèm. Cả hai tài liệu còn Draft; `contracts/iop/iop_protocol.h` v2.0 vẫn là contract runtime hiện tại. | vector trên host và giao thức/HIL trên từng biến thể |
+| FW-REQ-MCU-002 | MCU PHẢI đưa output về giá trị safe đã được duyệt khi không có `GET_IO` hợp lệ trong phiên theo `SAFE-REQ-001` và ICD `ICD-R-01..03` (Draft 2026-09-30). | đo timeout và output trên bo/HIL |
 | HMI-REQ-001 | Local HMI must là presentation/limited-operator/service panel, không phải control hoặc alarm authority; lỗi HMI không được ảnh hưởng core control. | architecture + process fault test |
-| HMI-REQ-002 | Base inventory must hiển thị UI16 + AO4 + DO4; DI chỉ xuất hiện khi capability xác nhận. | config + integration |
+| HMI-REQ-002 | Danh mục I/O PHẢI hiển thị đúng biến thể đã xác nhận: base UI16/AO4/DO4 hoặc biến thể UI16/AO8/DO8 khi được triển khai; DI không xuất hiện ở Rev A. | kiểm cấu hình và tích hợp theo từng biến thể |
 | HMI-REQ-003 | Alarm must có priority/state/time/source/response; ACK phải authoritative, audited và không clear active condition. | alarm integration + audit |
 | HMI-REQ-004 | Service actions must fail-closed theo identity/role, có timeout/audit; reboot chỉ sau core chấp nhận safe states. | security + fault injection |
 | HMI-REQ-005 | Unsupported telemetry/action must hiện `unknown/unavailable` hoặc bị disable; không được hiển thị placeholder như trạng thái thật. | negative test |

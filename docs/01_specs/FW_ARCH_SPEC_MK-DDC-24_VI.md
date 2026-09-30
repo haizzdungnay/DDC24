@@ -7,6 +7,8 @@
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Firmware Team
 
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+
 ---
 
 ## 1. Tổng quan Kiến trúc
@@ -321,3 +323,4 @@ do_control_task (10ms):
 **Document ID:** FW-ARCH-MK-DDC-24-VI  
 **Revision:** 2.0 | 2026-06-30
 **Review required:** Firmware Lead
+**Ghi chú 2026-09-30:** gắn nhãn tham khảo vì FW MCU chuyển cho team riêng; nội dung kỹ thuật không đổi.

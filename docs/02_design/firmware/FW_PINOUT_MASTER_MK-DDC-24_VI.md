@@ -2,9 +2,11 @@
 ## MK-DDC-24 — D-1
 
 > **Document ID:** DDD-PINOUT-MK-DDC-24-VI
-> **Phiên bản:** 2.0 | 2026-06-30
+> **Phiên bản:** 2.1 | 2026-09-30
 > **Trạng thái:** Approved for Rev A (ADR-010; owner re-sign required at schematic release)
 > 📘 [README](../../01_specs/README.md) · Đồng bộ: `hardware-design/05_mcu_io/MCU_STM32G0_SPEC.md §3`
+
+> ⚠️ **2026-09-30:** với team MCU riêng, chân MCU lấy theo HW spec [MCU_STM32G0_SPEC](../../04_design/hardware/05_mcu_io/MCU_STM32G0_SPEC.md) §3 và schematic (`FW-HW-001` của [FW-REQ v3.1](../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md)). File này là tham khảo cho tới khi HW hợp nhất hai bảng (mục mở M-3: chân AO mode PD1–PD4, chân feedback relay).
 
 > ⭐ **NGUỒN-CHUẨN DUY NHẤT cho chân MCU.** Schematic (`CB_SCHEMATIC_NOTES`), block diagram, CubeMX `.ioc`, và firmware HAL init **PHẢI** khớp bảng này. Mọi thay đổi qua DR gate + bump version.
 
@@ -128,5 +130,6 @@ PB1, PB3, PD0, PC14 và các chân PF còn lại là spare. `PC4-PC9`, `PC13`, `
 |---|---|---|
 | 1.0 | 2026-05-30 | Initial 8 UI + 8 DI pinout. |
 | 2.0 | 2026-06-30 | Rev A: 16 UI, second ADS131M08 CS/DRDY, per-channel mode latch, retired DI/direct UI-enable pins. |
+| 2.1 | 2026-09-30 | Ghi chú: với team MCU riêng, HW spec thắng về chân; chờ HW hợp nhất (M-3). Bảng chân không đổi. |
 
-**Rev** 2.0 | 2026-06-30 · Ký lại khi schematic release: FW Lead ___ · HW Lead ___
+**Rev** 2.1 | 2026-09-30 · Ký lại khi schematic release: FW Lead ___ · HW Lead ___

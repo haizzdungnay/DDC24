@@ -1,0 +1,8 @@
+import { describe, it, expect } from 'vitest'
+import { buildTrendRows } from './TrendsPage'
+describe('UI-F07: gap không được tính thành mẫu số 0', () => {
+ it('bỏ mẫu null khỏi số mẫu thống kê', () => {
+ const rows = buildTrendRows([{key:'UI-01',pointId:'UI-01',label:'Temp',color:'#fff'}], [], [{time:'10:00', 'UI-01':null} as never, {time:'10:01','UI-01':null} as never])
+ expect(rows[0].samples).toBe(0)
+ })
+})

@@ -1,0 +1,35 @@
+Running main() from ./googletest/src/gtest_main.cc
+[==========] Running 10 tests from 3 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from SpscRing
+[ RUN      ] SpscRing.FullRingRejectsPushWithoutOverwritingAndKeepsFifo
+[       OK ] SpscRing.FullRingRejectsPushWithoutOverwritingAndKeepsFifo (0 ms)
+[ RUN      ] SpscRing.WrapsAroundManyTimesWithoutLosingOrder
+[       OK ] SpscRing.WrapsAroundManyTimesWithoutLosingOrder (0 ms)
+[ RUN      ] SpscRing.ConcurrentProducerConsumerNeverLosesOrDuplicates
+[       OK ] SpscRing.ConcurrentProducerConsumerNeverLosesOrDuplicates (5 ms)
+[ RUN      ] SpscRing.PushAndPopDoNotAllocate
+[       OK ] SpscRing.PushAndPopDoNotAllocate (0 ms)
+[----------] 4 tests from SpscRing (5 ms total)
+
+[----------] 3 tests from LatestValueBuffer
+[ RUN      ] LatestValueBuffer.ReaderSeesNothingBeforeFirstPublishThenOnlyTheNewest
+[       OK ] LatestValueBuffer.ReaderSeesNothingBeforeFirstPublishThenOnlyTheNewest (0 ms)
+[ RUN      ] LatestValueBuffer.ConcurrentPublishNeverTearsAndNeverGoesBackwards
+[       OK ] LatestValueBuffer.ConcurrentPublishNeverTearsAndNeverGoesBackwards (13 ms)
+[ RUN      ] LatestValueBuffer.PublishDoesNotAllocate
+[       OK ] LatestValueBuffer.PublishDoesNotAllocate (0 ms)
+[----------] 3 tests from LatestValueBuffer (14 ms total)
+
+[----------] 3 tests from ThreadPolicy
+[ RUN      ] ThreadPolicy.MoveOffCpusLeavesTheScanCpu
+[       OK ] ThreadPolicy.MoveOffCpusLeavesTheScanCpu (0 ms)
+[ RUN      ] ThreadPolicy.NoOtherCpuIsReportedAsWarning
+[       OK ] ThreadPolicy.NoOtherCpuIsReportedAsWarning (0 ms)
+[ RUN      ] ThreadPolicy.DemotedHelperLeavesTheInheritedScanCpu
+[       OK ] ThreadPolicy.DemotedHelperLeavesTheInheritedScanCpu (0 ms)
+[----------] 3 tests from ThreadPolicy (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 10 tests from 3 test suites ran. (20 ms total)
+[  PASSED  ] 10 tests.

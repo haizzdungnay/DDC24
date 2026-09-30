@@ -1,0 +1,22 @@
+digraph iop_resync {
+  graph [rankdir=TB, bgcolor="white", pad="0.25", nodesep="0.4", ranksep="0.45", label="RESYNC sau safe/reset — chuỗi yêu cầu và điều kiện dừng", labelloc=t, fontsize=18, fontname="DejaVu Sans"];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#27618a", fontname="DejaVu Sans", fontsize=11, margin="0.16,0.1"];
+  edge [color="#305a78", fontname="DejaVu Sans", fontsize=10];
+  detect [label="SOM thấy SAFE_ACTIVE / mất SESSION / FRESH_BOOT / NACK"];
+  hs [label="HANDSHAKE V3.0 → đọc N_UI/N_AO/N_DO/N_DI"];
+  profile [label="Khớp profile cấu hình?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  stop [label="MCU giữ safe; alarm MCU_VARIANT_MISMATCH\n0 lệnh output", fillcolor="#fce8e6", color="#b44636"];
+  cfg [label="SET_UI_CFG → SET_AO_CFG → SET_SAFE_CFG"];
+  digest [label="GET_STATE → so CFG_DIGEST; lệch thì gửi lại cấu hình"];
+  poll [label="GET_IO hợp lệ để nuôi watchdog"];
+  outputs [label="SET_AO 8 phần tử → SET_DO mask phủ N_DO"];
+  state [label="GET_STATE: SAFE_ACTIVE = 0, APPLIED_* khớp?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  alarm [label="Giữ safe / alarm / điều tra", fillcolor="#fce8e6", color="#b44636"];
+  run [label="SESSION_RUN; tiếp tục poll 2 ms", fillcolor="#e7f4e8", color="#397a42"];
+  detect -> hs -> profile;
+  profile -> stop [label="không"];
+  profile -> cfg [label="có"];
+  cfg -> digest -> poll -> outputs -> state;
+  state -> alarm [label="không"];
+  state -> run [label="có"];
+}

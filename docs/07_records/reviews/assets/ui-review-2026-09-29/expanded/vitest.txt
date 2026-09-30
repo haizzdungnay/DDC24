@@ -1,0 +1,8 @@
+
+ RUN  v4.1.10 /tmp/ddc-ui-expanded-20260929/apps/web-ui
+
+
+ Test Files  12 passed (12)
+      Tests  169 passed (169)
+   Start at  10:09:43
+   Duration  22.66s (transform 3.54s, setup 0ms, import 8.80s, tests 24.72s, environment 11.62s)

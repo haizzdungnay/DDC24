@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-label="Xác nhận lệnh chạy thử — đề xuất"><title>Xác nhận lệnh chạy thử — đề xuất</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="1440" height="900" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="1440" height="66" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="24" y="31" font-size="20" font-weight="700" style="fill:#fff">DDC24 • Không gian tích hợp BMS</text>
+<text x="24" y="53" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa • chưa triển khai</text>
+<text x="1190" y="36" font-size="15" font-weight="400" style="fill:#fff">Kỹ sư • VI • Trợ giúp</text>
+<rect x="0" y="66" width="208" height="834" rx="0" fill="#e3eaef" stroke="#cbd6df"/>
+<text x="22" y="111" font-size="15" font-weight="400" style="fill:#162c3d">Tổng quan</text>
+<text x="22" y="159" font-size="15" font-weight="400" style="fill:#162c3d">Thiết bị / hệ thống</text>
+<text x="22" y="207" font-size="15" font-weight="400" style="fill:#162c3d">Cấu hình &amp; ánh xạ</text>
+<text x="22" y="255" font-size="15" font-weight="700" style="fill:#162c3d">Phiếu chạy thử</text>
+<text x="22" y="303" font-size="15" font-weight="400" style="fill:#162c3d">Cảnh báo &amp; xu hướng</text>
+<text x="22" y="351" font-size="15" font-weight="400" style="fill:#162c3d">Chẩn đoán</text>
+<text x="22" y="399" font-size="15" font-weight="400" style="fill:#162c3d">Hồ sơ bàn giao</text>
+<text x="22" y="447" font-size="15" font-weight="400" style="fill:#162c3d">Hệ thống</text>
+<text x="235" y="110" font-size="25" font-weight="700" style="fill:#162c3d">Xác nhận chạy thử</text>
+<rect x="440" y="158" width="680" height="630" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="462" y="195" font-size="22" font-weight="700" style="fill:#162c3d">Ghi DO-02 = ON</text>
+<text x="462" y="231" font-size="14" font-weight="400" style="fill:#162c3d">DDC-01 / AHU-01 / Quạt cấp — dữ liệu minh họa</text>
+<rect x="460" y="266" width="640" height="112" rx="10" fill="#fff2dd" stroke="#cbd6df"/>
+<text x="476" y="297" font-size="16" font-weight="400" style="fill:#162c3d">Contactor có thể đóng ngay và quạt khởi động. Kiểm thiết bị tại</text>
+<text x="476" y="320" font-size="16" font-weight="400" style="fill:#162c3d">chỗ trước khi gửi lệnh.</text>
+<text x="462" y="421" font-size="14" font-weight="700" style="fill:#162c3d">Thời hạn: 5 phút • Core cưỡng chế</text>
+<text x="462" y="462" font-size="14" font-weight="400" style="fill:#162c3d">□ Tôi đã kiểm điều kiện an toàn tại hiện trường. Đây là khai báo của</text>
+<text x="462" y="483" font-size="14" font-weight="400" style="fill:#162c3d">người vận hành.</text>
+<text x="462" y="536" font-size="14" font-weight="400" style="fill:#162c3d">Chặn gửi khi: mất liên lạc, dữ liệu cũ, quyền không đủ, revision thay</text>
+<text x="462" y="557" font-size="14" font-weight="400" style="fill:#162c3d">đổi hoặc chưa rõ nguồn đang giữ.</text>
+<text x="462" y="626" font-size="14" font-weight="400" style="fill:#162c3d">Hết thời gian chờ: kết quả chưa rõ; đọc lại commandId trước khi gửi</text>
+<text x="462" y="647" font-size="14" font-weight="400" style="fill:#162c3d">lại. Không tự ghi lần thứ hai.</text>
+<rect x="462" y="718" width="122" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="474" y="746" font-size="14" font-weight="700" style="fill:#162c3d">Hủy</text>
+<rect x="598" y="718" width="500" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="610" y="746" font-size="14" font-weight="700" style="fill:#fff">Gửi lệnh ON</text>
+</svg>

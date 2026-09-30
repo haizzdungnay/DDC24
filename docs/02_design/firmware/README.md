@@ -3,6 +3,8 @@
 **ID:** FW-DES-INDEX-001
 **Trạng thái:** In Review — recovered 2026-07-22
 
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+
 Tài liệu trong thư mục này được phục hồi nguyên văn. [Firmware Baseline](../../04_design/FIRMWARE.md), `shared/iop_protocol.h` và firmware implementation hiện hành có thẩm quyền cao hơn khi có xung đột.
 
 ## Current-path design cần đối chiếu

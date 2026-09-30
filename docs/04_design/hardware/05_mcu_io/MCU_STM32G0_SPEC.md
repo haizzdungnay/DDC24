@@ -16,6 +16,7 @@
 | 1.3 | 2026-06-23 | UI architecture review: remove shared SEL, add per-channel mode latch, update ADC signed int32 protocol and sampling responsibilities |
 | 1.4 | 2026-06-30 | Align IOP to 2 ms SOM poll; define HSE and reserved-pin release rules; clarify SWD pins |
 | 1.5 | 2026-07-22 | Declared target-versus-implemented status and aligned cross-references to the controlled docs tree. |
+| 1.6 | 2026-09-30 | §4–§8 thành tham khảo cho team MCU riêng; ràng buộc qua `FW-REQ-MK-DDC-24-VI` v3.0 và ICD `IOP-SPEC-MK-DDC-24-VI` v2.0. §2–§3 giữ nguyên. |
 
 ---
 
@@ -152,6 +153,9 @@ If the schematic still needs per-channel enable or analog-power gating, implemen
 
 ## 4. ADC Acquisition Responsibilities
 
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+> Áp cho §4–§8 (trách nhiệm firmware, task, tóm tắt IOP, watchdog, OTA). §2–§3 (điện, clock, chân) vẫn là nguồn chuẩn phần cứng.
+
 MCU responsibilities:
 
 - Configure both ADS131M08 devices through SPI3 MOSI.
@@ -262,4 +266,4 @@ All outputs must enter safe state before firmware flashing, and firmware image C
 | [Product BOM](../06_bom/BOM_MK-DDC-24_v1.md) | STM32 part/configuration; currently preliminary |
 | [UI hardware test](../09_hw_bringup/HW-TEST-UI-16CH.md) | Pin mapping, SPI3 timing and ADC timeout evidence |
 
-**Document ID:** HW-DES-05-MCU | Rev 1.5 | 2026-07-22
+**Document ID:** HW-DES-05-MCU | Rev 1.6 | 2026-09-30

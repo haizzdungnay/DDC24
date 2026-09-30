@@ -1,6 +1,8 @@
 # 04 — FW_MCU Implementation Guide
 ## MK-DDC-24 — Hướng dẫn lập trình firmware STM32G0B1RBT6
 
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+
 > **Document ID:** IMPL-FWMCU-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-10
 > **Trạng thái:** Draft — MCU FW chưa implement

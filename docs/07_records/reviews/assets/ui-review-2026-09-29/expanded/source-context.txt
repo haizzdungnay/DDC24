@@ -1,0 +1,3 @@
+Nguồn kiểm: origin/main@101d1fdf54c827519d196572484afbb366f9a7c4.
+Checkout root được tiến trình khác cập nhật trong phiên tới d9a784f6; review source/test vẫn ghim worktree riêng 101d1fdf, không ghi đè FE local.
+Candidate pin tại worktree 101d1fdf cũng FAIL 15/17, cùng hai authority; không do các report/concept mới.

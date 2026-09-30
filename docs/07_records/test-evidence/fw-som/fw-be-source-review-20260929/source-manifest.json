@@ -1,0 +1,383 @@
+{
+  "commit": "895444beba0760f18cf1bdc252e707e319a3c751",
+  "entries": [
+    {
+      "label": "S01",
+      "file": "apps/core/application/runtime/scan_loop.cpp",
+      "symbol": "void ScanLoop::step()",
+      "line": 205,
+      "sha256": "1cd9e2eabb3865eadf78981882c3d3c83b551159a8b81417e16acb0fd803e4a1",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/runtime/scan_loop.cpp#L205"
+    },
+    {
+      "label": "S02",
+      "file": "apps/core/application/runtime/scan_loop.cpp",
+      "symbol": "void ScanLoop::run(",
+      "line": 549,
+      "sha256": "1cd9e2eabb3865eadf78981882c3d3c83b551159a8b81417e16acb0fd803e4a1",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/runtime/scan_loop.cpp#L549"
+    },
+    {
+      "label": "S03",
+      "file": "apps/core/bootstrap/main.cpp",
+      "symbol": "StTaskConfig runtime_task;",
+      "line": 704,
+      "sha256": "399e0ce35529838025e01d0cee37a3a81b8474cc6360b1fd82e273bdd99c0071",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/bootstrap/main.cpp#L704"
+    },
+    {
+      "label": "S04",
+      "file": "apps/core/application/st/st_scheduler.cpp",
+      "symbol": "void StScheduler::run_task(",
+      "line": 1117,
+      "sha256": "d9e6f482bf74582b8b5f1bd829e3e4df09932bdf34d2b4e346340b4bb31a7543",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/st/st_scheduler.cpp#L1117"
+    },
+    {
+      "label": "S05",
+      "file": "apps/core/application/st/st_runtime.cpp",
+      "symbol": "StExecResult StProgramRuntime::execute(",
+      "line": 78,
+      "sha256": "f813120abc8f1ae0a78a38638f709cb0e7b88b40503babc38387236ae8dc5d03",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/st/st_runtime.cpp#L78"
+    },
+    {
+      "label": "S06",
+      "file": "apps/core/adapters/ipc/web_ipc.cpp",
+      "symbol": "void WebIpc::rt_publish_snapshot(",
+      "line": 1008,
+      "sha256": "a32ffc8ea444762e58f3e7d0ca76191fc46e02019b902175b97117d63e982210",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/adapters/ipc/web_ipc.cpp#L1008"
+    },
+    {
+      "label": "S07",
+      "file": "apps/core/adapters/persistence/state_snapshot_worker.cpp",
+      "symbol": "void StateSnapshotWorker::publish_from(",
+      "line": 47,
+      "sha256": "19aea3961089072a403c3861c01fc346837c0832bd0a247c208d08d1a2579d07",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/adapters/persistence/state_snapshot_worker.cpp#L47"
+    },
+    {
+      "label": "S08",
+      "file": "apps/iobus/bootstrap/main.cpp",
+      "symbol": "void sleep_until(",
+      "line": 87,
+      "sha256": "e30145a8cf455f00c754cb7ea331c9f78289fec828007d2fbe04d9d9aaa14058",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/iobus/bootstrap/main.cpp#L87"
+    },
+    {
+      "label": "S09",
+      "file": "apps/iobus/adapters/modbus_rtu/bus_worker.cpp",
+      "symbol": "void BusWorker::run_loop(",
+      "line": 1450,
+      "sha256": "c316b9416d91dceb2b89884a2f6cb752a82bac9d7690bf213844e1991b68d7a1",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/iobus/adapters/modbus_rtu/bus_worker.cpp#L1450"
+    },
+    {
+      "label": "S10",
+      "file": "apps/web-api/internal/app/shm_reader.go",
+      "symbol": "func (s *shmSegment) read(",
+      "line": 259,
+      "sha256": "615b4f593d53eb5955511aae8834fb0ce2afab6d2ece56fe5e28c66f3a1924d2",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/shm_reader.go#L259"
+    },
+    {
+      "label": "S11",
+      "file": "apps/web-api/internal/app/points.go",
+      "symbol": "func (a *App) ReadPoints(",
+      "line": 55,
+      "sha256": "a7de607d9f293d9abbd52d22e2d36e857318da8fb240852531c7d9140f68c8ee",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/points.go#L55"
+    },
+    {
+      "label": "S12",
+      "file": "apps/web-api/internal/app/ws.go",
+      "symbol": "func (a *App) handleMonitorWS(",
+      "line": 87,
+      "sha256": "4cc565b596d54858f8cce2eec12e5fcec140af00d1fd956ac7552f8a4e7c1253",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/ws.go#L87"
+    },
+    {
+      "label": "S13",
+      "file": "apps/web-api/internal/app/core_client.go",
+      "symbol": "func (c *CoreClient) ReadPointSnapshot(",
+      "line": 403,
+      "sha256": "33125694d126d624c2d7bdb8191ec014e20bb5b7e95e10f3609d25001a4f91e5",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/core_client.go#L403"
+    },
+    {
+      "label": "S14",
+      "file": "apps/web-api/internal/historian/query.go",
+      "symbol": "func (e *HistorianQueryEngine) Query(",
+      "line": 135,
+      "sha256": "87584f1cbfac6568c48832165d7d84668331c433bd96115125ae58606fea2e8b",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/historian/query.go#L135"
+    },
+    {
+      "label": "S15",
+      "file": "apps/web-api/internal/app/historian_query_store.go",
+      "symbol": "func (b *HistorianQueryStoreBackend) ReadTier(",
+      "line": 487,
+      "sha256": "fbb556d26463010bb1455529f003009d508b953d34f343fc219068fb3a40d1e3",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_query_store.go#L487"
+    },
+    {
+      "label": "S16",
+      "file": "apps/web-api/internal/programming/compiler/runner.go",
+      "symbol": "func (r ProcessRunner) Compile(",
+      "line": 748,
+      "sha256": "226832ca65fa4de9df1cc7c130e9343f2a55aae159879a9565370728c7ab1949",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/programming/compiler/runner.go#L748"
+    },
+    {
+      "label": "S17",
+      "file": "platform/systemd/mkddc-core.service",
+      "symbol": "CPUSchedulingPolicy=fifo",
+      "line": 68,
+      "sha256": "76d85f0c36a7ab2283a7bbff1bb9fadac52d22f1b6e1b66cd07242529250b415",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/platform/systemd/mkddc-core.service#L68"
+    },
+    {
+      "label": "S18",
+      "file": "apps/web-api/internal/app/historian_query_boundary_benchmark_test.go",
+      "symbol": "func BenchmarkHistorianQueryEightSeries24hAuto(",
+      "line": 92,
+      "sha256": "a6e7683399f085b25220fe78d7d690b4d08c1675ba7a2227e60fb880237c955a",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_query_boundary_benchmark_test.go#L92"
+    },
+    {
+      "label": "S19",
+      "file": "apps/web-api/internal/historian/query.go",
+      "symbol": "func buildHistorianQueryResult(",
+      "line": 295,
+      "sha256": "87584f1cbfac6568c48832165d7d84668331c433bd96115125ae58606fea2e8b",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/historian/query.go#L295"
+    },
+    {
+      "label": "S20",
+      "file": "apps/web-api/internal/app/configapi.go",
+      "symbol": "func readConfig[",
+      "line": 442,
+      "sha256": "64bdda36eaff5c4edb7a413c9ba8788f8ecd2ce5ad68acbc4d20035016e02251",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/configapi.go#L442"
+    },
+    {
+      "label": "S21",
+      "file": "apps/web-api/internal/app/overview.go",
+      "symbol": "func (a *App) buildOverview(",
+      "line": 249,
+      "sha256": "9ee1bf46d7511f9816b3936250aea1beb36fbebb885ea207cf39de2e61905ce8",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/overview.go#L249"
+    },
+    {
+      "label": "S22",
+      "file": "apps/web-api/internal/app/system.go",
+      "symbol": "func (a *App) iopCountersFromIobus(",
+      "line": 88,
+      "sha256": "05e182991f2bad192b108e19d4982468e355c1df49ec17dfbed2a5a4bcd10041",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/system.go#L88"
+    },
+    {
+      "label": "S23",
+      "file": "apps/web-api/internal/app/override.go",
+      "symbol": "func (r *OverrideRegistry) Refresh(",
+      "line": 109,
+      "sha256": "0436ee3265a0b6dd4b2c0adef623f9556d7b75e752c0ab69212fe67bfe7ee642",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/override.go#L109"
+    },
+    {
+      "label": "S24",
+      "file": "apps/core/adapters/ipc/config_reload.cpp",
+      "symbol": "bool reload_configs(",
+      "line": 11,
+      "sha256": "7651b39a10567bade65775999d7a8c163788e3019b125c00f869d66cbc2723e0",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/adapters/ipc/config_reload.cpp#L11"
+    },
+    {
+      "label": "S25",
+      "file": "platform/packaging/io_config.conf",
+      "symbol": "\"poll_period_ms\": 10",
+      "line": 5,
+      "sha256": "2bcbad501f3669bffcc46d88524f53fd1417f2ccc4566a644e974656f19b893f",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/platform/packaging/io_config.conf#L5"
+    },
+    {
+      "label": "S26",
+      "file": "apps/web-api/internal/programming/application/checks_topology.go",
+      "symbol": "func programBudgetUs(",
+      "line": 96,
+      "sha256": "8aa1406bf0649d6cc266b5d27202db1595fc1e54173a5ae4fb5c27325e42289c",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/programming/application/checks_topology.go#L96"
+    },
+    {
+      "label": "S27",
+      "file": "apps/web-api/internal/app/http.go",
+      "symbol": "func loggingMiddleware(",
+      "line": 85,
+      "sha256": "63a851d3fb2a9c6862a930e972a187dd3960336cab8cf1eea9c235efe1f8e3d8",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/http.go#L85"
+    },
+    {
+      "label": "S28",
+      "file": "apps/core/adapters/ipc/web_ipc.cpp",
+      "symbol": "void WebIpc::respond_alarm_list(",
+      "line": 469,
+      "sha256": "a32ffc8ea444762e58f3e7d0ca76191fc46e02019b902175b97117d63e982210",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/adapters/ipc/web_ipc.cpp#L469"
+    },
+    {
+      "label": "S29",
+      "file": "apps/web-api/internal/app/historian_store.go",
+      "symbol": "func OpenHistorianStore(",
+      "line": 32,
+      "sha256": "c128f1651c64666e2db1fb655358188165750b763df7ffa8899e45749df3cc5d",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_store.go#L32"
+    },
+    {
+      "label": "S30",
+      "file": "contracts/shm/mkddc_shm.h",
+      "symbol": "#define KX_WRITE_BEGIN",
+      "line": 389,
+      "sha256": "174a3eaa1cb160cc5f56776367cde052aaf3e3e5d15a5bb0c66ef3181d9758fd",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/contracts/shm/mkddc_shm.h#L389"
+    },
+    {
+      "label": "S31",
+      "file": "apps/web-api/internal/app/historian_query_http.go",
+      "symbol": "func serveHistorianHistory(",
+      "line": 82,
+      "sha256": "71e93044c16c868a6803b1e4402d13e589eedd12051c5a9af10c89ec22c03721",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_query_http.go#L82"
+    }
+  ],
+  "related": [
+    {
+      "label": "S05",
+      "file": "apps/core/application/st/st_cyclic_runtime.cpp",
+      "symbol": "bool StCyclicRuntime::request_activation(",
+      "line": 7,
+      "sha256": "df96ede86382036b73a6a52f7e080fdb021c2715d8fe74285491f911049de817",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/st/st_cyclic_runtime.cpp#L7"
+    },
+    {
+      "label": "S11",
+      "file": "apps/web-api/internal/app/points.go",
+      "symbol": "func (a *App) overlayPointMetadata(",
+      "line": 164,
+      "sha256": "a7de607d9f293d9abbd52d22e2d36e857318da8fb240852531c7d9140f68c8ee",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/points.go#L164"
+    },
+    {
+      "label": "S12",
+      "file": "apps/web-api/internal/app/ws.go",
+      "symbol": "func sendMonitorSnapshot(",
+      "line": 420,
+      "sha256": "4cc565b596d54858f8cce2eec12e5fcec140af00d1fd956ac7552f8a4e7c1253",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/ws.go#L420"
+    },
+    {
+      "label": "S12",
+      "file": "apps/web-api/internal/app/ws.go",
+      "symbol": "func fingerprintPoints(",
+      "line": 464,
+      "sha256": "4cc565b596d54858f8cce2eec12e5fcec140af00d1fd956ac7552f8a4e7c1253",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/ws.go#L464"
+    },
+    {
+      "label": "S13",
+      "file": "apps/web-api/internal/app/core_client.go",
+      "symbol": "coreWebIPCMaxInFlight",
+      "line": 76,
+      "sha256": "33125694d126d624c2d7bdb8191ec014e20bb5b7e95e10f3609d25001a4f91e5",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/core_client.go#L76"
+    },
+    {
+      "label": "S15",
+      "file": "apps/web-api/internal/app/historian_query_store.go",
+      "symbol": "func (b *HistorianQueryStoreBackend) readHotIdentity(",
+      "line": 352,
+      "sha256": "fbb556d26463010bb1455529f003009d508b953d34f343fc219068fb3a40d1e3",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_query_store.go#L352"
+    },
+    {
+      "label": "S15",
+      "file": "apps/web-api/internal/app/historian_query_store.go",
+      "symbol": "func (b *HistorianQueryStoreBackend) readArchiveIdentity(",
+      "line": 405,
+      "sha256": "fbb556d26463010bb1455529f003009d508b953d34f343fc219068fb3a40d1e3",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/historian_query_store.go#L405"
+    },
+    {
+      "label": "S17",
+      "file": "platform/systemd/mkddc-web-pi.service",
+      "symbol": "CPUAffinity=0-2",
+      "line": 8,
+      "sha256": "16e82f2f7604a8b2cc20f4418afdb355fe7e9acdd42ae4a3bcf919645d55467c",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/platform/systemd/mkddc-web-pi.service#L8"
+    },
+    {
+      "label": "S17",
+      "file": "platform/systemd/mkddc-iobus.service",
+      "symbol": "CPUAffinity=0-2",
+      "line": 10,
+      "sha256": "d33e5accdb7ff56b1f7a19cf64c1061dc8bcd5a1c1233c14b0a9a088769f80d6",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/platform/systemd/mkddc-iobus.service#L10"
+    },
+    {
+      "label": "S20",
+      "file": "apps/web-api/internal/config/store.go",
+      "symbol": "func ReadJSON(",
+      "line": 75,
+      "sha256": "adc709dbc5fc43a73a2e5f921ab637a823f6321555023a8e36f5f9f85d3aecb2",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/config/store.go#L75"
+    },
+    {
+      "label": "S24",
+      "file": "apps/core/bootstrap/main.cpp",
+      "symbol": "auto on_reload =",
+      "line": 887,
+      "sha256": "399e0ce35529838025e01d0cee37a3a81b8474cc6360b1fd82e273bdd99c0071",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/bootstrap/main.cpp#L887"
+    },
+    {
+      "label": "S25",
+      "file": "contracts/iop/iop_protocol.h",
+      "symbol": "#define IOP_GET_IO_PERIOD_MS",
+      "line": 48,
+      "sha256": "30a5a2229166e8b1c0131adcdd964277f221b1128d53ba06c160b720e8d74d3c",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/contracts/iop/iop_protocol.h#L48"
+    },
+    {
+      "label": "S26",
+      "file": "apps/core/application/programming/programming_runtime_coordinator.hpp",
+      "symbol": "struct PackageProgramSlice",
+      "line": 156,
+      "sha256": "dbf675076d34c683d110c7f18485da35a41cd9c96f6e68eb35e333bcc9ae4206",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/application/programming/programming_runtime_coordinator.hpp#L156"
+    },
+    {
+      "label": "S29",
+      "file": "apps/web-api/internal/programming/store/store.go",
+      "symbol": "db.SetMaxOpenConns(1)",
+      "line": 77,
+      "sha256": "a0f0845afc2a1ccbf1d3dd7e196f9bcb4f81f11cdd5b5e48e31f91d0399dbb64",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/programming/store/store.go#L77"
+    },
+    {
+      "label": "S30",
+      "file": "apps/core/adapters/ipc/iobus_reader.cpp",
+      "symbol": "for (int i = 0; i < 5; i++)",
+      "line": 59,
+      "sha256": "d105ffdd827f7b483ac75bf5c62ae9eb841e2ad203f30562014bacbd1590d96f",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/core/adapters/ipc/iobus_reader.cpp#L59"
+    },
+    {
+      "label": "S31",
+      "file": "apps/web-api/internal/app/main.go",
+      "symbol": "server := &http.Server{",
+      "line": 486,
+      "sha256": "7d18722f5f256905094d6ddc236df38ed0e7e355d7766c9d014dd39e643d5b12",
+      "url": "https://github.com/Mekong-HCM/MK-DDC-24/blob/895444beba0760f18cf1bdc252e707e319a3c751/apps/web-api/internal/app/main.go#L486"
+    }
+  ]
+}

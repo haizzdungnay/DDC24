@@ -1,0 +1,13 @@
+digraph iop_time {
+  graph [rankdir=LR, bgcolor="white", pad="0.25", nodesep="0.38", ranksep="0.44", label="Mốc thời gian thiết kế IOP V3.0 — KHÔNG PHẢI số đo trên bo", labelloc=t, fontsize=18, fontname="DejaVu Sans"];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#27618a", fontname="DejaVu Sans", fontsize=11, margin="0.12,0.1"];
+  edge [color="#305a78", fontname="DejaVu Sans", fontsize=10];
+  t0 [label="0 ms\nGET_IO hợp lệ cuối\nhoặc HANDSHAKE", fillcolor="#e7f4e8", color="#397a42"];
+  t20 [label="20 ms sau response thành công\nSOM: DEGRADED\ninput UNCERTAIN\nkhông RESET_IO"];
+  t199 [label="199 ms\nMCU chưa được vào COMM_SAFE"];
+  t200 [label="200 ms\nMCU bắt đầu cửa sổ safe", fillcolor="#fff4d9", color="#9a7628"];
+  t205 [label="205 ms\nMCU đã áp safe\nCOMM_SAFE", fillcolor="#fce8e6", color="#b44636"];
+  t500 [label="500 ms\nSOM: CORE_WDG nếu core\nim lặng (đồng hồ riêng)", fillcolor="#f1eefb", color="#68558d"];
+  t0 -> t20 [label="hai đồng hồ riêng"];
+  t20 -> t199 -> t200 -> t205 -> t500;
+}

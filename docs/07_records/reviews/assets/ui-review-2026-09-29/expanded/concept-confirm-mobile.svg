@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="900" viewBox="0 0 390 900" role="img" aria-label="Xác nhận lệnh chạy thử — đề xuất"><title>Xác nhận lệnh chạy thử — đề xuất</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="390" height="900" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="390" height="64" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="18" y="27" font-size="16" font-weight="700" style="fill:#fff">DDC24  /  Tích hợp BMS</text>
+<text x="18" y="49" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa</text>
+<text x="18" y="96" font-size="21" font-weight="700" style="fill:#162c3d">Xác nhận chạy thử</text>
+<rect x="16" y="130" width="358" height="630" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="38" y="167" font-size="22" font-weight="700" style="fill:#162c3d">Ghi DO-02 = ON</text>
+<text x="38" y="203" font-size="14" font-weight="400" style="fill:#162c3d">DDC-01 / AHU-01 / Quạt cấp — dữ</text>
+<text x="38" y="224" font-size="14" font-weight="400" style="fill:#162c3d">liệu minh họa</text>
+<rect x="36" y="238" width="318" height="112" rx="10" fill="#fff2dd" stroke="#cbd6df"/>
+<text x="52" y="269" font-size="16" font-weight="400" style="fill:#162c3d">Contactor có thể đóng ngay và</text>
+<text x="52" y="292" font-size="16" font-weight="400" style="fill:#162c3d">quạt khởi động. Kiểm thiết bị</text>
+<text x="52" y="315" font-size="16" font-weight="400" style="fill:#162c3d">tại chỗ trước khi gửi lệnh.</text>
+<text x="38" y="393" font-size="14" font-weight="700" style="fill:#162c3d">Thời hạn: 5 phút • Core cưỡng chế</text>
+<text x="38" y="434" font-size="14" font-weight="400" style="fill:#162c3d">□ Tôi đã kiểm điều kiện an toàn</text>
+<text x="38" y="455" font-size="14" font-weight="400" style="fill:#162c3d">tại hiện trường. Đây là khai báo</text>
+<text x="38" y="476" font-size="14" font-weight="400" style="fill:#162c3d">của người vận hành.</text>
+<text x="38" y="508" font-size="14" font-weight="400" style="fill:#162c3d">Chặn gửi khi: mất liên lạc, dữ</text>
+<text x="38" y="529" font-size="14" font-weight="400" style="fill:#162c3d">liệu cũ, quyền không đủ, revision</text>
+<text x="38" y="550" font-size="14" font-weight="400" style="fill:#162c3d">thay đổi hoặc chưa rõ nguồn đang</text>
+<text x="38" y="571" font-size="14" font-weight="400" style="fill:#162c3d">giữ.</text>
+<text x="38" y="598" font-size="14" font-weight="400" style="fill:#162c3d">Hết thời gian chờ: kết quả chưa</text>
+<text x="38" y="619" font-size="14" font-weight="400" style="fill:#162c3d">rõ; đọc lại commandId trước khi</text>
+<text x="38" y="640" font-size="14" font-weight="400" style="fill:#162c3d">gửi lại. Không tự ghi lần thứ hai.</text>
+<rect x="38" y="690" width="122" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="50" y="718" font-size="14" font-weight="700" style="fill:#162c3d">Hủy</text>
+<rect x="174" y="690" width="178" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="186" y="718" font-size="14" font-weight="700" style="fill:#fff">Gửi lệnh ON</text>
+</svg>

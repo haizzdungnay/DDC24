@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Emulating viewport: {\"deviceScaleFactor\":1,\"isMobile\":false,\"hasTouch\":false,\"isLandscape\":false,\"width\":1440,\"height\":900}\n## Network requests\nShowing 1-6 of 6 (Page 1 of 1).\nreqid=127 GET http://127.0.0.1:4193/api/v1/history?point=AO-01&from=2026-09-29T02%3A06%3A00.783Z&to=2026-09-29T03%3A06%3A00.783Z&resolution=1m&maxPoints=60 [502]\nreqid=128 GET http://127.0.0.1:4193/api/v1/history?point=AO-01&from=2026-09-29T02%3A06%3A00.787Z&to=2026-09-29T03%3A06%3A00.787Z&resolution=1m&maxPoints=60 [502]\nreqid=169 GET http://127.0.0.1:4193/api/v1/schedules [502]\nreqid=170 GET http://127.0.0.1:4193/api/v1/schedules [502]\nreqid=196 GET http://127.0.0.1:4193/api/v1/modbus/frames?bus=0&limit=200 [502]\nreqid=197 GET http://127.0.0.1:4193/api/v1/modbus/frames?bus=0&limit=200 [502]"
+    }
+  ]
+}

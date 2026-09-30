@@ -1,0 +1,14 @@
+=== RUN   TestProcessRunnerWithOfficialCompiler
+    runner_test.go:234: không có compiler production đúng profile: /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: no such file or directory; /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: no such file or directory — chạy cổng cpp trước hoặc đặt MKDDC_ST_COMPILER_BINARY
+--- SKIP: TestProcessRunnerWithOfficialCompiler (0.00s)
+=== RUN   TestProcessRunnerWithOfficialCompilerResolvesIoMapIntoArtifact
+    runner_test.go:255: không có compiler production đúng profile: /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: no such file or directory; /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: no such file or directory — chạy cổng cpp trước hoặc đặt MKDDC_ST_COMPILER_BINARY
+--- SKIP: TestProcessRunnerWithOfficialCompilerResolvesIoMapIntoArtifact (0.00s)
+=== RUN   TestProcessRunnerWithOfficialCompilerEmitsPublishedSignalRefs
+    runner_test.go:289: không có compiler production đúng profile: /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: no such file or directory; /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: no such file or directory — chạy cổng cpp trước hoặc đặt MKDDC_ST_COMPILER_BINARY
+--- SKIP: TestProcessRunnerWithOfficialCompilerEmitsPublishedSignalRefs (0.00s)
+=== RUN   TestProcessRunnerWithOfficialCompilerCachesWholeProjectRepeat
+    runner_test.go:867: không có compiler production đúng profile: /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/fw/core/mkddc-st-compile: no such file or directory; /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: stat /tmp/ddc-fw-be-review-20260929/build/verify/cpp-full/core/mkddc-st-compile: no such file or directory — chạy cổng cpp trước hoặc đặt MKDDC_ST_COMPILER_BINARY
+--- SKIP: TestProcessRunnerWithOfficialCompilerCachesWholeProjectRepeat (0.00s)
+PASS
+ok  	mkddc-web/internal/programming/compiler	0.005s

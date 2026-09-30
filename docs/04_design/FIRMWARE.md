@@ -2,7 +2,7 @@
 
 **ID:** FW-DES-001
 **Trạng thái:** Target design — protocol/runtime baseline có source; BSP/HIL còn mở
-**Cập nhật:** 2026-08-03
+**Cập nhật:** 2026-09-30 (FW MCU chuyển cho team riêng; ràng buộc qua yêu cầu + ICD)
 
 Firmware STM32G0B1 sở hữu real-time I/O, ADC sampling, AO/DO actuation, Kinexus-IOP framing và independent safe timeout. Linux/SOM không truy cập trực tiếp ADS131M08; STM32 là SPI master duy nhất.
 
@@ -15,7 +15,17 @@ Firmware STM32G0B1 sở hữu real-time I/O, ADC sampling, AO/DO actuation, Kine
 > HIL. Vì vậy source baseline này không phải bằng chứng ADC/DAC/relay/UART thật
 > đã implemented hoặc safe/release-ready.
 
-## Baseline hiện hành
+## Ranh giới với team MCU (từ 2026-09-30)
+
+Firmware STM32 do **một team riêng** thiết kế và thực hiện. Dự án không áp đặt thiết kế bên trong firmware. Ràng buộc với team đó chỉ gồm:
+
+- [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md): yêu cầu hộp đen và cổng nghiệm thu G-MCU-1..3;
+- [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md): frame, lệnh, trạng thái, thời gian, lỗi, phiên bản, bài kiểm tích hợp (IOP v3.0);
+- [Header v3 nháp](../01_specs/iop_protocol_v3_DRAFT.h) để hai team review byte; HW spec của **từng biến thể** do HW cung cấp riêng. `contracts/iop/iop_protocol.h` v2.0 vẫn thuộc runtime hiện tại, chưa là header giao team MCU để làm v3.
+
+Cả hai tài liệu đang **Draft về chi tiết, chờ hai team ký**. Các tài liệu thiết kế firmware trong `02_design/firmware/`, FW_ARCH_SPEC và guide 04 là tham khảo. [ADR-064](../adr/ADR-064-iop-v3-hai-bien-the.md) đã chốt **V3.0 duy nhất** cho cả 16/4/4 và 16/8/8; V2.x không là lựa chọn tích hợp. Chưa có hồ sơ HW chuẩn hoặc HIL cho 8/8.
+
+## Source/runtime di sản chưa chuyển V3.0 (V2.0)
 
 - Kinexus-IOP v2: UART 921600 baud, `GET_IO` 2 ms/500 Hz, response timeout 3 ms, fault threshold 20 ms.
 - `IO_RESP`: payload 74 bytes, frame 80 bytes; capability Rev A `0x000D` cho 16 UI + 4 AO + 4 DO.

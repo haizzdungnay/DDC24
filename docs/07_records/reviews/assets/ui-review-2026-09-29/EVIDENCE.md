@@ -1,7 +1,7 @@
 # Bằng chứng review giao diện DDC-24 ngày 29/09/2026
 
 **ID:** REC-DDC-UI-EVIDENCE-20260929
-**Phiên bản:** 1.0
+**Phiên bản:** 1.1
 **Trạng thái:** Record — SOURCE/HOST/BROWSER-FIXTURE
 **Cập nhật:** 2026-09-29
 
@@ -67,8 +67,35 @@ API Programming/capabilities, runtime, project, chương trình, catalog và che
 
 Năm file Vitest là `ProgramsWorkspace.test.tsx`, `MappingLiveData.test.tsx`, `CheckCommissionPage.test.tsx`, `ShellNavigation.test.tsx`, `WeeklyTab.test.tsx` tại source baseline. Lượt đầu mượn dependency từ checkout local thiếu Node types; đã cài dependency riêng và chạy lại các cổng trên. Không sửa source để làm test tái hiện lỗi xanh. Kiểm tài liệu/pin không chứng minh trạng thái runtime hay đóng finding frontend.
 
+
+
+## Bằng chứng mở rộng 1.1 — tích hợp BMS
+
+- Ngày: 2026-09-29; baseline `101d1fdf54c827519d196572484afbb366f9a7c4`, detached worktree `/tmp/ddc-ui-expanded-20260929`; `npm ci` đúng lockfile. Source worktree sạch sau gỡ test tái hiện tạm. Root giữ WIP, không sửa mã frontend hay deploy.
+- Vite `127.0.0.1:4193`, mode demo/auth mock; 1440×900 và 390×844. [58 quan sát đã chuẩn hóa](expanded/survey.json), [tool output gốc](expanded/survey-raw.json), [điều hướng](expanded/navigation.json). Các lượt mobile rơi về Login sau đổi viewport đã loại và chạy lại sau login mock.
+- Console/Network: [desktop Console](expanded/console-desktop.txt), [desktop Network](expanded/network-desktop.txt), [mobile Console](expanded/console-mobile.txt), [mobile Network](expanded/network-mobile.txt). Các 502 do backend/fixture không phục vụ history/schedules/frames; scheduler thành công và frame có dữ liệu chưa kiểm. Không tính lỗi môi trường thành lỗi backend thật. Không coi Console trống là tất cả routes/error states đều không có lỗi.
+- Ảnh mới: [Dashboard mobile](expanded/dashboard-mobile.png), [Commission mobile](expanded/commission-mobile.png), [Modbus mobile](expanded/modbus-points-mobile.png), [VP mobile](expanded/virtual-mobile.png), [Trend GAP và thống kê 0](expanded/trend-gap-mobile.png). Dữ liệu mô phỏng; viewport 390 nhưng `innerWidth` có thể phình do document overflow, phép so dùng clientWidth/scrollWidth.
+- Kiểm nguồn: [169 test/12 file PASS](expanded/vitest.txt), [lint](expanded/lint.txt), [build](expanded/build.txt). Build Programming gzip 76,85 KiB dưới 165 KiB. Không chạy full suite E2E hoặc target.
+- UI-F07: [test tái hiện độc lập](expanded/gap-repro.test.tsx.txt), [1 FAIL mong 0 nhận 2 mẫu](expanded/gap-repro.txt). Test tạm nằm trong worktree audit, đã xóa sau thu kết quả; không đưa test đỏ vào source sản phẩm.
+- Concept: [gallery](expanded/concept-gallery.html), 9 SVG liên kết trong report proposal §9; Chrome nạp đủ 9/9 (HTTP 200), không lấy ảnh concept làm runtime. Render check và snapshot riêng lưu trong `expanded`; các card/component là minh họa review, chưa đủ mọi modal/state DD. Server gallery ban đầu có favicon 404; đã thêm favicon inline, không phải lỗi SVG.
+- Không có backend thật/board/HIL/reboot/soak/usability benchmark đối thủ; không đổi release gate. Phép kiểm tài liệu và danh sách checksum ở phần dưới.
+
+
+
+### Kết quả kiểm tài liệu mở rộng
+
+| Kiểm | Kết quả mới | Diễn giải |
+|---|---|---|
+| Docs ISO `--expect` | PASS; quét 501 file Markdown, EXPECT khớp | [Log](expanded/docs-harness.txt); metadata/lịch sử và local links đạt |
+| Candidate pin | **FAIL: 15/17 khớp** | [Log](expanded/pins.txt); DECISIONS.md và PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md lệch pin **đã có ở baseline 101d1fdf sạch**. Không thay/pin lại authority ngoài phạm vi review để làm cổng xanh |
+| Concept render | 9/9 SVG nạp 200; không có text vượt viewBox theo bbox | [Kiểm render](expanded/concept-render.json); xem trực quan mẫu desktop/mobile; không thay usability/accessibility test |
+| Diff check + JSON/XML/assets | PASS | [Kiểm artifact](expanded/artifact-check.txt); checksum ở [manifest](expanded/sha256.txt) |
+
+[Ngữ cảnh checkout](expanded/source-context.txt): root có tiến trình khác cập nhật trong phiên; mọi source claim mới vẫn dùng commit đã ghim. Điều kiện mở lại candidate gate: chủ quản authority phát hành manifest phù hợp và reviewer kiểm phần thay đổi. Đây là gap tài liệu hiện có, không có quyền kết luận release từ report UI.
+
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-09-29 | Ghi cấu hình, lớp bằng chứng, phép tái hiện, screenshot và log; không có deploy/target/HIL |
+| 1.1 | 2026-09-29 | Thêm evidence mở rộng 29 tuyến, log host và UI-F07, screenshot mobile, 9 concept SVG; phân biệt demo/source/target |

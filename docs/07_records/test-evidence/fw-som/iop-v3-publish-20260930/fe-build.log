@@ -1,0 +1,40 @@
+
+> mk-ddc-24-frontend@0.1.0 build
+> npm run check:programming-contracts && tsc --noEmit && vite build && node scripts/check-login-chunks.mjs && node scripts/precompress-assets.mjs && npm run check:bundle-budget
+
+
+> mk-ddc-24-frontend@0.1.0 check:programming-contracts
+> npm run check:programming-errors && npm run check:programming-api && npm run check:programming-fbd && npm run check:programming-st-keywords && npm run check:programming-st-keyboard
+
+
+> mk-ddc-24-frontend@0.1.0 check:programming-errors
+> python3 ../../scripts/generate_programming_errors.py --check
+
+PASS: error catalog 38 public / 160 detail / SHA-256 f2ecfc4aef996f6de60c94945015f02c6e67e5fc7e110f370d59747b7d3e5171
+
+> mk-ddc-24-frontend@0.1.0 check:programming-api
+> node scripts/generate-programming-client.mjs --check
+
+Programming API client đồng bộ: 45 operation
+
+> mk-ddc-24-frontend@0.1.0 check:programming-fbd
+> python3 ../../scripts/verify_programming_fbd_contract.py --self-test
+
+PASS self-test: 10/10 mutation bị reject fail-closed
+PASS: FBD schema/golden/profile/keyboard/equivalence/manifest khớp; canonical semantics hợp lệ
+
+> mk-ddc-24-frontend@0.1.0 check:programming-st-keywords
+> python3 ../../scripts/generate_st_reserved_words.py --check
+
+OK: apps/web-ui/src/features/programming/design/editor/stCoreReservedWords.generated.ts khớp compiler.
+
+> mk-ddc-24-frontend@0.1.0 check:programming-st-keyboard
+> python3 ../../scripts/verify_programming_st_keyboard.py --self-test
+
+PASS self-test: 5/5 hợp đồng sai bị reject fail-closed
+PASS: hợp đồng phím ST khớp mã nguồn (23 lệnh, 7 ngữ cảnh)
+src/app/precompress-build.contract.test.ts(1,30): error TS2307: Cannot find module 'node:child_process' or its corresponding type declarations.
+src/app/precompress-build.contract.test.ts(4,10): error TS2305: Module '"node:process"' has no exported member 'execPath'.
+src/app/trend-chart-lazy.contract.test.ts(1,30): error TS2307: Cannot find module 'node:child_process' or its corresponding type declarations.
+src/app/trend-chart-lazy.contract.test.ts(4,10): error TS2305: Module '"node:process"' has no exported member 'execPath'.
+src/features/dashboard/DashboardPage.tsx(894,22): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1040" viewBox="0 0 390 1040" role="img" aria-label="Phiếu kiểm I/O và bàn giao"><title>Phiếu kiểm I/O và bàn giao</title><style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#162c3d} .dim{fill:#526777}</style>
+<rect x="0" y="0" width="390" height="1040" rx="0" fill="#edf2f5" stroke="#cbd6df"/>
+<rect x="0" y="0" width="390" height="64" rx="0" fill="#102d40" stroke="#cbd6df"/>
+<text x="18" y="27" font-size="16" font-weight="700" style="fill:#fff">DDC24  /  Tích hợp BMS</text>
+<text x="18" y="49" font-size="12" font-weight="400" style="fill:#bce3e8">BẢN ĐỀ XUẤT • dữ liệu minh họa</text>
+<text x="18" y="96" font-size="21" font-weight="700" style="fill:#162c3d">Phiếu chạy thử / AHU-01</text>
+<text x="18" y="123" font-size="14" font-weight="400" style="fill:#162c3d">DDC-01 • CT-001 • kiểm 6/8</text>
+<rect x="16" y="146" width="358" height="112" rx="10" fill="#fff2dd" stroke="#cbd6df"/>
+<text x="32" y="176" font-size="17" font-weight="400" style="fill:#162c3d">Lệnh thành công chưa chứng minh</text>
+<text x="32" y="200" font-size="17" font-weight="400" style="fill:#162c3d">thiết bị đã chạy.</text>
+<rect x="16" y="278" width="358" height="246" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="312" font-size="20" font-weight="700" style="fill:#162c3d">DO-02 / Quạt cấp</text>
+<text x="32" y="343" font-size="15" font-weight="400" style="fill:#162c3d">Lệnh ON • Core đọc lại ON</text>
+<text x="32" y="371" font-size="15" font-weight="400" style="fill:#162c3d">Core báo tự nhả còn 04:58</text>
+<text x="32" y="409" font-size="16" font-weight="700" style="fill:#162c3d">Hiện trường: chưa xác nhận</text>
+<rect x="32" y="445" width="324" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="44" y="473" font-size="14" font-weight="700" style="fill:#fff">Ghi nhận phản hồi hiện trường</text>
+<rect x="16" y="545" width="358" height="145" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="578" font-size="18" font-weight="700" style="fill:#162c3d">Bước 3: Nhả lệnh</text>
+<text x="32" y="608" font-size="14" font-weight="400" style="fill:#162c3d">Đọc lại quyền điều khiển; không coi</text>
+<text x="32" y="629" font-size="14" font-weight="400" style="fill:#162c3d">hết TTL trên web là đã nhả.</text>
+<rect x="32" y="636" width="324" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="44" y="664" font-size="14" font-weight="700" style="fill:#162c3d">Xem trước trả về tự động</text>
+<rect x="16" y="712" width="358" height="133" rx="10" fill="#fff" stroke="#cbd6df"/>
+<text x="32" y="745" font-size="18" font-weight="700" style="fill:#162c3d">Ghi chú / ảnh / phép đo</text>
+<text x="32" y="776" font-size="14" font-weight="400" style="fill:#162c3d">Thiếu phép kiểm vẫn được xuất biên</text>
+<text x="32" y="797" font-size="14" font-weight="400" style="fill:#162c3d">bản với trạng thái CHƯA KIỂM.</text>
+<rect x="16" y="876" width="358" height="44" rx="7" fill="#fff" stroke="#cbd6df"/>
+<text x="28" y="904" font-size="14" font-weight="700" style="fill:#162c3d">Lưu kết quả</text>
+<rect x="16" y="934" width="358" height="44" rx="7" fill="#005f68" stroke="#cbd6df"/>
+<text x="28" y="962" font-size="14" font-weight="700" style="fill:#fff">Xem hồ sơ bàn giao</text>
+</svg>

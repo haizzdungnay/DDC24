@@ -2,8 +2,10 @@
 
 > **Document:** IOP_PROTOCOL | Rev 2.1 | 2026-06-30
 > **Scope:** SOM ↔ MCU communication protocol for 16 UI Rev A hardware
-> **Status:** APPROVED — supersedes Rev 2.0-draft (2026-06-23). Governing reference: ADR-010 + `contracts/iop/iop_protocol.h`.
-> **Nguồn-chuẩn cuối cùng:** `contracts/iop/iop_protocol.h` — file này và ADR-010 là diễn giải.
+> **Trạng thái hiện nay:** Lịch sử V2.x; không là hợp đồng tích hợp mới. Trạng thái APPROVED dưới đây chỉ phản ánh thời điểm Rev 2.1. Nguồn mục tiêu là ICD V3.0 theo ADR-064.
+> **Source hiện có:** `contracts/iop/iop_protocol.h` còn V2.0 và phải được thay trước P1; file này không có quyền thắng ICD V3.0.
+
+> ⚠️ **SUPERSEDED cho tích hợp mới (2026-09-30).** Chủ dự án chọn IOP V3.0 duy nhất theo [ADR-064](../../../adr/ADR-064-iop-v3-hai-bien-the.md); [ICD V3.0](../../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) là bản để hai team ký. File này chỉ giữ lịch sử V2.x, không là phương án fallback.
 
 ---
 
@@ -221,3 +223,4 @@ GET_IO SEQ=1 hoàn chỉnh: AA 00 01 01 AC E1
 | 2.0-draft | 2026-06-23 | Rev A 16 UI frame — SUPERSEDED |
 | **2.0** | **2026-06-25** | **Approved: poll model, 74B IO_RESP, BOARD_CAP_MAP, v2 FAULT bits. Governing: ADR-010 + contracts/iop/iop_protocol.h** |
 | **2.1** | **2026-06-30** | **Documented the 2 ms timing constants and AO/DO/diagnostic command registry from the shared header.** |
+| 2.2 | 2026-09-30 | SUPERSEDED: nội dung chuyển sang ICD `IOP-SPEC-MK-DDC-24-VI` v2.0; không sửa thêm ở file này. |

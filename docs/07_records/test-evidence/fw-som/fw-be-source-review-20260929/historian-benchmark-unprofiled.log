@@ -1,0 +1,9 @@
+goos: linux
+goarch: amd64
+pkg: mkddc-web/internal/app
+cpu: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz
+BenchmarkHistorianQueryEightSeries24hAuto-28    	       3	1152200625 ns/op	268790498 B/op	 1893483 allocs/op
+BenchmarkHistorianQueryEightSeries24hAuto-28    	       3	1143238023 ns/op	268795394 B/op	 1893494 allocs/op
+BenchmarkHistorianQueryEightSeries24hAuto-28    	       3	1120815180 ns/op	268792293 B/op	 1893489 allocs/op
+PASS
+ok  	mkddc-web/internal/app	34.313s

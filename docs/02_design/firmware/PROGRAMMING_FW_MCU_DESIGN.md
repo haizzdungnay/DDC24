@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FWMCU-PROG-001` |
-| Phiên bản | 0.4 |
+| Phiên bản | 0.5 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; HIL vật lý vẫn RED |
 | Ngày | 2026-08-09 |
 | Chủ quản | Firmware MCU Lead |
@@ -15,6 +15,9 @@
 > **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
 > `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
 > không còn chặn viết/merge code. Review và HIL evidence chưa có vẫn thực hiện trong task.
+
+> ⚠️ **Tham khảo, không ràng buộc team MCU (2026-09-30).** Firmware MCU do một team riêng thiết kế và thực hiện. Ràng buộc với team đó chỉ gồm [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](../../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) và [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (cả hai đang Draft, chờ ký). Nội dung dưới đây là ý đồ thiết kế cũ của dự án; khi khác hai tài liệu trên thì hai tài liệu đó thắng.
+> Các yêu cầu hành vi của file này (liên tục IOP khi Commission, frame lặp, 199/200/201 ms, ACK sau khi ghi phần cứng, trường chẩn đoán) đã được đưa vào ICD `ICD-R-01..09`, §6.9 và FW-REQ v3.1. Phần tổ chức main-loop/ISR/buffer (§9, §12, §15) là gợi ý.
 
 ## 0. Đọc nhanh
 
@@ -237,6 +240,7 @@ không ACK partial success. Exact critical-section WCET thuộc cross-build/HIL.
 | 0.2 | 2026-08-09 | Bổ sung module/ISR/DMA/buffer, timeout edge, command/read-back, source/deploy/test M3 |
 | 0.3 | 2026-08-09 | Bổ sung ISR/DMA/main ownership, coherent snapshot và atomic output batch/fail-safe algorithm; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; gắn blocker vào `HW-AUTH-001/002` |
+| 0.5 | 2026-09-30 | Gắn nhãn tham khảo cho team MCU riêng; yêu cầu hành vi chuyển vào ICD `IOP-SPEC-MK-DDC-24-VI` v2.0 và `FW-REQ-MK-DDC-24-VI` v3.0 |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

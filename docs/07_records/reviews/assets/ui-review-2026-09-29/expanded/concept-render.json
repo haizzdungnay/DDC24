@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Script ran on page and returned:\n```json\n{\"images\":[{\"src\":\"concept-checkout-desktop.svg\",\"loaded\":true,\"width\":1440,\"height\":900,\"outOfView\":[]},{\"src\":\"concept-checkout-mobile.svg\",\"loaded\":true,\"width\":390,\"height\":1040,\"outOfView\":[]},{\"src\":\"concept-confirm-desktop.svg\",\"loaded\":true,\"width\":1440,\"height\":900,\"outOfView\":[]},{\"src\":\"concept-confirm-mobile.svg\",\"loaded\":true,\"width\":390,\"height\":900,\"outOfView\":[]},{\"src\":\"concept-equipment-desktop.svg\",\"loaded\":true,\"width\":1440,\"height\":900,\"outOfView\":[]},{\"src\":\"concept-equipment-mobile.svg\",\"loaded\":true,\"width\":390,\"height\":1040,\"outOfView\":[]},{\"src\":\"concept-states.svg\",\"loaded\":true,\"width\":1440,\"height\":930,\"outOfView\":[]},{\"src\":\"concept-workspace-desktop.svg\",\"loaded\":true,\"width\":1440,\"height\":900,\"outOfView\":[]},{\"src\":\"concept-workspace-mobile.svg\",\"loaded\":true,\"width\":390,\"height\":980,\"outOfView\":[]}],\"documentWidth\":390,\"viewport\":390}\n```"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+
+> mk-ddc-24-frontend@0.1.0 lint
+> eslint src --max-warnings=0 && npm run check:ui-strings
+
+
+/home/chuong/Desktop/DDC-PROJECT/apps/web-ui/src/features/operations/TrendsPage.tsx
+  229:9  error  'historyPresentation' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/chuong/Desktop/DDC-PROJECT/apps/web-ui/src/features/scheduler/ScheduleEditorPage.tsx
+  75:13  error  'runtime' is assigned a value but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars
+  75:22  error  'created_at' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  75:34  error  'created_by' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  75:46  error  'updated_at' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  75:58  error  'updated_by' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/chuong/Desktop/DDC-PROJECT/apps/web-ui/src/features/scheduler/tabs/TargetTab.tsx
+    1:10  error  'Eye' is defined but never used. Allowed unused vars must match /^_/u        @typescript-eslint/no-unused-vars
+  420:63  error  'onInspect' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  531:32  error  Unexpected any. Specify a different type                                     @typescript-eslint/no-explicit-any
+
+✖ 9 problems (9 errors, 0 warnings)

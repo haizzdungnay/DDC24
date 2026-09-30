@@ -1,0 +1,37 @@
+Running main() from ./googletest/src/gtest_main.cc
+[==========] Running 14 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 14 tests from PollLoopTiming
+[ RUN      ] PollLoopTiming.SteadyStateHasNoLateEventAndNoCatchup
+[       OK ] PollLoopTiming.SteadyStateHasNoLateEventAndNoCatchup (0 ms)
+[ RUN      ] PollLoopTiming.OneWorkStallOf16msIsOneLateEvent
+[       OK ] PollLoopTiming.OneWorkStallOf16msIsOneLateEvent (0 ms)
+[ RUN      ] PollLoopTiming.OneWakeStallOf16msIsOneLateEvent
+[       OK ] PollLoopTiming.OneWakeStallOf16msIsOneLateEvent (0 ms)
+[ RUN      ] PollLoopTiming.TwoSeparateStallsAreTwoLateEvents
+[       OK ] PollLoopTiming.TwoSeparateStallsAreTwoLateEvents (0 ms)
+[ RUN      ] PollLoopTiming.FinishingBeforeNextTickIsNotLate
+[       OK ] PollLoopTiming.FinishingBeforeNextTickIsNotLate (0 ms)
+[ RUN      ] PollLoopTiming.FinishingExactlyAtNextTickIsLate
+[       OK ] PollLoopTiming.FinishingExactlyAtNextTickIsLate (0 ms)
+[ RUN      ] PollLoopTiming.SustainedOverloadIsOneEvent
+[       OK ] PollLoopTiming.SustainedOverloadIsOneEvent (0 ms)
+[ RUN      ] PollLoopTiming.MinuteResetDoesNotDoubleCountAnEvent
+[       OK ] PollLoopTiming.MinuteResetDoesNotDoubleCountAnEvent (0 ms)
+[ RUN      ] PollLoopTiming.SkipPolicyKeepsLateEventAndHasNoCatchup
+[       OK ] PollLoopTiming.SkipPolicyKeepsLateEventAndHasNoCatchup (0 ms)
+[ RUN      ] PollLoopTiming.IoRespGapCountsMissedResponsesAndOpenGap
+[       OK ] PollLoopTiming.IoRespGapCountsMissedResponsesAndOpenGap (0 ms)
+[ RUN      ] PollLoopTiming.NoResponseYetReportsNoGap
+[       OK ] PollLoopTiming.NoResponseYetReportsNoGap (0 ms)
+[ RUN      ] PollLoopTiming.FormatLineUsesProbeGrammarAndRoundsUp
+[       OK ] PollLoopTiming.FormatLineUsesProbeGrammarAndRoundsUp (0 ms)
+[ RUN      ] PollLoopTiming.WorstCaseLineFitsLineCapacity
+[       OK ] PollLoopTiming.WorstCaseLineFitsLineCapacity (0 ms)
+[ RUN      ] PollLoopTiming.HotPathDoesNotAllocate
+[       OK ] PollLoopTiming.HotPathDoesNotAllocate (0 ms)
+[----------] 14 tests from PollLoopTiming (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 14 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 14 tests.

@@ -8,6 +8,94 @@
 
 ## [Unreleased]
 
+### Changed — Phát hành hồ sơ tích hợp IOP V3.0 lên GitHub (2026-09-30)
+
+- **Bằng chứng đi kèm:** đưa 13 file log được dẫn trong hồ sơ/manifest vào Git bằng danh sách tường minh dù rule chung bỏ qua `*.log`; kiểm manifest hiệu năng 11/11 và manifest UI PASS.
+- **Phạm vi:** đồng bộ `main@729b3a35`, giữ cả hai phía của CHANGELOG; commit các hồ sơ UI/hiệu năng còn trong workspace thành nhóm riêng và đưa đủ 18 file `fw-mcu-handover-2026-09-30/` lên nhánh/PR. Hai log UI chỉ bỏ dòng trống cuối file và cập nhật checksum; giữ số đo lịch sử.
+- **Kiểm chứng mới:** C++ cấu hình đủ Modbus/BACnet/HMI, build PASS; CTest 1 752 PASS, 2 SKIP trên 1 754 mục; Go vet và test 21 package PASS; Vitest 278 file/3 597 test PASS; docs ISO, 41 frame/4 đầu vào lỗi/2 digest, manifest gói PASS.
+- **Lỗi nền:** FE lint FAIL 9 lỗi, FE build FAIL 5 lỗi TypeScript; 6 file liên quan giống `origin/main` từng byte, ghi finding #848. Không đổi code FE để xử lý trong PR tài liệu. CI GitHub bị tắt, không có kết quả CI xanh.
+- **Quyền phát hành:** chủ dự án cho phép bỏ quy trình Issue/review độc lập và yêu cầu push thư mục bàn giao trong phiên này; không tạo verdict review độc lập giả. Gộp bằng merge commit để giữ SHA nguồn trong `NGUON_GOC.md`. Hồ sơ số đo: `docs/07_records/test-evidence/fw-som/iop-v3-publish-20260930/README.md`.
+
+### Added — Rà tài liệu thiết kế FW SOM ↔ FW MCU và phương án ghép nối hai lớp (2026-09-30)
+
+- **Phạm vi:** chỉ tài liệu thiết kế, **không review mã nguồn** (theo yêu cầu chủ sở hữu). Rà 41 tài liệu: FW MCU, giao diện IOP, FW SOM (iobus và phần core liên quan output/safe-state), phần cứng Forlinx, test plan, decision log. Mốc `e34d0a2f`.
+- **Hồ sơ mới:** `docs/07_records/reviews/DDC24_FW_SOM_MCU_PAIR_INTEGRATION_REVIEW_2026-09-30.md` (`REC-DDC-FWSOM-MCU-PAIR-20260930` 1.0). Đã đăng ký ở chỉ mục `docs/07_records/reviews/README.md` (bản 1.36).
+- **Kết luận:** thiết kế cặp **chưa sẵn sàng tích hợp**. Byte contract IOP v2.0 nhất quán, nhưng hợp đồng hành vi mâu thuẫn giữa ít nhất 8 tài liệu. 17 finding: 5 P0, 7 P1, 5 P2. Các P0:
+  - output khi mất liên lạc có hai đáp án (hold-last và safe 200 ms);
+  - SOM không thấy MCU đang safe hoặc vừa reset, output không được gửi lại; có kịch bản kẹt ở `ERR_SAFE_STATE`;
+  - iobus gửi `RESET_IO` ở ngưỡng 20 ms, sớm hơn MCU 10 lần;
+  - thiếu đường cấu hình UI mode, debounce và safe value từ SOM xuống MCU;
+  - `ttyS2` trên Forlinx dùng chung với Bluetooth HCI, còn GPIO nRESET/BOOT0/FAULT_OUT mới chỉ định nghĩa cho Radxa CM3.
+- **Đề xuất (chờ duyệt, chưa là authority):**
+  - phương án B: IOP v2.1 tương thích ngược (`IO_RESP[73]` → `MCU_STATE`, bit `ADC_STAT` mới, `SET_UI_CFG`/`SET_SAFE_CFG`/`GET_STATE`);
+  - một ICD hành vi với luật R1–R12 và thang thời gian có chủ sở hữu;
+  - lộ trình P0–P3, trong đó P2 ghép cặp thật NUCLEO-G0B1RE ↔ Forlinx trước khi có carrier board;
+  - 9 quyết định D1–D9 cần ký.
+- **Không đổi:** contract `contracts/iop`, `contracts/shm`, mã nguồn, runtime, release gate.
+- **Verification:** kiểm bằng script rằng mọi link tương đối trong hồ sơ mới đều trỏ tới file có thật (0 link hỏng). Không chạy test build vì phiên này không đổi mã.
+
+### Added — Rà soát hiện trạng và dư địa hiệu năng FW SOM / Backend (2026-09-29)
+
+- Thêm `REC-DDC-FW-BE-PERF-20260929` tại source `origin/main@895444be`: kiến trúc và logic Core/IOBus/Go/SHM/IPC/Historian/compiler/platform; đối chiếu tối ưu Plan 63 đã merge và các task còn chờ cổng/số đo target. Ghi 10 finding cùng phương án, ưu tiên, effort/risk, pilot và tiêu chí đo; giữ nguyên source sản phẩm và tài liệu UI đang sửa.
+- Bằng chứng HOST mới: benchmark có sẵn Historian 8 điểm/24 giờ/auto qua 3 lượt × 3 query, 1,121–1,152 s/lượt, khoảng 256,34 MiB tổng cấp phát và 1,893 triệu allocation/lượt; không phải RSS hoặc số đo SOM. Lưu log/pprof top/source hash; profile toàn lệnh có setup/warmup.
+- Kiểm chứng: Go test/vet 4 package PASS (`-count=1`, 4 test compiler production SKIP vì worktree chưa build compiler); C++ timing/RT primitive 24/24 PASS. Kiểm link/hash/JSON, docs ISO và diff check ghi tại `fw-be-source-review-20260929/HOST_EVIDENCE.md`. Full build, TARGET/HIL/soak và browser NOT RUN theo phạm vi review source; chưa nâng gate sản phẩm.
+
+
+### Changed — Mở rộng review giao diện và phương án cạnh tranh cho đơn vị tích hợp BMS (2026-09-29)
+
+- Nâng `REC-DDC-UI-REVIEW-20260929` và `REC-DDC-UI-PROPOSAL-20260929` lên 1.1; mở rộng 29 tuyến trang Dashboard/Monitor/I/O/Commissioning/Alarm/Trend/Scheduler/Modbus/Diagnostics/Hệ thống/Help. Baseline mới `origin/main@101d1fdf`; giữ finding và bằng chứng Programming 1.0 tại `265f1a8b`, không coi số đo cũ là phép kiểm mới.
+- Ghi UI-F06: mobile 390 px tràn document ở Modbus 527 px, Outputs 425 px, VP 532 px; UI-F07: hai mẫu null bị thống kê thành hai mẫu số 0. Ghi riêng UI-G01..04 về phiếu chạy thử, ngữ cảnh thiết bị, hồ sơ bàn giao và entry-point/capability; không gán demo lỗi đơn vị thành lỗi target.
+- Nghiên cứu nguồn chính thức 7 hãng/hệ sinh thái; thêm UI-P09..16, mapping CP-01..09, ownership refactor, target data/state và pilot cho nhóm tích hợp BMS. Thêm 9 concept SVG desktop/mobile/modal/state cùng gallery; dữ liệu minh họa, chưa thay visual authority/spec hoặc mở cổng implement/release.
+- Kiểm chứng mới: Chrome DevTools MCP 58 quan sát/29 tuyến desktop/mobile; 12 file Vitest/169 test hiện có PASS; test tái hiện UI-F07 1/1 FAIL đúng lỗi, bản sao lưu evidence; lint và build PASS, Programming 76,85 KiB gzip/165 KiB. Demo chưa có backend fixture cho schedules/history/frames: ghi lỗi 502 và giới hạn luồng; backend thật, target/HIL và usability đối thủ NOT RUN. Log, ảnh và số đo kiểm tài liệu/render nằm trong evidence mở rộng. Docs ISO PASS (quét 501 file Markdown, EXPECT khớp), render 9/9 SVG và diff check PASS. Candidate pin còn FAIL 15/17 do hai authority đã lệch trên baseline sạch; không tự ghim lại ngoài phạm vi review.
+
+### Changed — Gói tích hợp IOP V3.0 R3 kèm sổ tay lệnh (2026-09-30)
+
+- **Phạm vi:** cập nhật bản bàn giao và ZIP từ commit nguồn `70e9f19980d2`, gồm 18 file; thêm sổ tay 16 CMD và liên kết tra cứu, giữ các tài liệu/byte V3.0 hiện hành.
+- **Kiểm chứng:** 17/17 dòng manifest PASS; 18/18 mục ZIP khớp file gói; 69 link nội bộ hợp lệ; 41 frame, 4 đầu vào lỗi, 2 digest trong bản gói PASS với Python và C99/C11/C++11/C++17. Dựng bằng SHA đầy đủ hoặc viết tắt cho cùng ZIP 90 687 byte, SHA-256 `e42fa387d1f0a03928969512941769d9440f6d7fb83e5b942cbec664684fc18f`.
+- **Giới hạn:** nội dung sẵn để hai team review; gói chưa gửi/chưa ký, kiểm cặp P1 và phần cứng P2/P3 chưa chạy.
+
+### Added — Sổ tay toàn bộ lệnh tích hợp IOP V3.0 (2026-09-30)
+
+- **Phạm vi:** thêm `IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md`: đủ 16 CMD, payload/bitfield, 41 frame request/response đầy đủ CRC cho hai profile, 4 đầu vào lỗi, giải mã dữ liệu/cấu hình và luồng khởi động/RESYNC/retry/mất poll. Liên kết từ ICD, ví dụ và chỉ mục; chuẩn bị bản gói R3.
+- **Kiểm chứng:** `verify_iop_v3_command_reference.py` PASS 41 frame, 16/16 CMD, 4 ca đầu vào lỗi, 2 digest; Python đối chiếu header qua C99/C11/C++11/C++17. `docs_iso_harness.py --expect` PASS; byte giao thức và runtime không đổi, P1/P2/P3 chưa chạy.
+- **Đóng gói:** builder kiểm fixture khi dựng; chuẩn hóa SHA nguồn đầy đủ để cùng commit cho cùng mã băm ZIP, kể cả tham số SHA viết tắt.
+
+### Changed — Gói IOP V3.0 R2 ghim lại sau rà nguồn/rủi ro (2026-09-30)
+
+- **Phạm vi:** dựng lại 17 file gói từ commit nguồn `9e62fc11ed15` để bản FW-REQ có nguồn/lý do 11 nhóm và bản VVP có 5 rủi ro giao diện; thay bản ZIP R2 trước đó, chưa gửi các team nhận.
+- **Kiểm chứng:** 16/16 dòng manifest PASS, 17/17 mục ZIP không lỗi; 60 link nội bộ, 74/74 yêu cầu, 16/16 quy trình và 5/5 rủi ro có đường kiểm; ZIP 75 792 byte, SHA-256 `9df04ac2fd54cdb106334bcad371de1cc841f37fc6a4f1e6839f1ceb8dbf152a`. P1/P2/P3 vẫn `NOT RUN`.
+
+### Changed — Nguồn yêu cầu và rủi ro tích hợp IOP V3.0 (2026-09-30)
+
+- **Phạm vi:** bổ sung nguồn và lý do theo 11 nhóm ID cho 74 yêu cầu FW MCU; VVP nối 5 rủi ro giao diện tới kiểm soát, bài kiểm, bằng chứng và người có thẩm quyền chấp nhận. Không đổi ID, tiêu chí hay byte giao thức.
+- **Giới hạn:** mức nghiêm trọng/xác suất và rủi ro còn lại chờ Safety đánh giá trên từng revision bo; 16 bài ICD và 74 đường kiểm là kế hoạch, không phải Test Result.
+- **Kiểm chứng:** rà đúng 74 ID hiệu lực, 5/5 rủi ro có đường kiểm, docs ISO harness và diff check trước commit; gói bàn giao sẽ dựng lại từ commit nguồn mới.
+
+### Added — Bản gói bàn giao IOP V3.0 R2 có nguồn gốc cố định (2026-09-30)
+
+- **Phạm vi:** version hóa `fw-mcu-handover-2026-09-30/` với sáu file nội dung (ICD, FW-REQ, header nháp, tài liệu ví dụ EX-01..03, kế hoạch kiểm và phiếu HW), bốn SVG và bốn file DOT nguồn, README, `NGUON_GOC.md` và manifest; ZIP là bản dựng cục bộ có thể tạo lại bằng `scripts/build_iop_v3_handover.py`. Nguồn tài liệu ghim tại `d04703e5d2af`, không lấy từ WIP khác.
+- **Kiểm chứng:** 17/17 mục trong ZIP kiểm toàn vẹn; manifest 16/16 file đạt SHA-256; 60 link nội bộ hợp lệ; VVP 74/74 yêu cầu và 16/16 quy trình ICD; ZIP 74 120 byte, SHA-256 `f139fa1e3c6f209766da22d9dc4ddc1a4b1d9e71235daf6cae339b5d1bdd4df2`.
+- **Giới hạn:** gói chưa gửi/chưa ký; kết quả P1/P2/P3, điện vật lý, HIL và chứng nhận ISO chưa có. Thông số HW 8/8 phải do HW cung cấp theo revision bo, không điền giả vào biểu mẫu.
+
+### Changed — Gói tích hợp IOP V3.0 bản rà soát R2: ví dụ, hình và kiểm chứng (2026-09-30)
+
+- **Phạm vi:** giữ giao thức trên dây V3.0 và 74 ID yêu cầu FW; sửa thứ tự P0 ký tài liệu/O-9, P1 chuyển source SOM rồi kiểm host. Thêm ba ví dụ 4/4, 8/8, mất poll/RESYNC; bốn hình SVG kèm nguồn DOT; phiếu HWIF-01..10 theo revision bo; VVP gồm 16 quy trình ICD, 8 nhóm kiểm FW và ma trận kế hoạch 74/74 yêu cầu. Gói chỉ chứa tài liệu giao diện, không đưa thiết kế mạch 4/4 cũ hoặc V2.x làm fallback.
+- **Ranh giới:** đây là bản Draft để HW/FW MCU/SOM review. O-9, hồ sơ HW 8/8 và chữ ký P0 còn chờ; P1/P2/P3, test FW MCU và HIL đều `NOT RUN`/`BLOCKED`. Bốn hình là giới hạn thiết kế, không phải phép đo. ZIP/manifest của bản bàn giao sẽ được dựng từ commit nguồn đã ghim.
+- **Kiểm chứng tài liệu nguồn:** `docs_iso_harness.py --expect` PASS (510 Markdown, 0 link/anchor hỏng); ma trận 74/74 ID gồm 69 MUST + 5 SHOULD, 16/16 quy trình ICD; 4/4 SVG parse được; `git diff --check` PASS.
+
+### Added — Gói tài liệu tích hợp SOM ↔ MCU v3.0 cho team HW và FW MCU (2026-09-30)
+
+- **Phạm vi:** dựng lại gói cục bộ `fw-mcu-handover-2026-09-30/` và `.zip` theo lựa chọn (a) của chủ dự án. Gói cũ chưa gửi; bản mới có đúng ba file nội dung: `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md` (ICD v3.0), `FW_REQUIREMENTS_MK-DDC-24_VI.md` (v3.1) và `iop_protocol_v3_DRAFT.h`, cộng README phân vai phản hồi HW/FW/SOM, nguồn gốc SHA-256 và manifest. Bỏ toàn bộ phần HW 4/4, tham khảo v2, kiểm chứng/bối cảnh cũ khỏi gói. `.gitignore` giữ gói/zip ở máy cục bộ như bản sao bàn giao, không coi là contract runtime.
+- **Giới hạn:** bản nháp để HW/FW MCU/SOM/Safety rà soát, chưa ký và chưa gửi; thiếu hồ sơ HW chuẩn 8/8. `contracts/iop/iop_protocol.h` v2.0 và source runtime vẫn là hiện trạng; P1/P2/P3, HIL và release chưa có bằng chứng từ gói này.
+- **Kiểm chứng:** 3 file nội dung + 3 file hỗ trợ, 17 link nội bộ hợp lệ; vector §15.1 và header trong gói trùng nguồn. `sha256sum -c MANIFEST.sha256` đạt 5/5, `unzip -t` đạt 6/6; zip 41 615 byte, SHA-256 `dd7dc73b2856e2d85a2edea609ab05a0fcaf8fc77b85af64816d54f5bcaccca6`.
+
+### Changed — Hợp đồng nháp IOP v3.0 cho hai biến thể (2026-09-30)
+
+- **Quyết định:** chủ dự án chọn PA-B/IOP v3.0, gộp v2.1, dùng một layout tối đa 8 AO/8 DO cho cả 16/4/4 và 16/8/8; số kênh thực lắp khai trong `HANDSHAKE_RESP`. Ghi [ADR-064](docs/adr/ADR-064-iop-v3-hai-bien-the.md) ở trạng thái Accepted cho phiên bản/phạm vi và làm rõ [ADR-010](docs/adr/ADR-010-iop-v2-poll-capability-map.md) chỉ mô tả runtime v2 hiện tại; team MCU riêng tự thiết kế bên trong. Chi tiết ICD và yêu cầu FW vẫn Draft, cần các team ký.
+- **ICD và yêu cầu:** viết lại tại chỗ `IOP-SPEC-MK-DDC-24-VI` v3.0 và `FW-REQ-MK-DDC-24-VI` v3.1, thêm header byte nháp tại `docs/01_specs/`. ICD có 21 vector, 16 bài kiểm và 6 mục quyết định còn chờ; FW-REQ có 74 yêu cầu hiệu lực (69 MUST, 5 SHOULD), 5 hoãn Rev B. Sửa thứ tự kiểm CRC/LEN, từ chối output khi sai biến thể, buộc cấu hình và poll hợp lệ trước khi rời safe; nêu rõ giới hạn khả thi AO/DO nguyên khối cần Safety/HW/MCU xác nhận.
+- **Truy vết:** cập nhật decision log, yêu cầu hệ thống, ma trận truy vết, hub/README, banner tài liệu MCU cũ và record rà soát. Các mô tả v2.1 trong record được giữ như snapshot lịch sử; runtime, SHM, iobus và fake MCU chưa được chuyển v3.
+- **Kiểm chứng:** header biên dịch sạch bằng GCC C99/C11, G++ C++11/C++17 và ARM Cortex-M0+ C99/C11 (`-Wall -Wextra -Werror -pedantic`). CRC/LEN của 21/21 vector khớp bản tính độc lập, 2/2 `CFG_DIGEST` khớp `zlib.crc32`; `python3 scripts/docs_iso_harness.py --expect` PASS (507 Markdown, 0 link/anchor hỏng, 0 ID trùng).
+
 ### Changed — Gộp `main` (PR #845) vào PR #844: bỏ quy đổi AO ở `apply_states`, giữ test của cả hai phía (2026-09-30)
 
 - **Phạm vi:** merge `origin/main@bc62a725` vào `fix/schedule-ao-binary-and-intellisense@e34d0a2f`. Một file conflict: `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`). `test_schedule_runtime.cpp` do git tự gộp, đã soát tay.

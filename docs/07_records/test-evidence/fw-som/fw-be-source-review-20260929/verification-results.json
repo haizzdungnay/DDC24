@@ -1,0 +1,108 @@
+{
+  "timestamp_utc": "2026-09-29T06:23:28.891968+00:00",
+  "baseline": "895444beba0760f18cf1bdc252e707e319a3c751",
+  "evidence_level": "HOST",
+  "target_new": "NOT_RUN",
+  "environment": {
+    "go": "go1.26.4 linux/amd64",
+    "cpu": "Intel Xeon E5-2680 v4 @ 2.40GHz",
+    "os": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ]
+  },
+  "go_test": {
+    "command": "go test ./internal/app ./internal/programming/compiler ./internal/programming/application ./internal/modbusrtu -count=1",
+    "exit_code": 0,
+    "stdout_captured_from_tool": [
+      "ok mkddc-web/internal/app 54.058s",
+      "ok mkddc-web/internal/programming/compiler 4.563s",
+      "ok mkddc-web/internal/programming/application 79.048s",
+      "ok mkddc-web/internal/modbusrtu 0.079s"
+    ],
+    "limitation": "4 test Official compiler SKIP; xem compiler-official.log"
+  },
+  "go_vet": {
+    "command": "go vet ./internal/app ./internal/programming/compiler ./internal/programming/application ./internal/modbusrtu",
+    "exit_code": 0,
+    "stdout": ""
+  },
+  "cpp": {
+    "poll_loop": {
+      "passed": 14,
+      "failed": 0
+    },
+    "rt_exchange": {
+      "passed": 10,
+      "failed": 0
+    },
+    "full_build_ctest": "NOT_RUN"
+  },
+  "github": {
+    "issue_809": "CLOSED",
+    "pr_813": "MERGED",
+    "pr_835": "MERGED",
+    "issues_815_816_819_821_824": "OPEN",
+    "mutated": false
+  },
+  "notes": [
+    "pprof toàn lệnh gồm setup/warmup; không coi tỷ lệ là query-only",
+    "B/op là tổng cấp phát Go, không phải RSS/heap live",
+    "Kết quả go_test chép nguyên thông tin stdout đã thu qua tool, không phải log test chi tiết"
+  ],
+  "historian_unprofiled": [
+    {
+      "iterations": 3,
+      "ns_op": 1152200625,
+      "bytes_op": 268790498,
+      "allocs_op": 1893483
+    },
+    {
+      "iterations": 3,
+      "ns_op": 1143238023,
+      "bytes_op": 268795394,
+      "allocs_op": 1893494
+    },
+    {
+      "iterations": 3,
+      "ns_op": 1120815180,
+      "bytes_op": 268792293,
+      "allocs_op": 1893489
+    }
+  ],
+  "documents": {
+    "source_anchors": 47,
+    "reference_labels": 31,
+    "json_files": 2,
+    "docs_iso_harness": "PASS",
+    "markdown_files_scanned": 503,
+    "diff_check": "PASS"
+  }
+}
