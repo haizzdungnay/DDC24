@@ -9,8 +9,8 @@
  */
 import type {
   ScheduleDayKey,
-  ScheduleObject,
   SchedulePointKind,
+  ScheduleObject,
   ScheduleStatus,
   ScheduleTimeValue,
   ScheduleValue,

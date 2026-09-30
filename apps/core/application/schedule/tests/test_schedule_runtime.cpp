@@ -1346,3 +1346,76 @@ TEST(ScheduleV31Clock, PowerRecoveryComputesCurrentValueWithoutReplayingEvents)
     /* Chỉ MỘT lệnh ghi, không phải bốn lệnh phát lại các mốc đã qua. */
     EXPECT_TRUE(st->targets[0].written);
 }
+
+TEST(ScheduleV31Target, UsesTargetSpecificActiveAndInactiveValues)
+{
+    const std::string weekly_mon_only =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    const std::string targets =
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1,"active_value":1,"inactive_value":0},)"
+        R"({"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1,"active_value":85.0,"inactive_value":15.0}])";
+    Fixture f;
+    f.io.ao_mode[0] = 0; /* 0-10V */
+    f.resolver.set_ao_modes(f.io.ao_mode);
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only, "[]", targets, "BINARY", R"({"value":"INACTIVE"})")})));
+
+    // During active event (10:00 MON): DO1=1, AO1=85% -> 8.5V
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 8.5f);
+
+    // Outside event (20:00 MON): DO1=0, AO1=15% -> 1.5V
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_FALSE(do_on(f.resolver, 0));
+    EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 1.5f);
+}
+
+TEST(ScheduleV31Target, RelinquishOnInactiveReleasesPoint)
+{
+    const std::string weekly_mon_only =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    const std::string targets =
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1,)"
+        R"("active_value":1,"inactive_action":"RELINQUISH"}])";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only, "[]", targets, "BINARY", R"({"value":"INACTIVE"})")})));
+
+    // In active event (10:00 MON): DO1 is ACTIVE (held by schedule priority 4)
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_SCHEDULE);
+
+    // Outside event (20:00 MON): DO1 is RELINQUISHED (priority 4 released!)
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0));
+
+    // Local logic at level 5 can now control DO1 freely!
+    f.resolver.set_do(PRIO_LOCAL_LOGIC, 0, true);
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_LOCAL_LOGIC);
+}
+
+TEST(ScheduleV31Target, StaggeredDelayDelaysActivation)
+{
+    const std::string weekly_mon_only =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    const std::string targets =
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1,"active_value":1,"inactive_value":0,"staggered_delay_seconds":0},)"
+        R"({"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"DO","channel":2,"active_value":1,"inactive_value":0,"staggered_delay_seconds":30}])";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only, "[]", targets, "BINARY", R"({"value":"INACTIVE"})")})));
+
+    // At 08:00:10 (10s elapsed < 30s): DO1 is ON, DO2 is still OFF (delayed)
+    f.runtime.evaluate_at(at(2026, 8, 10, 8, 0, 10), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_FALSE(do_on(f.resolver, 1));
+
+    // At 08:00:35 (35s elapsed >= 30s): Both DO1 and DO2 are ON
+    f.runtime.evaluate_at(at(2026, 8, 10, 8, 0, 35), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_TRUE(do_on(f.resolver, 1));
+}

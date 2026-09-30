@@ -495,6 +495,17 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		}
 		a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
 		a.audit.PointOverride(principal, id, body.ttlS, 0, "rejected", "core_rejected", "", r.RemoteAddr)
+		if strings.HasPrefix(coreID, "AO") {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"error":   "point force rejected: value out of range (AO accepts 0.0-10.0 V or 4.0-20.0 mA, not %)",
+				"code":    "OUT_OF_RANGE",
+				"min":     0.0,
+				"max":     10.0,
+				"unit":    "V",
+				"message": "Giá trị ép tay ngoài phạm vi (kênh AO nhận điện áp 0.0–10.0 V, không phải %)",
+			})
+			return
+		}
 		writeError(w, http.StatusConflict, "point force rejected")
 		return
 	}

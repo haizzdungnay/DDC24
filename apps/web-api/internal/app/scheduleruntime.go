@@ -38,6 +38,14 @@ func (a *App) attachScheduleRuntime(list []ScheduleObject) {
 	for _, st := range states {
 		byID[st.ScheduleID] = st
 	}
+	pointsMap := make(map[string]any)
+	if pr, ok := a.core.(pointReader); ok {
+		if pts, pErr := pr.ReadPoints(ctx); pErr == nil {
+			for _, p := range pts {
+				pointsMap[p.ID] = p.Value
+			}
+		}
+	}
 	now := time.Now().UTC()
 	for i := range list {
 		st, found := byID[list[i].ScheduleID]
@@ -45,12 +53,12 @@ func (a *App) attachScheduleRuntime(list []ScheduleObject) {
 			// Controller chưa biết lịch này ⇒ chưa publish hoặc lệch revision.
 			continue
 		}
-		list[i].Runtime = buildScheduleRuntimeState(list[i], st, now)
+		list[i].Runtime = buildScheduleRuntimeState(list[i], st, now, pointsMap)
 		list[i].Status = deriveScheduleStatus(list[i], st)
 	}
 }
 
-func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now time.Time) *ScheduleRuntimeState {
+func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now time.Time, pointsMap map[string]any) *ScheduleRuntimeState {
 	rt := &ScheduleRuntimeState{
 		EffectiveValue:  decodeScheduleValue(st.EffectiveValue, obj.ValueType),
 		LastEvaluatedAt: strPtr(now.Format(time.RFC3339)),
@@ -74,15 +82,33 @@ func buildScheduleRuntimeState(obj ScheduleObject, st coreScheduleState, now tim
 	rt.AppliedRevision = &applied
 
 	for _, t := range st.Targets {
+		targetKind := ""
+		targetPointID := ""
+		for _, to := range obj.TargetObjects {
+			if to.TargetID == t.TargetID {
+				targetKind = to.PointKind
+				targetPointID = to.PointID
+				break
+			}
+		}
 		target := ScheduleTargetRuntime{
 			TargetID:     t.TargetID,
-			WrittenValue: decodeScheduleValue(t.WrittenValue, obj.ValueType),
+			WrittenValue: decodeScheduleTargetValue(t.WrittenValue, targetKind, obj.ValueType),
 			LastWriteAt:  strPtr(now.Format(time.RFC3339)),
+		}
+		if val, ok := pointsMap[targetPointID]; ok {
+			target.ActualValue = val
 		}
 		switch {
 		case t.ErrorCode != "":
 			target.WriteResult = strPtr("FAILED")
 			target.ErrorCode = strPtr(t.ErrorCode)
+		case t.InDelay != nil && *t.InDelay:
+			target.WriteResult = strPtr("DELAYED")
+			target.DelayRemainingSec = t.DelayRemainingSec
+		case t.ShouldClaim != nil && !*t.ShouldClaim:
+			target.WriteResult = strPtr("RELINQUISHED")
+			target.WrittenValue = nil
 		case !t.Written:
 			// Lịch này thua ở bước phân xử priority giữa các lịch. Không phải
 			// lỗi, nhưng người dùng phải thấy được — thua âm thầm là cách để
@@ -157,4 +183,20 @@ func nextTransitionTimestamp(weekSecond int, timezone string, now time.Time) str
 		delta += 7 * 86400 // lần chuyển thuộc tuần sau
 	}
 	return local.Add(time.Duration(delta) * time.Second).Format(time.RFC3339)
+}
+
+func decodeScheduleTargetValue(raw float64, kind string, fallbackType string) any {
+	switch kind {
+	case "DO", "BV":
+		if raw != 0 {
+			return 1
+		}
+		return 0
+	case "AO", "AV", "EXT":
+		return raw
+	case "MSV":
+		return int64(raw)
+	default:
+		return decodeScheduleValue(raw, fallbackType)
+	}
 }

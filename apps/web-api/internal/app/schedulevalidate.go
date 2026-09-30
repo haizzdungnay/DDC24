@@ -413,6 +413,12 @@ func validateScheduleTargets(f *scheduleFindings, s *ScheduleObject) {
 				f.add(errSchedTargetNotFound, base+".point_id",
 					fmt.Sprintf("phải là %s", expected))
 			}
+			if t.StaggeredDelaySeconds != nil && (*t.StaggeredDelaySeconds < 0 || *t.StaggeredDelaySeconds > 300) {
+				f.add(errSchedTargetNotFound, base+".staggered_delay_seconds", "độ trễ khởi động so le phải từ 0 đến 300 giây")
+			}
+			if t.InactiveAction != "" && t.InactiveAction != "WRITE_VALUE" && t.InactiveAction != "RELINQUISH" {
+				f.add(errSchedTargetNotFound, base+".inactive_action", "phải là WRITE_VALUE hoặc RELINQUISH")
+			}
 
 		case "BACNET_OBJECT":
 			// ADR-023 QĐ-4: BACnet Schedule/Calendar thuộc P4. Từ chối thẳng

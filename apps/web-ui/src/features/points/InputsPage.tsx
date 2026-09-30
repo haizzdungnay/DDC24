@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { DraftDiffTable } from '../../shared/components/DraftDiffTable'
 import { Modal } from '../../shared/components/Modal'
@@ -1249,6 +1250,11 @@ function DiagnosticsTab({
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)
   const { data, reset } = useAiLiveTrend(pointId, point)
+  const latestTs = data[data.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 120_000, latestTs]
+  }, [latestTs])
   const booleanInput = isDigitalContact(config.signalType) || typeof point?.value === 'boolean'
   const values = booleanInput ? [] : data.map((sample) => sample.raw)
   const stats = values.length > 0
@@ -1302,6 +1308,8 @@ function DiagnosticsTab({
             height={260}
             series={[{ key: pointId, label: config.label || pointId, color: 'var(--c-accent)', unit }]}
             rawUnit={rawCell?.unit}
+            showDots
+            xDomain={xDomain}
           />
           {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu live cho kênh này.', 'No live data for this channel yet.')}</div>}
         </section>
@@ -1364,6 +1372,27 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
   const [buffers, setBuffers] = useState<Record<string, LiveTrendSample[]>>({})
 
   useEffect(() => {
+    if (!pointId) return
+    let cancelled = false
+    fetchRecentTrendSamples([pointId], 120_000, 60).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setBuffers((current) => {
+        const existing = current[pointId] ?? []
+        if (existing.length === 0) {
+          return { ...current, [pointId]: initialSamples as LiveTrendSample[] }
+        }
+        const byTs = new Map<number, LiveTrendSample>()
+        for (const s of initialSamples as LiveTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-60) }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pointId])
+
+  useEffect(() => {
     if (!point) return
     const value = pointNumber(point)
     // Chưa có số đo thì BỎ QUA mẫu, không ghi 0 vào đuôi biểu đồ (REV-FE-04).
@@ -1372,11 +1401,13 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     // lên trục thời gian bằng giờ máy trạm — biểu đồ sẽ nói dối về độ tươi.
     if (!point.updatedAt) return
     const time = formatTime(point.updatedAt)
+    const stampMs = Date.parse(point.updatedAt)
+    const ts = Number.isFinite(stampMs) ? stampMs : 0
     setBuffers((current) => {
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-60)
+      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-60)
       return { ...current, [pointId]: next }
     })
   }, [pointId, point])

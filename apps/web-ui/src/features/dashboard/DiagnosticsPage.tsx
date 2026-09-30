@@ -1,5 +1,5 @@
 import { Activity, CircleHelp, Clock3, Cpu, Database, Download, MemoryStick, Network, PowerOff, Router, Thermometer } from 'lucide-react'
-import type React from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
@@ -64,6 +64,11 @@ export function DiagnosticsPage() {
     { key: 'ram', label: 'RAM', color: 'var(--c-good-fg)', unit: '%' },
     { key: 'temp', label: pick('Nhiệt độ', 'Temperature'), color: 'var(--c-warn-fg)', unit: '°C' }
   ].filter((series) => historySamples.some((sample) => sample[series.key] !== undefined))
+  const latestTs = historySamples[historySamples.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 60 * 60_000, latestTs]
+  }, [latestTs])
 
   const polledPoints = pointsState.data ?? emptyPoints
   const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
@@ -243,7 +248,7 @@ export function DiagnosticsPage() {
         className="p-3"
       >
         {historySeries.length && historySamples.length > 1
-          ? <TrendChart data={historySamples} series={historySeries} height={200} timeZone="local" showTable={false} showDots />
+          ? <TrendChart data={historySamples} series={historySeries} height={200} timeZone="local" showTable={false} showDots xDomain={xDomain} />
           : (
             <StateBlock
               state="empty"

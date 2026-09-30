@@ -270,7 +270,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		}
 		return nil, err
 	}
-	app.virtualPointRing = NewVirtualPointRing(10 * time.Minute)
+	app.virtualPointRing = NewVirtualPointRing(30 * time.Minute)
 	// F-PROG-ASBUILT-014 (phần READ): sau khi web-api khởi động lại (hoặc Core
 	// khởi động lại độc lập), av_[]/bv_[] của Core reset về BAD/0 — không đồng
 	// bộ lại ngay thì mọi ST Program bind VP sẽ fail-closed (quality != GOOD)

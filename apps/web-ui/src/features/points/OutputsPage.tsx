@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
+import { fetchRecentTrendSamples } from '../../shared/api/history'
 import { Button } from '../../shared/components/Button'
 import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
@@ -497,6 +498,11 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
       return engineering === null ? sample : { ...sample, raw: engineering, [output.id]: engineering }
     })
   }, [signalData, output])
+  const latestTs = data[data.length - 1]?.__ts
+  const xDomain = useMemo<[number, number] | undefined>(() => {
+    if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
+    return [latestTs - 120_000, latestTs]
+  }, [latestTs])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
@@ -542,7 +548,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
             <h3 className="text-sm font-semibold text-[var(--c-text)]">{t('outputsLiveTrend')}</h3>
             <span className="text-xs font-semibold text-[var(--c-text-dim)]">{output.id}</span>
           </div>
-          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} rawUnit={modeRawUnit} />
+          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} rawUnit={modeRawUnit} showDots xDomain={xDomain} />
         </section>
       </div>
 
@@ -788,6 +794,27 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
   const lastKeyRef = useRef('')
 
   useEffect(() => {
+    if (!pointId) return
+    let cancelled = false
+    fetchRecentTrendSamples([pointId], 120_000, outputTrendLimit).then((initialSamples) => {
+      if (cancelled || !initialSamples.length) return
+      setBuffers((current) => {
+        const existing = current[pointId] ?? []
+        if (existing.length === 0) {
+          return { ...current, [pointId]: initialSamples as LiveSample[] }
+        }
+        const byTs = new Map<number, LiveSample>()
+        for (const s of initialSamples as LiveSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
+        for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-outputTrendLimit) }
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pointId])
+
+  useEffect(() => {
     if (!point) return
     const value = pointNumber(point)
     // Chưa có số đo thì bỏ qua mẫu thay vì ghi 0 (REV-FE-04).
@@ -801,7 +828,9 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
     lastKeyRef.current = nextKey
     setBuffers((current) => {
       const existing = current[pointId] ?? []
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-outputTrendLimit) }
+      const stampMs = point.updatedAt ? Date.parse(point.updatedAt) : 0
+      const ts = Number.isFinite(stampMs) ? stampMs : 0
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-outputTrendLimit) }
     })
   }, [pointId, point])
 

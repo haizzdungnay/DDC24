@@ -56,6 +56,21 @@
 - **Truy vết:** cập nhật decision log, yêu cầu hệ thống, ma trận truy vết, hub/README, banner tài liệu MCU cũ và record rà soát. Các mô tả v2.1 trong record được giữ như snapshot lịch sử; runtime, SHM, iobus và fake MCU chưa được chuyển v3.
 - **Kiểm chứng:** header biên dịch sạch bằng GCC C99/C11, G++ C++11/C++17 và ARM Cortex-M0+ C99/C11 (`-Wall -Wextra -Werror -pedantic`). CRC/LEN của 21/21 vector khớp bản tính độc lập, 2/2 `CFG_DIGEST` khớp `zlib.crc32`; `python3 scripts/docs_iso_harness.py --expect` PASS (507 Markdown, 0 link/anchor hỏng, 0 ID trùng).
 
+### Changed — Gộp `main` (PR #845) vào PR #844: bỏ quy đổi AO ở `apply_states`, giữ test của cả hai phía (2026-09-30)
+
+- **Phạm vi:** merge `origin/main@bc62a725` vào `fix/schedule-ao-binary-and-intellisense@e34d0a2f`. Một file conflict: `apps/core/application/schedule/schedule_runtime.cpp` (`ScheduleRuntime::apply_states`). `test_schedule_runtime.cpp` do git tự gộp, đã soát tay.
+- **Hai phía:**
+  - PR #844 quy đổi trong `apply_states`: lịch `BINARY`/`BOOLEAN` → AO 100 %/0 %, còn lại giữ giá trị.
+  - PR #845 chuyển quy đổi lên `evaluate_schedule`, theo từng target: có `active_value`/`inactive_value` thì dùng; `BINARY`/`BOOLEAN` không khai thì AO 100, BO 1, INACTIVE 0; `REAL` giữ `effective_value`. `apply_states` chỉ còn `pct = c.value`.
+- **Quyết định:** lấy phía `main`, thêm chú thích vì sao `apply_states` không quy đổi nữa. Giữ phía PR sẽ ép target AO khai `active_value = 85` lên 100 %. Lỗi gốc của PR #844 (REAL 1 % bật AO hết thang) đã được `main` sửa theo cách này.
+- **Giữ nguyên từ PR #844:** `expect_accepted` và `TargetKindAcceptedRegardlessOfValueType` (`main` vẫn còn dòng `EXPECT_TRUE(config(...))` làm `core_tests` không biên dịch được); `BinaryScheduleDrivesAoFullScale`, `RealScheduleOnePercentIsNotFullScale`; `CMAKE_EXPORT_COMPILE_COMMANDS`; hồ sơ deploy `EV-FWSOM-DEPLOY-844-TARGET`. Mục `Fixed` ngày 2026-09-29 bên dưới mô tả mã `a4c31b53` đang chạy trên bo, không viết lại.
+- **Kiểm chứng (host, worktree sạch tại kết quả gộp):**
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw --output-on-failure` exit 0, **1754/1754 PASS**; `ScheduleV31*` 73/73.
+  - Kiểm đột biến 1: đưa logic phía PR vào lại `apply_states` → `UsesTargetSpecificActiveAndInactiveValues` FAIL (72/73); khôi phục → 73/73.
+  - Kiểm đột biến 2: ở `evaluate_schedule`, cho REAL `1.0` → AO 100 % → `RealScheduleOnePercentIsNotFullScale` FAIL (72/73); khôi phục → 73/73.
+  - Go và FE giống `origin/main` từng byte, không chạy lại.
+- **Refs:** PR #844, PR #845, commit `45e31285`.
+
 ### Changed — Deploy PR #844 lên bo lab: Core khoá RELEASE, schedule-sim, sim-worker, web, FE (2026-09-29)
 
 - **Phạm vi:** bo `OK1126B-buildroot`, qua WAN `:2223`. Hồ sơ mới `docs/07_records/test-evidence/fw-som/2026-09-29-foxlinx-deploy-pr844-schedule-ao.md` (`EV-FWSOM-DEPLOY-844-TARGET` 1.0), log gốc ở `deploy-pr844-20260929/`.

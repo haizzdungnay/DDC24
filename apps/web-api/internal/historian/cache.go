@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	RAMRetentionMS = int64(10 * 60 * 1000)
+	RAMRetentionMS = int64(30 * 60 * 1000)
 	RAMMaxBytes    = uint64(64 << 20)
 	RawRAMBudget   = uint64(16 << 20)
 	RawSampleBytes = uint64(128)

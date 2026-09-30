@@ -30,7 +30,7 @@ type TabKey = 'weekly' | 'exceptions' | 'targets' | 'simulate' | 'effective' | '
  */
 export function ScheduleEditorPage() {
   const { id } = useParams<{ id: string }>()
-  const { schedules, loading, error, upsert, remove, reload } = useScheduler()
+  const { schedules, loading, error, upsert, remove, reload, updateRuntime } = useScheduler()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const toast = useToast()
@@ -49,8 +49,40 @@ export function ScheduleEditorPage() {
     if (saved) setDraft(structuredClone(saved))
   }, [saved?.schedule_id, saved?.revision])
 
+  // Poll runtime mỗi 1 giây để cập nhật trạng thái thực tế của các target (D-02)
+  useEffect(() => {
+    if (!id) return
+    let active = true
+    const poll = async () => {
+      try {
+        const rt = await apiClient.getScheduleRuntime(id)
+        if (!active) return
+        updateRuntime(id, rt)
+      } catch {
+        // bỏ qua lỗi gián đoạn mạng polling
+      }
+    }
+    void poll()
+    const timer = setInterval(poll, 1000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [id, updateRuntime])
+
+  function cleanForCompare(obj: ScheduleObject | null): string {
+    if (!obj) return ''
+    const { runtime, created_at, created_by, updated_at, updated_by, ...rest } = obj
+    const targets = (rest.target_objects || []).map((t) => {
+      const cleanT = { ...t }
+      if (cleanT.inactive_value === null) delete cleanT.inactive_value
+      return cleanT
+    })
+    return JSON.stringify({ ...rest, target_objects: targets })
+  }
+
   const dirty = useMemo(
-    () => Boolean(draft && saved && JSON.stringify(draft) !== JSON.stringify(saved)),
+    () => Boolean(draft && saved && cleanForCompare(draft) !== cleanForCompare(saved)),
     [draft, saved]
   )
 
@@ -76,6 +108,7 @@ export function ScheduleEditorPage() {
     try {
       const updated = await apiClient.updateSchedule(draft.schedule_id, draft)
       upsert(updated)
+      setDraft(structuredClone(updated))
       setFindings([])
       toast.push('success', `Đã lưu ${updated.schedule_id} — revision ${updated.revision}`)
     } catch (err) {
