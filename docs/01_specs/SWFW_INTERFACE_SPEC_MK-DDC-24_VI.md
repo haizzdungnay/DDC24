@@ -2,13 +2,14 @@
 
 **Document ID:** IOP-SPEC-MK-DDC-24-VI
 **Phiên bản:** 3.0
+**Bản rà soát:** R2 — chỉnh P0/P1, bổ sung ví dụ, hình và kế hoạch kiểm chứng; giao thức trên dây vẫn V3.0
 **Cập nhật:** 2026-09-30
 **Trạng thái:** Phiên bản **V3.0 duy nhất đã được chủ dự án chọn** theo ADR-064; chi tiết ICD vẫn Draft để **team SOM, team MCU và Safety thống nhất**, chưa ký (§17)
 **Chủ quản:** System Architect (chủ sở hữu giao diện)
 **Bên tham gia:** Team SOM (`mkddc-iobus`, `mkddc-core`) · Team MCU (firmware STM32G0B1, team riêng)
 **Người review:** SOM lead, MCU team lead, Safety
 **Người phê duyệt:** System Architect; Safety cho các mục §7–§9 và §13
-**Đi cùng:** [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](FW_REQUIREMENTS_MK-DDC-24_VI.md) · [Header nháp `iop_protocol_v3_DRAFT.h`](iop_protocol_v3_DRAFT.h)
+**Đi cùng:** [Yêu cầu FW MCU `FW-REQ-MK-DDC-24-VI` v3.1](FW_REQUIREMENTS_MK-DDC-24_VI.md) · [Header nháp `iop_protocol_v3_DRAFT.h`](iop_protocol_v3_DRAFT.h) · [Ví dụ tích hợp](IOP_V3_INTEGRATION_EXAMPLES_MK-DDC-24_VI.md) · [Kế hoạch và ma trận kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) · [Phiếu đầu vào HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md)
 **Thay thế về mục tiêu tích hợp:** bản 2.0 (IOP v2.1, chưa phát hành) và bản 1.2 (IOP v1) của chính file này, [IOP_PROTOCOL.md Rev 2.1](../04_design/hardware/05_mcu_io/IOP_PROTOCOL.md), phần hợp đồng trong [guide 05](../03_implementation/05_IOP_UART_IMPLEMENTATION_GUIDE.md), và phần layout V2 của [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md). Những file V2 chỉ còn vai trò lịch sử/source hiện có, không là phương án tích hợp dự phòng.
 **Nguồn rà soát:** [`REC-DDC-FWSOM-MCU-PAIR-20260930`](../07_records/reviews/DDC24_FW_SOM_MCU_PAIR_INTEGRATION_REVIEW_2026-09-30.md)
 
@@ -695,6 +696,8 @@ Rollback chỉ về một cặp đã từng PASS §15.
 
 ## 15. Kiểm chứng tích hợp
 
+[Ba ví dụ theo luồng](IOP_V3_INTEGRATION_EXAMPLES_MK-DDC-24_VI.md) giải thích cách dùng frame/trạng thái cho 4/4, 8/8 và mất poll. [Kế hoạch kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) biến `ICD-T-01..16` thành bước chạy, tiêu chí và mẫu bằng chứng; [phiếu HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) ghi đầu vào vật lý còn thiếu. Các hình SVG trong hai tài liệu là minh họa giao diện, không phải số đo bo hoặc pinout chuẩn.
+
 ### 15.1 Vector frame chuẩn
 
 Sinh bằng chính [`iop_protocol_v3_DRAFT.h`](iop_protocol_v3_DRAFT.h) (biên dịch C99, C11, C++11, C++17, ARM Cortex-M0+), rồi đối chiếu độc lập bằng một bản tính riêng ngày 2026-09-30: 21/21 frame và 2/2 digest khớp. V01–V04, V08, V12–V14 và V18 là frame hợp lệ cả ở v2.0 (định dạng không đổi); các frame còn lại chỉ có ở v3.0.
@@ -752,8 +755,8 @@ V20 đầy đủ (80 byte): `AA 4A 02 01 00 10 00 00 FF F0 00 00` + 56 byte `00`
 
 | Chặng | Nội dung | Điều kiện ra |
 |---|---|---|
-| P0 | Ký tài liệu này và `FW-REQ` v3.1; SOM (iobus, fake MCU) chuyển sang v3.0 | §17 đủ chữ ký |
-| P1 | Kiểm trên host: bản build host của firmware MCU nối iobus qua PTY; fake MCU dùng để chèn lỗi | `ICD-T-01..10` và `ICD-T-16` PASS |
+| P0 | Chốt các quyết định O-1/O-3/O-4/O-5/O-9 và ký tài liệu này cùng `FW-REQ` v3.1; thống nhất kế hoạch chuyển source SOM | §17 đủ chữ ký, quyết định có biên bản và phiên bản header được ghim |
+| P1 | Chuyển iobus, fake MCU và các consumer SOM cần thiết sang V3.0 trước khi kiểm trên host; bản build host firmware MCU nối iobus qua PTY, fake MCU dùng để chèn lỗi | `ICD-T-01..10` và `ICD-T-16` PASS trên cả hai profile; không chạy V2.x làm fallback |
 | P2 | Cặp thật trên bo rời (ví dụ NUCLEO-G0B1RE ↔ bo SOM qua UART thật) | `ICD-T-03..14`, `ICD-T-16` PASS trên phần cứng, có log logic analyzer |
 | P3 | HIL trên carrier của từng biến thể có sẵn | `ICD-T-15` và ma trận HIL vật lý PASS |
 
@@ -815,7 +818,20 @@ Các mục của bản 2.0 đã khép: O-2 đóng bởi Đ-2; O-6 (relay có fee
 | [IOP_PROTOCOL.md](../04_design/hardware/05_mcu_io/IOP_PROTOCOL.md) Rev 2.1 | toàn bộ phần giao tiếp mục tiêu |
 | [guide 05](../03_implementation/05_IOP_UART_IMPLEMENTATION_GUIDE.md) | §1–§9, §11.2, §12.2, §13–§15 về hợp đồng cũ |
 | [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md) | phần phiên bản/layout V2 đã bị ADR-064 thay; nguyên tắc poll và int32 vẫn giữ |
-| `contracts/iop/iop_protocol.h` v2.0 | source cũ phải được thay đồng bộ bằng V3.0 **trước P1**, sau khi chi tiết ICD được ký |
+| `contracts/iop/iop_protocol.h` v2.0 | source cũ phải được thay đồng bộ bằng V3.0 **ở đầu P1, trước khi chạy test host**, sau khi chi tiết ICD được ký |
+
+### 16.4 Tự rà mức sẵn sàng review của ICD
+
+Đây là **ICD giao diện**, không áp thiết kế RTOS/driver bên trong MCU. Tự rà theo phần áp dụng của [DOC-GOV-001](../00_governance/DOC_GOVERNANCE.md); bảng này không thay kết luận của team tiêu thụ hoặc chữ ký.
+
+| Kiểm | Bằng chứng | Trạng thái / điều kiện còn cần |
+|---|---|---|
+| Metadata, phiên bản, thẩm quyền, lịch sử | Đầu tài liệu, §1, lịch sử cuối file | Có; cần ghim hash bản ký ở P0 |
+| Layout byte và biến thể | Header nháp, §4–§6, §15.1, EX-01/02 | Có cho review; 8/8 chưa có tài liệu HW chuẩn |
+| State, lỗi, thời gian, safe | §7–§10, EX-03, hình ở tài liệu ví dụ/kiểm chứng | Có hành vi Draft; O-1/O-3/O-4/O-5/O-9 cần người có thẩm quyền chốt |
+| Kiểm chứng truy vết | §15 và [VVP §2–§4](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) | Có **kế hoạch**; P1/P2/P3 chưa chạy, không được ghi PASS |
+| Đầu vào vật lý và khả năng nguyên khối | [HWIF-01..10](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md), O-9 | HW/MCU/Safety phải phản hồi theo revision bo trước P2/P3 |
+| Review của bên tiêu thụ và phê duyệt | §17 | Chưa ký; chưa đạt M4/M5 theo DOC-GOV-001 |
 
 ## 17. Phê duyệt
 
@@ -830,7 +846,7 @@ Các mục của bản 2.0 đã khép: O-2 đóng bởi Đ-2; O-6 (relay có fee
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 3.0 | 2026-09-30 | Nâng **IOP v3.0** theo quyết định chủ sở hữu: phục vụ cả biến thể 16/4/4 và 16/8/8 bằng khai số kênh trong `HANDSHAKE_RESP`; `SET_AO` 16 byte, `SET_SAFE_CFG` 17 byte, `STATE_RESP` 32 byte, `CFG_DIGEST` 34 byte; gộp bổ sung v2.1; kèm header nháp, 21 vector và 2 digest. Bản nháp hoàn thiện luật CRC/LEN, điều kiện rời safe, mismatch biến thể, ranh giới runtime v2 và mục mở O-9. Chưa ký. |
+| 3.0 | 2026-09-30 | Nâng **IOP v3.0** theo quyết định chủ sở hữu: phục vụ cả biến thể 16/4/4 và 16/8/8 bằng khai số kênh trong `HANDSHAKE_RESP`; `SET_AO` 16 byte, `SET_SAFE_CFG` 17 byte, `STATE_RESP` 32 byte, `CFG_DIGEST` 34 byte; gộp bổ sung v2.1; kèm header nháp, 21 vector và 2 digest. Bản rà soát R2 sửa phân vai P0/P1, liên kết ba ví dụ, bốn hình, VVP 74/74 và phiếu HW; không đổi byte trên dây. Chưa ký. |
 | 2.0 | 2026-09-30 | Viết lại thành ICD cho IOP v2.1 (không phát hành, thay bởi 3.0 cùng ngày) |
 | 1.2 | 2026-06-15 | §8/§9.1 đổi tên service và SHM theo ADR-005 (IOP v1) |
 | 1.1 | 2026-06-11 | Contract Freeze: FAULT bit6 VDD_FAULT, bảng RESET reason, sửa vector CRC (IOP v1) |

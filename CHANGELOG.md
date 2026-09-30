@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Changed — Gói tích hợp IOP V3.0 bản rà soát R2: ví dụ, hình và kiểm chứng (2026-09-30)
+
+- **Phạm vi:** giữ giao thức trên dây V3.0 và 74 ID yêu cầu FW; sửa thứ tự P0 ký tài liệu/O-9, P1 chuyển source SOM rồi kiểm host. Thêm ba ví dụ 4/4, 8/8, mất poll/RESYNC; bốn hình SVG kèm nguồn DOT; phiếu HWIF-01..10 theo revision bo; VVP gồm 16 quy trình ICD, 8 nhóm kiểm FW và ma trận kế hoạch 74/74 yêu cầu. Gói chỉ chứa tài liệu giao diện, không đưa thiết kế mạch 4/4 cũ hoặc V2.x làm fallback.
+- **Ranh giới:** đây là bản Draft để HW/FW MCU/SOM review. O-9, hồ sơ HW 8/8 và chữ ký P0 còn chờ; P1/P2/P3, test FW MCU và HIL đều `NOT RUN`/`BLOCKED`. Bốn hình là giới hạn thiết kế, không phải phép đo. ZIP/manifest của bản bàn giao sẽ được dựng từ commit nguồn đã ghim.
+- **Kiểm chứng tài liệu nguồn:** `docs_iso_harness.py --expect` PASS (510 Markdown, 0 link/anchor hỏng); ma trận 74/74 ID gồm 69 MUST + 5 SHOULD, 16/16 quy trình ICD; 4/4 SVG parse được; `git diff --check` PASS.
+
 ### Added — Gói tài liệu tích hợp SOM ↔ MCU v3.0 cho team HW và FW MCU (2026-09-30)
 
 - **Phạm vi:** dựng lại gói cục bộ `fw-mcu-handover-2026-09-30/` và `.zip` theo lựa chọn (a) của chủ dự án. Gói cũ chưa gửi; bản mới có đúng ba file nội dung: `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md` (ICD v3.0), `FW_REQUIREMENTS_MK-DDC-24_VI.md` (v3.1) và `iop_protocol_v3_DRAFT.h`, cộng README phân vai phản hồi HW/FW/SOM, nguồn gốc SHA-256 và manifest. Bỏ toàn bộ phần HW 4/4, tham khảo v2, kiểm chứng/bối cảnh cũ khỏi gói. `.gitignore` giữ gói/zip ở máy cục bộ như bản sao bàn giao, không coi là contract runtime.

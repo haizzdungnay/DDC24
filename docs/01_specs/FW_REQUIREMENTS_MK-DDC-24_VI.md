@@ -2,13 +2,14 @@
 
 **Document ID:** FW-REQ-MK-DDC-24-VI
 **Phiên bản:** 3.1
+**Bản rà soát:** R2 — thêm truy vết tới quy trình kiểm và đầu vào HW; 74 ID giữ nguyên
 **Cập nhật:** 2026-09-30
 **Trạng thái:** IOP **V3.0 duy nhất đã được chủ dự án chọn** theo ADR-064; yêu cầu chi tiết vẫn Draft để **team SOM, team MCU và Safety thống nhất**, chưa ký (§9)
 **Chủ quản:** System Architect
 **Người nhận thực hiện:** Team MCU (team riêng, tự thiết kế bên trong firmware)
 **Người review:** MCU team lead, SOM lead, Safety, Verification
 **Người phê duyệt:** System Architect + Safety
-**Đi cùng:** [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (Kinexus-IOP v3.0) · [Header nháp `iop_protocol_v3_DRAFT.h`](iop_protocol_v3_DRAFT.h). Mọi yêu cầu giao tiếp trong tài liệu này trỏ về ICD, không định nghĩa lại.
+**Đi cùng:** [ICD SOM ↔ MCU `IOP-SPEC-MK-DDC-24-VI` v3.0](SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) (Kinexus-IOP v3.0) · [Header nháp `iop_protocol_v3_DRAFT.h`](iop_protocol_v3_DRAFT.h) · [Ví dụ tích hợp](IOP_V3_INTEGRATION_EXAMPLES_MK-DDC-24_VI.md) · [Ma trận và quy trình kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) · [Phiếu đầu vào HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md). Mọi yêu cầu giao tiếp trong tài liệu này trỏ về ICD, không định nghĩa lại.
 **Thay thế:** bản 3.0 (cùng ngày, chưa phát hành) và bản 2.1 (2026-06-30) của chính file này. Bản 2.1 trộn yêu cầu với thiết kế bên trong; bản này chỉ giữ **hành vi quan sát được từ bên ngoài MCU**.
 **Nguồn:** [REQUIREMENTS.md](../02_requirements/REQUIREMENTS.md) (`SAFE-REQ-001`, `IF-REQ-001`, `HW-REQ-001`, `FW-REQ-MCU-001/002`), quyết định chủ sở hữu 2026-09-30 ([DECISIONS.md](../00_governance/DECISIONS.md)), rà soát [`REC-DDC-FWSOM-MCU-PAIR-20260930`](../07_records/reviews/DDC24_FW_SOM_MCU_PAIR_INTEGRATION_REVIEW_2026-09-30.md)
 
@@ -211,6 +212,8 @@ Team MCU tự quyết, không cần xin duyệt, miễn đạt §4 và ICD:
 
 ## 6. Nghiệm thu
 
+[Kế hoạch kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) §2 mô tả điều kiện/bước/kỳ vọng/bằng chứng cho `ICD-T-01..16`; §3–§4 phủ **74/74** yêu cầu hiệu lực bằng quy trình dự kiến. Đây là ma trận kế hoạch, mọi Test Result vẫn `NOT RUN` cho tới khi team MCU/SOM/HW thực hiện và người có thẩm quyền review.
+
 | Cổng | Môi trường | Yêu cầu phải PASS | Bằng chứng |
 |---|---|---|---|
 | **G-MCU-1** | Host (P1): bản build FW-REL-008 nối iobus qua PTY, chạy **cả hai biến thể**, cộng test host của team MCU | FW-IOP-001, 004, 005, 006, 007, 008, 010, 011, 012, 014, 015 · FW-IO-004, 013, 016 · FW-AO-005, 006 · FW-DO-007 · FW-WDG-008 · FW-CFG-004 · FW-DIAG-005 · FW-HW-004 (phần host) · FW-REL-001, 002, 004, 008 | kết quả `ICD-T-01..10`, `ICD-T-16`; báo cáo test host của team MCU |
@@ -253,6 +256,18 @@ Số đếm hiện hành (đếm bằng script ngày 2026-09-30): **74** yêu c�
 
 Các mục M-1 (relay có feedback) và M-3 (hợp nhất pinout) của bản 3.0 chuyển thành việc của HW theo từng biến thể: firmware khai `BOARD_FEATURES.DO_FB` theo bo thật, và chân lấy theo tài liệu HW (FW-HW-001).
 
+### 8.1 Tự rà mức sẵn sàng review của yêu cầu FW
+
+Tự rà theo loại **hồ sơ yêu cầu** của [DOC-GOV-001](../00_governance/DOC_GOVERNANCE.md), không áp checklist thiết kế nội bộ MCU cho team nhận việc. Bảng này không thay review của team tiêu thụ.
+
+| Kiểm | Bằng chứng | Trạng thái / điều kiện còn cần |
+|---|---|---|
+| ID, mức, phân bổ, phương pháp và tiêu chí | 74 dòng §4, bảng trách nhiệm §1 | Có để review; 5 SHOULD cần giải trình nếu không đạt |
+| Nguồn, biến thể, hợp đồng byte/hành vi | Đầu file, ICD và header nháp | Có; O-1/O-3/O-4/O-5/O-9 chờ ký |
+| Yêu cầu → quy trình → bằng chứng | [VVP §2–§4](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) phủ 74/74 dòng | Chỉ là kế hoạch; mọi kết quả `NOT RUN` |
+| Điều kiện vật lý và dung sai | [Phiếu HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) | HW cần cung cấp theo revision bo trước G-MCU-2/3 |
+| Review/phê duyệt | §9 | Chưa ký; chưa đạt M4/M5 theo DOC-GOV-001 |
+
 ## 9. Phê duyệt
 
 | Vai trò | Người | Trạng thái |
@@ -266,7 +281,7 @@ Các mục M-1 (relay có feedback) và M-3 (hợp nhất pinout) của bản 3.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 3.1 | 2026-09-30 | Theo quyết định chủ sở hữu: hỗ trợ cả hai biến thể 16/4/4 và 16/8/8 qua khai số kênh (thêm FW-IOP-015, FW-DO-007, FW-HW-004); trỏ ICD v3.0 và header nháp; phần cứng lấy theo tài liệu HW của từng biến thể do HW cung cấp riêng; bản build host phải chọn được biến thể. Làm rõ CRC/LEN, điều kiện rời safe, VDD fault, phản hồi khung lỗi và điều kiện mở O-9. Draft, chưa ký. |
+| 3.1 | 2026-09-30 | Theo quyết định chủ sở hữu: hỗ trợ cả hai biến thể 16/4/4 và 16/8/8 qua khai số kênh (thêm FW-IOP-015, FW-DO-007, FW-HW-004); trỏ ICD v3.0 và header nháp; phần cứng lấy theo tài liệu HW của từng biến thể do HW cung cấp riêng; bản build host phải chọn được biến thể. Bản rà soát R2 liên kết ma trận 74/74, quy trình kiểm và phiếu đầu vào HW; 74 ID/tiêu chí giữ nguyên. Draft, chưa ký. |
 | 3.0 | 2026-09-30 | Viết lại thành yêu cầu hộp đen cho team MCU riêng (không phát hành, thay bởi 3.1 cùng ngày) |
 | 2.1 | 2026-06-30 | §7: FW-IOP-008..009 (fault_flags, ADC fault → COMMUNICATION_FAILURE theo ADR-011) |
 | 2.0 | 2026-06-30 | Căn chỉnh I/O và IOP theo ADR-010 (breaking) |
