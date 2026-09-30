@@ -1,5 +1,9 @@
 import '@testing-library/jest-dom/vitest'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { HistoryTooltip } from './TrendChartPlot'
+import type { TrendSeries } from './TrendChart'
+import type { TrendSample } from '../types'
 
 type AxisSeries = { unit?: string; axis?: 'left' | 'right' }
 import { assignSecondAxis } from './TrendChart'
@@ -66,5 +70,41 @@ describe('T57-2.5 — gán trục Y thứ hai theo đơn vị', () => {
     // Sắp theo tên: A trước, B sau ⇒ A giữ trục trái, B sang phải.
     expect(series.find((item) => item.unit === 'B')?.axis).toBe('right')
     expect(series.find((item) => item.unit === 'A')?.axis).toBeUndefined()
+  })
+})
+
+
+afterEach(cleanup)
+
+describe('T57-2.4   HistoryTooltip chi hien thi gon gang ten - gia tri - don vi', () => {
+  const series: TrendSeries[] = [
+    { key: 'UI-01', label: 'UI-01', color: '#2A5C8A', unit: 'V', kind: 'UI' },
+    { key: 'UI-02', label: 'UI-02', color: '#F59E0B', unit: 'degC', kind: 'UI' }
+  ]
+  const sample: TrendSample = {
+    time: '2026-09-30T04:43:00.000Z',
+    'UI-01': 87.83,
+    'UI-01:quality': 'GOOD',
+    'UI-01:source': 'io',
+    'UI-01:tier': 'cache'
+  }
+
+  it('chi hien thi ten, gia tri, don vi va khong chua Quality/Source/Tier/Raw', () => {
+    render(
+      <HistoryTooltip
+        active
+        payload={[{ dataKey: 'UI-01', value: 87.83, payload: sample }]}
+        label="2026-09-30T04:43:00.000Z"
+        series={series}
+        timeZone="UTC"
+      />
+    )
+
+    expect(screen.getByText(/UI-01: 87\.83 V/)).toBeInTheDocument()
+    expect(screen.getByText(/UI-02: \u2014/)).toBeInTheDocument()
+    expect(screen.queryByText(/Quality/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Source/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Tier/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Raw/i)).not.toBeInTheDocument()
   })
 })

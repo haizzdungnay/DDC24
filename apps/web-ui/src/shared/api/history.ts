@@ -1,8 +1,11 @@
-import { API_ORIGIN } from '../config'
+import { API_ORIGIN, HISTORIAN_V2_TRENDS_ENABLED } from '../config'
+import { apiClient } from './client'
+import type { TrendSample } from '../types'
+import { formatTime } from '../utils'
 
 export const HISTORY_FIXED_RESOLUTIONS = ['1s', '3s', '5s', '15s', '30s', '1m', '3m', '5m', '15m', '30m', '60m'] as const
 export const HISTORY_QUERY_RESOLUTIONS = ['auto', ...HISTORY_FIXED_RESOLUTIONS] as const
-export const HISTORY_PRESET_RANGES = ['30m', '1h', '6h', '24h'] as const
+export const HISTORY_PRESET_RANGES = ['5m', '15m', '30m', '1h', '6h', '24h'] as const
 export const HISTORY_MAX_POINTS = 5000
 
 export type HistoryFixedResolution = (typeof HISTORY_FIXED_RESOLUTIONS)[number]
@@ -153,6 +156,8 @@ export function historySeriesKey(pointId: string, generation: number): string {
 
 export function historyPresetDurationMs(range: HistoryPresetRange): number {
   switch (range) {
+    case '5m': return 5 * 60_000
+    case '15m': return 15 * 60_000
     case '30m': return 30 * 60_000
     case '1h': return 60 * 60_000
     case '6h': return 6 * 60 * 60_000
@@ -367,6 +372,78 @@ function normalizeWireDate(value: Date, path: string): { time: string; timeMs: n
   const timeMs = value.getTime()
   if (!Number.isFinite(timeMs)) invalidResponse(`${path} must be a valid UTC timestamp`)
   return { time: value.toISOString(), timeMs }
+}
+
+export function historyResponseToTrendSamples(res: HistoryResponse, pointIds: readonly string[]): TrendSample[] {
+  const byTime = new Map<number, TrendSample>()
+  for (const series of res.series) {
+    for (const sample of series.samples) {
+      let row = byTime.get(sample.timeMs)
+      if (!row) {
+        row = {
+          __ts: sample.timeMs,
+          time: formatTime(new Date(sample.timeMs).toISOString()),
+          raw: sample.value,
+          [series.pointId]: sample.value
+        }
+        byTime.set(sample.timeMs, row)
+      } else {
+        row[series.pointId] = sample.value
+        if (pointIds.length === 1 && series.pointId === pointIds[0]) {
+          row.raw = sample.value
+        }
+      }
+    }
+  }
+  return [...byTime.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0))
+}
+
+export async function fetchRecentTrendSamples(
+  pointIds: readonly string[],
+  windowMs = 120_000,
+  maxPoints = 60
+): Promise<TrendSample[]> {
+  const canonicalIds = pointIds.filter(isCanonicalPointId).slice(0, 8)
+  if (!canonicalIds.length) return []
+  const now = Date.now()
+  const from = new Date(now - windowMs)
+  const to = new Date(now)
+
+  if (HISTORIAN_V2_TRENDS_ENABLED) {
+    try {
+      const res = await historyClient.query({
+        pointIds: canonicalIds,
+        from,
+        to,
+        resolution: 'auto',
+        maxPoints,
+        source: 'cache'
+      })
+      if (res.series.some((s) => s.samples.length > 0)) {
+        return historyResponseToTrendSamples(res, canonicalIds)
+      }
+      const dbRes = await historyClient.query({
+        pointIds: canonicalIds,
+        from,
+        to,
+        resolution: 'auto',
+        maxPoints,
+        source: 'database'
+      })
+      if (dbRes.series.some((s) => s.samples.length > 0)) {
+        return historyResponseToTrendSamples(dbRes, canonicalIds)
+      }
+    } catch {
+      // Fall through to legacy API on error
+    }
+  }
+
+  try {
+    const rangeSec = Math.max(30, Math.ceil(windowMs / 1000))
+    return await apiClient.getHistory(canonicalIds, `${rangeSec}s`)
+  } catch {
+    return []
+  }
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {

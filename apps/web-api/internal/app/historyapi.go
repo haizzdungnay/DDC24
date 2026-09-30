@@ -210,6 +210,10 @@ func parsePointQuery(raw string) ([]string, error) {
 
 func parseHistoryRange(raw string) (int64, error) {
 	switch raw {
+	case "5m":
+		return int64((5 * time.Minute).Seconds()), nil
+	case "15m":
+		return int64((15 * time.Minute).Seconds()), nil
 	case "30m":
 		return int64((30 * time.Minute).Seconds()), nil
 	case "1h":
@@ -219,7 +223,7 @@ func parseHistoryRange(raw string) (int64, error) {
 	case "24h":
 		return int64((24 * time.Hour).Seconds()), nil
 	default:
-		return 0, fmt.Errorf("range must be one of 30m, 1h, 6h, 24h")
+		return 0, fmt.Errorf("range must be one of 5m, 15m, 30m, 1h, 6h, 24h")
 	}
 }
 

@@ -9,7 +9,7 @@
 import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import type { TrendSample } from '../types'
 import type { TrendChartMarker, TrendSeries } from './TrendChart'
-import { displayTrendValue, formatTrendRaw, formatTrendTime, trendBandKey } from './trendChartFormat'
+import { displayTrendValue, formatTrendTime, trendBandKey } from './trendChartFormat'
 
 export interface TrendChartPlotProps {
   data: TrendSample[]
@@ -20,9 +20,10 @@ export interface TrendChartPlotProps {
   bandVisible: boolean
   showDots: boolean
   markers: TrendChartMarker[]
+  xDomain?: [number | string, number | string]
 }
 
-export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, bandVisible, showDots, markers }: TrendChartPlotProps) {
+export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, bandVisible, showDots, markers, xDomain }: TrendChartPlotProps) {
   const hasRightAxis = series.some((item) => item.axis === 'right')
   const rightAxisUnit = series.find((item) => item.axis === 'right')?.unit
   const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
@@ -36,7 +37,7 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
         <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
-        <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+        <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={xDomain ?? (hasTimeAxis ? ['dataMin', 'dataMax'] : undefined)} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         <YAxis yAxisId="left" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         {hasRightAxis && (
           <YAxis yAxisId="right" orientation="right" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} label={rightAxisUnit ? { value: rightAxisUnit, position: 'insideTopRight', fontSize: 11, fill: 'var(--c-text-dim)' } : undefined} />
@@ -80,13 +81,13 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
             }}
           />
         ))}
-        {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
+        {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />)}
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
-function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
+export function HistoryTooltip({ active, payload, label, series, rawUnit: _rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
   /* `T57-2.4` — CON TRỎ ĐỌC GIÁ TRỊ: duyệt theo `series`, không theo `payload`.
    *
@@ -109,11 +110,9 @@ function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: {
           <div key={item.key}>
             <span style={{ color: item.color }}>■</span>{' '}
             <span>{item.label}: {missing ? '—' : displayTrendValue(raw as number, item.kind, item.stepped)}{!missing && item.unit ? ` ${item.unit}` : ''}</span>
-            {!missing && <div className="text-[var(--c-text-dim)]">Quality {row[`${item.key}:quality`] ?? '—'} · Source {row[`${item.key}:source`] ?? '—'} · Tier {row[`${item.key}:tier`] ?? '—'}</div>}
           </div>
         )
       })}
-      {rawUnit && payload[0]?.payload?.['__raw'] != null && <div className="mt-1 text-[var(--c-text-dim)]">Raw: {formatTrendRaw(payload[0].payload['__raw'], rawUnit)}</div>}
     </div>
   )
 }

@@ -195,6 +195,15 @@ describe('Trend preview', () => {
     }
     await waitFor(() => expect(JSON.parse(localStorage.getItem('mkddc:v1:landing-trend-points') ?? '[]')).toEqual(['UI-01', 'UI-02', 'AO-01']))
   })
+
+  it('cho phép chuyển khoảng thời gian nhanh và lưu vào localStorage', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+    const btn5m = screen.getByRole('button', { name: /^5 phút$/i })
+    expect(btn5m).toBeInTheDocument()
+    await user.click(btn5m)
+    await waitFor(() => expect(localStorage.getItem('mkddc:v1:landing-trend-range')).toBe('5'))
+  })
 })
 
 
