@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Changed — Nguồn yêu cầu và rủi ro tích hợp IOP V3.0 (2026-09-30)
+
+- **Phạm vi:** bổ sung nguồn và lý do theo 11 nhóm ID cho 74 yêu cầu FW MCU; VVP nối 5 rủi ro giao diện tới kiểm soát, bài kiểm, bằng chứng và người có thẩm quyền chấp nhận. Không đổi ID, tiêu chí hay byte giao thức.
+- **Giới hạn:** mức nghiêm trọng/xác suất và rủi ro còn lại chờ Safety đánh giá trên từng revision bo; 16 bài ICD và 74 đường kiểm là kế hoạch, không phải Test Result.
+- **Kiểm chứng:** rà đúng 74 ID hiệu lực, 5/5 rủi ro có đường kiểm, docs ISO harness và diff check trước commit; gói bàn giao sẽ dựng lại từ commit nguồn mới.
+
 ### Added — Bản gói bàn giao IOP V3.0 R2 có nguồn gốc cố định (2026-09-30)
 
 - **Phạm vi:** version hóa `fw-mcu-handover-2026-09-30/` với sáu file nội dung (ICD, FW-REQ, header nháp, tài liệu ví dụ EX-01..03, kế hoạch kiểm và phiếu HW), bốn SVG và bốn file DOT nguồn, README, `NGUON_GOC.md` và manifest; ZIP là bản dựng cục bộ có thể tạo lại bằng `scripts/build_iop_v3_handover.py`. Nguồn tài liệu ghim tại `d04703e5d2af`, không lấy từ WIP khác.

@@ -89,6 +89,9 @@ def validate_package(manifest_names: list[str]) -> int:
     for i in range(1, 17):
         if f"### ICD-T-{i:02d} —" not in vvp:
             raise ValueError(f"Thiếu quy trình ICD-T-{i:02d}")
+    for i in range(1, 6):
+        if f"`RSK-IOP-{i:03d}`" not in vvp:
+            raise ValueError(f"Thiếu rủi ro RSK-IOP-{i:03d}")
     return local_links
 
 

@@ -239,6 +239,18 @@ Mỗi dòng là **kế hoạch phủ**, không phải Test Result. Cột “Tiê
 | `FW-REL-007` | SHOULD | I | FW-T-08 | báo cáo phân tích tĩnh | `NOT RUN` |
 | `FW-REL-008` | MUST | I, P | FW-T-07, ICD-T-10 | iobus chạy với bản này qua `ICD-T-01..10` và `ICD-T-16` cho cả hai biến thể | `NOT RUN` |
 
+### 4.1 Rủi ro giao diện và đường kiểm
+
+Đây là **danh mục rủi ro tích hợp**, không thay phân tích an toàn của sản phẩm. Chưa có xác suất/mức nghiêm trọng được Safety duyệt, nên **rủi ro còn lại chưa được chấp nhận**. `PASS` test không tự đóng rủi ro; Safety và bên tiêu thụ phải review kết quả trên đúng bo/revision.
+
+| ID | Nguyên nhân → sự kiện → tác động | Kiểm soát trong hợp đồng | Bài kiểm và bằng chứng cần có | Chủ quyết định / trạng thái |
+|---|---|---|---|---|
+| `RSK-IOP-001` | Khai sai 4/4 ↔ 8/8 → SOM ghi kênh không lắp → output không đúng cấu hình | So toàn bộ `N_*`, 0 lệnh output khi mismatch | `ICD-T-10/16`, HWIF-01 và log handshake từng revision | SOM + HW + Safety; chưa chấp nhận |
+| `RSK-IOP-002` | Mất poll → output giữ quá lâu → hành vi điều khiển không an toàn | MCU safe trong [200;205] ms, SOM không RESET_IO ở 20 ms | `ICD-T-04/08/15`, waveform output và log UART | MCU + Safety; chưa chấp nhận |
+| `RSK-IOP-003` | AO/DO áp từng phần → trạng thái trung gian ngoài ý muốn → sai tác động vật lý | Điều kiện rời safe nguyên khối và ACK sau áp; O-9 cần HW định lượng | `ICD-T-06/15`, HWIF-09, waveform mọi kênh | HW + MCU + Safety; **O-9 chặn P0**, vật lý chờ P3 |
+| `RSK-IOP-004` | CRC/SEQ lỗi hoặc retry lặp → lệnh ghi sai/lặp → output không dự kiến | CRC trước CMD/LEN, SEQ, idempotency, NACK toàn lệnh | `ICD-T-01/02/05`, byte capture và bộ đếm ghi | MCU + SOM; chưa chấp nhận |
+| `RSK-IOP-005` | Lỗi nguồn/ADC/DAC/relay không lộ ra → SOM tiếp tục tin output/input | `FAULT_FLAGS`, `MCU_STATE`, `FAULT_OUT`, safe/RESYNC | `ICD-T-03/14/15`, HWIF-04/08, waveform và alarm | HW + SOM + Safety; chưa chấp nhận |
+
 ## 5. Mẫu Test Result để team thực hiện điền
 
 | Trường | Giá trị phải ghi |
@@ -259,9 +271,10 @@ Ví dụ **dòng kế hoạch, chưa phải kết quả**: `FW-WDG-005 → ICD-T
 | 74 yêu cầu hiệu lực có đường tới quy trình và tiêu chí nguồn | §4, phải được kiểm tự động 74/74 | Bên tiêu thụ xác nhận ma trận, không suy PASS từ mapping |
 | Đầu vào HW cho test vật lý | [HWIF-01..10](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) chưa được điền | HW/Safety cung cấp và ký trước P2/P3 |
 | Test Result P1/P2/P3 | Chưa có | Chỉ lên M4/M5/đóng gate sau review và chữ ký có thẩm quyền |
+| Rủi ro giao diện → kiểm soát → test → chủ chấp nhận | §4.1, 5/5 rủi ro có đường kiểm | Safety cần chấm S/L và chấp nhận rủi ro còn lại sau bằng chứng P2/P3 |
 
 ## Lịch sử sửa đổi
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 1.0 | 2026-09-30 | Viết 16 quy trình ICD-T, 8 nhóm kiểm FW và ma trận kế hoạch cho 74 yêu cầu; mọi kết quả ở trạng thái chưa chạy. |
+| 1.0 | 2026-09-30 | Viết 16 quy trình ICD-T, 8 nhóm kiểm FW, ma trận kế hoạch cho 74 yêu cầu và 5 rủi ro giao diện nối tới kiểm soát/test; mọi kết quả ở trạng thái chưa chạy. |
