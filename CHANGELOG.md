@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Changed — Phát hành hồ sơ tích hợp IOP V3.0 lên GitHub (2026-09-30)
+
+- **Phạm vi:** đồng bộ `main@729b3a35`, giữ cả hai phía của CHANGELOG; commit các hồ sơ UI/hiệu năng còn trong workspace thành nhóm riêng và đưa đủ 18 file `fw-mcu-handover-2026-09-30/` lên nhánh/PR. Hai log UI chỉ bỏ dòng trống cuối file và cập nhật checksum; giữ số đo lịch sử.
+- **Kiểm chứng mới:** C++ cấu hình đủ Modbus/BACnet/HMI, build PASS; CTest 1 752 PASS, 2 SKIP trên 1 754 mục; Go vet và test 21 package PASS; Vitest 278 file/3 597 test PASS; docs ISO, 41 frame/4 đầu vào lỗi/2 digest, manifest gói PASS.
+- **Lỗi nền:** FE lint FAIL 9 lỗi, FE build FAIL 5 lỗi TypeScript; 6 file liên quan giống `origin/main` từng byte, ghi finding #848. Không đổi code FE để xử lý trong PR tài liệu. CI GitHub bị tắt, không có kết quả CI xanh.
+- **Quyền phát hành:** chủ dự án cho phép bỏ quy trình Issue/review độc lập và yêu cầu push thư mục bàn giao trong phiên này; không tạo verdict review độc lập giả. Gộp bằng merge commit để giữ SHA nguồn trong `NGUON_GOC.md`. Hồ sơ số đo: `docs/07_records/test-evidence/fw-som/iop-v3-publish-20260930/README.md`.
+
+### Added — Rà tài liệu thiết kế FW SOM ↔ FW MCU và phương án ghép nối hai lớp (2026-09-30)
+
+- **Phạm vi:** chỉ tài liệu thiết kế, **không review mã nguồn** (theo yêu cầu chủ sở hữu). Rà 41 tài liệu: FW MCU, giao diện IOP, FW SOM (iobus và phần core liên quan output/safe-state), phần cứng Forlinx, test plan, decision log. Mốc `e34d0a2f`.
+- **Hồ sơ mới:** `docs/07_records/reviews/DDC24_FW_SOM_MCU_PAIR_INTEGRATION_REVIEW_2026-09-30.md` (`REC-DDC-FWSOM-MCU-PAIR-20260930` 1.0). Đã đăng ký ở chỉ mục `docs/07_records/reviews/README.md` (bản 1.36).
+- **Kết luận:** thiết kế cặp **chưa sẵn sàng tích hợp**. Byte contract IOP v2.0 nhất quán, nhưng hợp đồng hành vi mâu thuẫn giữa ít nhất 8 tài liệu. 17 finding: 5 P0, 7 P1, 5 P2. Các P0:
+  - output khi mất liên lạc có hai đáp án (hold-last và safe 200 ms);
+  - SOM không thấy MCU đang safe hoặc vừa reset, output không được gửi lại; có kịch bản kẹt ở `ERR_SAFE_STATE`;
+  - iobus gửi `RESET_IO` ở ngưỡng 20 ms, sớm hơn MCU 10 lần;
+  - thiếu đường cấu hình UI mode, debounce và safe value từ SOM xuống MCU;
+  - `ttyS2` trên Forlinx dùng chung với Bluetooth HCI, còn GPIO nRESET/BOOT0/FAULT_OUT mới chỉ định nghĩa cho Radxa CM3.
+- **Đề xuất (chờ duyệt, chưa là authority):**
+  - phương án B: IOP v2.1 tương thích ngược (`IO_RESP[73]` → `MCU_STATE`, bit `ADC_STAT` mới, `SET_UI_CFG`/`SET_SAFE_CFG`/`GET_STATE`);
+  - một ICD hành vi với luật R1–R12 và thang thời gian có chủ sở hữu;
+  - lộ trình P0–P3, trong đó P2 ghép cặp thật NUCLEO-G0B1RE ↔ Forlinx trước khi có carrier board;
+  - 9 quyết định D1–D9 cần ký.
+- **Không đổi:** contract `contracts/iop`, `contracts/shm`, mã nguồn, runtime, release gate.
+- **Verification:** kiểm bằng script rằng mọi link tương đối trong hồ sơ mới đều trỏ tới file có thật (0 link hỏng). Không chạy test build vì phiên này không đổi mã.
+
 ### Added — Rà soát hiện trạng và dư địa hiệu năng FW SOM / Backend (2026-09-29)
 
 - Thêm `REC-DDC-FW-BE-PERF-20260929` tại source `origin/main@895444be`: kiến trúc và logic Core/IOBus/Go/SHM/IPC/Historian/compiler/platform; đối chiếu tối ưu Plan 63 đã merge và các task còn chờ cổng/số đo target. Ghi 10 finding cùng phương án, ưu tiên, effort/risk, pilot và tiêu chí đo; giữ nguyên source sản phẩm và tài liệu UI đang sửa.
