@@ -74,3 +74,47 @@ Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **
 7. Báo lại kết quả kèm link PR và số đo.
 
 Nếu bước nào hỏng (thường gặp: token `gh`/git hết hạn), **làm hết các bước không bị chặn** rồi nói rõ bước nào còn lại và cần gì để mở khoá — không dừng ngang khi chưa commit xong.
+
+## Quy trình gỡ conflict của một PR
+
+Khi user nhờ "xử lý conflict PR #N" (hoặc PR báo `CONFLICTING`/`DIRTY`), làm trọn
+các bước dưới đây, không hỏi lại. Mục tiêu là PR merge được **và** mã sau khi gộp
+đúng ý cả hai phía, không chỉ là hết dấu `<<<<<<<`.
+
+1. **Lấy bản mới nhất, không đụng cây làm việc chung.**
+   `git fetch origin main <nhánh-PR>` rồi
+   `git worktree add --detach <scratchpad>/wt origin/<nhánh-PR>`. Mọi thao tác sau
+   làm trong worktree đó. Không `checkout`/`reset`/`stash`/`checkout -- <file>`
+   trên cây chung: phiên khác có thể đang để việc chưa commit ở đó.
+2. **Merge `origin/main` vào nhánh PR, không rebase, không force-push.**
+   `git merge --no-ff --no-commit origin/main`. Nhánh PR đã push, có khi đã deploy
+   theo SHA và SHA đó nằm trong hồ sơ; rebase làm mất dấu.
+3. **Hiểu ý định của cả hai phía trước khi chọn.** Với mỗi file conflict, đọc các
+   commit bên `main` đã đổi đoạn đó
+   (`git log -p $(git merge-base HEAD origin/main)..origin/main -- <file>`) và
+   trả lời được: `main` đổi để làm gì, PR đổi để làm gì.
+   - `main` đã giải cùng vấn đề theo cách khác ⇒ lấy phía `main`, bỏ logic trùng
+     của PR; giữ test của PR nếu vẫn đúng với logic mới.
+   - Hai phía làm hai việc khác nhau ⇒ gộp cả hai, rồi đọc lại toàn hàm.
+   - Cấm `git checkout --ours/--theirs` cả file cho mã nguồn.
+4. **Soát cả file git tự gộp được.** Hai phía cùng sửa một file mà không báo
+   conflict vẫn có thể xung đột ngữ nghĩa. Lấy giao của hai danh sách
+   `git diff --name-only <merge-base> <phía>` và đọc
+   `git diff origin/main -- <file>` cho từng file trong giao đó.
+5. **File chỉ thêm khối** (`CHANGELOG.md` dưới `[Unreleased]`, bảng chỉ mục
+   README): giữ cả hai phía. Nếu cách gộp làm mục CHANGELOG của PR không còn đúng
+   (logic của PR bị thay), thêm một mục mới ghi quyết định gộp; không viết lại
+   mục cũ, vì nó khớp với SHA đã deploy.
+6. **Kiểm chứng như lúc commit** (mục "commit" hoặc "merge" ở trên), chạy ngay
+   trong worktree, đọc exit code của configure, build và test. Khi cách gộp chọn
+   một phía, làm **kiểm đột biến**: đưa phía bị bỏ vào lại, chỉ ra test đỏ, rồi
+   khôi phục.
+7. **Commit merge có thân bài tiếng Việt**: từng file conflict, phía `main` làm
+   gì, phía PR làm gì, chọn gì, vì sao, test nào chốt. Push bằng
+   `git push origin HEAD:<nhánh-PR>`, rồi xác nhận
+   `gh pr view <N> --json mergeable,mergeStateStatus` trả `MERGEABLE`.
+8. **Dọn**: `git worktree remove --force <wt>` (xoá luôn `build/` bên trong) và
+   `git worktree prune`. `git status --short` ở cây chung phải y hệt lúc đầu phiên.
+
+Gỡ conflict xong **không** tự merge PR, trừ khi user nói "merge". Khi merge bị
+chặn vì thiếu review thì để PR mở và báo link.
