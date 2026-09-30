@@ -1,0 +1,15 @@
+digraph iop_boundary {
+  graph [rankdir=LR, bgcolor="white", pad="0.25", nodesep="0.55", ranksep="0.8", label="IOP V3.0 — ranh giới tích hợp (sơ đồ logic, chưa xác nhận chân/mạch)", labelloc=t, fontsize=18, fontname="DejaVu Sans"];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#27618a", fontname="DejaVu Sans", fontsize=12, margin="0.18,0.13"];
+  edge [color="#305a78", fontname="DejaVu Sans", fontsize=10];
+  core [label="SOM · core\nLệnh output, cấu hình biến thể"];
+  iobus [label="SOM · iobus\nMaster IOP; poll, RESYNC, alarm"];
+  mcu [label="FW MCU · STM32G0B1\nSlave IOP; lấy mẫu, áp output, safe 200–205 ms"];
+  hw [label="HW · bo 16/4/4 hoặc 16/8/8\nPinout và giới hạn điện do HW cung cấp", fillcolor="#f7f1df", color="#9a7628"];
+  core -> iobus [label="lệnh + cấu hình"];
+  iobus -> core [label="raw + trạng thái", constraint=false];
+  iobus -> mcu [label="UART 921600 · request"];
+  mcu -> iobus [label="response · số kênh khai báo", constraint=false];
+  mcu -> hw [label="AO/DO drive"];
+  hw -> mcu [label="UI và feedback vật lý", constraint=false];
+}

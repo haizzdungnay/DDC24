@@ -1,0 +1,27 @@
+digraph iop_parser {
+  graph [rankdir=TB, bgcolor="white", pad="0.25", nodesep="0.38", ranksep="0.4", label="MCU nhận frame — thứ tự kiểm và kết quả quan sát được", labelloc=t, fontsize=18, fontname="DejaVu Sans"];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb", color="#27618a", fontname="DejaVu Sans", fontsize=11, margin="0.14,0.1"];
+  edge [color="#305a78", fontname="DejaVu Sans", fontsize=10];
+  sof [label="Tìm SOF 0xAA; đọc LEN/CMD/SEQ"];
+  lenmax [label="LEN ≤ 252?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  complete [label="Nhận đủ LEN + 2 byte CRC?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  crc [label="CRC đúng?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  cmd [label="CMD đã biết, LEN đúng?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  value [label="Giá trị và trạng thái hợp lệ?", shape=diamond, fillcolor="#fff4d9", color="#9a7628"];
+  drop [label="Bỏ frame; 0 response", fillcolor="#fce8e6", color="#b44636"];
+  nackcrc [label="NACK ERR_CRC_FAIL", fillcolor="#fce8e6", color="#b44636"];
+  nackcmd [label="NACK ERR_UNKNOWN_CMD / ERR_BAD_LEN", fillcolor="#fce8e6", color="#b44636"];
+  nackvalue [label="NACK lỗi giá trị/trạng thái; 0 output áp một phần", fillcolor="#fce8e6", color="#b44636"];
+  act [label="Thực thi một lần; ACK hoặc response", fillcolor="#e7f4e8", color="#397a42"];
+  sof -> lenmax;
+  lenmax -> drop [label="không"];
+  lenmax -> complete [label="có"];
+  complete -> drop [label="không / interbyte > 1 ms"];
+  complete -> crc [label="có"];
+  crc -> nackcrc [label="không"];
+  crc -> cmd [label="có"];
+  cmd -> nackcmd [label="không"];
+  cmd -> value [label="có"];
+  value -> nackvalue [label="không"];
+  value -> act [label="có"];
+}

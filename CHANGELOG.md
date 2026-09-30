@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Added — Bản gói bàn giao IOP V3.0 R2 có nguồn gốc cố định (2026-09-30)
+
+- **Phạm vi:** version hóa `fw-mcu-handover-2026-09-30/` với sáu file nội dung (ICD, FW-REQ, header nháp, tài liệu ví dụ EX-01..03, kế hoạch kiểm và phiếu HW), bốn SVG và bốn file DOT nguồn, README, `NGUON_GOC.md` và manifest; ZIP là bản dựng cục bộ có thể tạo lại bằng `scripts/build_iop_v3_handover.py`. Nguồn tài liệu ghim tại `d04703e5d2af`, không lấy từ WIP khác.
+- **Kiểm chứng:** 17/17 mục trong ZIP kiểm toàn vẹn; manifest 16/16 file đạt SHA-256; 60 link nội bộ hợp lệ; VVP 74/74 yêu cầu và 16/16 quy trình ICD; ZIP 74 120 byte, SHA-256 `f139fa1e3c6f209766da22d9dc4ddc1a4b1d9e71235daf6cae339b5d1bdd4df2`.
+- **Giới hạn:** gói chưa gửi/chưa ký; kết quả P1/P2/P3, điện vật lý, HIL và chứng nhận ISO chưa có. Thông số HW 8/8 phải do HW cung cấp theo revision bo, không điền giả vào biểu mẫu.
+
 ### Changed — Gói tích hợp IOP V3.0 bản rà soát R2: ví dụ, hình và kiểm chứng (2026-09-30)
 
 - **Phạm vi:** giữ giao thức trên dây V3.0 và 74 ID yêu cầu FW; sửa thứ tự P0 ký tài liệu/O-9, P1 chuyển source SOM rồi kiểm host. Thêm ba ví dụ 4/4, 8/8, mất poll/RESYNC; bốn hình SVG kèm nguồn DOT; phiếu HWIF-01..10 theo revision bo; VVP gồm 16 quy trình ICD, 8 nhóm kiểm FW và ma trận kế hoạch 74/74 yêu cầu. Gói chỉ chứa tài liệu giao diện, không đưa thiết kế mạch 4/4 cũ hoặc V2.x làm fallback.
