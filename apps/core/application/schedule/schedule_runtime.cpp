@@ -295,6 +295,49 @@ bool parse_target(const json::Value* v, ValueType value_type, ScheduleTarget* ou
                      declared.c_str(), out->point_id.c_str());
         return false;
     }
+
+    auto parse_target_num = [](const json::Value* fld, double* out_val) -> bool {
+        if (!fld) return false;
+        if (fld->is_num() && std::isfinite(fld->num)) { *out_val = fld->num; return true; }
+        if (fld->is_bool()) { *out_val = fld->b ? 1.0 : 0.0; return true; }
+        if (fld->is_str()) {
+            if (fld->str == "ACTIVE" || fld->str == "1" || fld->str == "true" || fld->str == "ON") { *out_val = 1.0; return true; }
+            if (fld->str == "INACTIVE" || fld->str == "0" || fld->str == "false" || fld->str == "OFF") { *out_val = 0.0; return true; }
+            char* end = nullptr;
+            double d = std::strtod(fld->str.c_str(), &end);
+            if (end != fld->str.c_str() && *end == '\0') { *out_val = d; return true; }
+        }
+        return false;
+    };
+
+    double av = 0.0;
+    if (parse_target_num(v->get("active_value"), &av)) {
+        out->active_value = av;
+        out->has_active_value = true;
+    } else {
+        out->active_value = (out->kind == PointKind::AO) ? 100.0 : 1.0;
+        out->has_active_value = false;
+    }
+
+    double iv = 0.0;
+    if (parse_target_num(v->get("inactive_value"), &iv)) {
+        out->inactive_value = iv;
+        out->has_inactive_value = true;
+    } else {
+        out->inactive_value = 0.0;
+        out->has_inactive_value = false;
+    }
+
+    std::string inact_act;
+    if (as_string(v->get("inactive_action"), &inact_act)) {
+        if (inact_act == "RELINQUISH") out->inactive_action = InactiveAction::Relinquish;
+        else out->inactive_action = InactiveAction::WriteValue;
+    }
+    int delay = 0;
+    if (as_int(v->get("staggered_delay_seconds"), &delay) && delay >= 0) {
+        out->staggered_delay_seconds = (delay > 300) ? 300 : delay;
+    }
+
     return true;
 }
 
@@ -792,12 +835,12 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
     if (conflict) st.error = ScheduleError::ConfigExceptionConflict;
 
     int start_sec = -1;
+    int event_elapsed_sec = 0;
     if (winner && value_at(winner->time_values, now.second_of_day, &st.effective_value, &start_sec)) {
         st.source = ValueSource::Exception;
         st.source_exception_id = winner->id;
+        if (start_sec >= 0) event_elapsed_sec = now.second_of_day - start_sec;
     } else {
-        /* 2. Lịch tuần — mốc gần nhất trước hoặc bằng bây giờ; chưa tới mốc nào
-         * hôm nay thì lùi tối đa 7 ngày để lấy mốc cuối cùng còn hiệu lực. */
         bool found = false;
         for (int back = 0; back < 7 && !found; back++) {
             const int day = ((now.weekday - back) % 7 + 7) % 7;
@@ -805,12 +848,15 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
             if (value_at(s.weekly[day], cutoff, &st.effective_value, &start_sec)) {
                 st.source = ValueSource::Weekly;
                 found = true;
+                if (start_sec >= 0) {
+                    event_elapsed_sec = back * kDaySeconds + (now.second_of_day - (back == 0 ? start_sec : 0));
+                }
             }
         }
         if (!found) {
-            /* 3. Mặc định. */
             st.effective_value = s.schedule_default;
             st.source = ValueSource::Default;
+            event_elapsed_sec = 999999;
         }
     }
 
@@ -845,7 +891,41 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
         r.target_id = t.id;
         r.kind = t.kind;
         r.idx = t.idx;
-        r.written_value = st.effective_value;
+        double target_val = 0.0;
+        bool should_claim = true;
+        bool in_delay = false;
+        if (st.effective_value != 0.0) {
+            if (t.staggered_delay_seconds > 0 && event_elapsed_sec < t.staggered_delay_seconds) {
+                in_delay = true;
+                if (t.inactive_action == InactiveAction::Relinquish) {
+                    should_claim = false;
+                } else if (t.has_inactive_value) {
+                    target_val = t.inactive_value;
+                } else {
+                    target_val = 0.0;
+                }
+            } else {
+                if (t.has_active_value) {
+                    target_val = t.active_value;
+                } else if (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) {
+                    target_val = (t.kind == PointKind::AO) ? 100.0 : 1.0;
+                } else {
+                    target_val = st.effective_value;
+                }
+            }
+        } else {
+            if (t.inactive_action == InactiveAction::Relinquish) {
+                should_claim = false;
+            } else if (t.has_inactive_value) {
+                target_val = t.inactive_value;
+            } else {
+                target_val = (s.value_type == ValueType::Binary || s.value_type == ValueType::Boolean) ? 0.0 : st.effective_value;
+            }
+        }
+        r.should_claim = should_claim;
+        r.written_value = target_val;
+        r.in_staggered_delay = in_delay;
+        r.delay_remaining_sec = in_delay ? (t.staggered_delay_seconds - event_elapsed_sec) : 0;
         st.targets.push_back(r);
     }
     return st;
@@ -957,9 +1037,10 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         if (!st.active) continue;
         for (std::size_t ti = 0; ti < st.targets.size(); ti++) {
             const TargetResult& tr = st.targets[ti];
+            if (!tr.should_claim) continue;
             const std::string key = target_key(tr.kind, tr.idx);
             Claim claim{si, ti, schedules_[si].priority_for_writing,
-                        st.next_transition_week_second, st.effective_value};
+                        st.next_transition_week_second, tr.written_value};
             const auto it = winners.find(key);
             if (it == winners.end()) {
                 winners[key] = claim;
@@ -985,11 +1066,26 @@ void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
         ScheduleState& st = states_[c.schedule_index];
         TargetResult& tr = st.targets[c.target_index];
 
-        active.push_back({tr.kind, tr.idx});
+        active.push_back({tr.kind, tr.idx, c.value, tr.in_staggered_delay});
+        bool changed = true;
+        for (const auto& prev : applied_) {
+            if (prev.kind == tr.kind && prev.idx == tr.idx) {
+                if (prev.value == c.value && prev.in_delay == tr.in_staggered_delay) {
+                    changed = false;
+                }
+                break;
+            }
+        }
+        if (changed) {
+            std::fprintf(stderr,
+                         "INFO  schedule.state_change id=%s target=%s val=%.2f in_delay=%d\n",
+                         st.schedule_id.c_str(), tr.target_id.c_str(), c.value,
+                         tr.in_staggered_delay ? 1 : 0);
+        }
         bool ok = true;
         if (tr.kind == PointKind::AO) {
             const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
-            const double pct = (c.value == 1.0) ? 100.0 : c.value;
+            const double pct = c.value;
             ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(pct, mode));
         } else if (tr.kind == PointKind::BO) {
             ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);
@@ -1038,6 +1134,8 @@ void ScheduleRuntime::release_missing(const std::vector<AppliedTarget>& active, 
         } else {
             writer.release({old.kind, old.idx});
         }
+        std::fprintf(stderr, "INFO  schedule.target_released kind=%d idx=%d\n",
+                     static_cast<int>(old.kind), old.idx);
     }
 }
 

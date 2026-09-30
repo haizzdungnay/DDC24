@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -113,5 +114,35 @@ func TestSimBinaryLookupPrefersEnvironmentOverride(t *testing.T) {
 	}
 	if path != fake {
 		t.Fatalf("path = %q; want %q", path, fake)
+	}
+}
+
+func TestScheduleEffectiveCallsSimBinaryWithPoint(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "mkddc-schedule-sim")
+	script := "#!/bin/sh\n" +
+		"echo '{\"segments\":[{\"from\":\"2026-08-19T00:00:00Z\",\"to\":\"2026-08-19T12:00:00Z\",\"value\":1,\"scheduleId\":\"SCH-001\",\"scheduleName\":\"Test\",\"priority\":16,\"reason\":\"weekly · SCH-001\"}],\"conflicts\":[]}'\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("MKDDC_SCHEDULE_SIM", fake)
+
+	app, token := newTestAppWithAdmin(t)
+	resp := serveAuth(t, app.Router(), http.MethodGet,
+		"/api/v1/schedules/effective?pointId=DO-01&from=2026-08-19T00:00:00Z&to=2026-08-19T12:00:00Z", "", token)
+	assertStatus(t, resp, http.StatusOK)
+
+	var res ScheduleEffectiveResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if res.PointID != "DO-01" {
+		t.Fatalf("pointId = %q, want DO-01", res.PointID)
+	}
+	if len(res.Segments) != 1 || res.Segments[0].ScheduleID != "SCH-001" {
+		t.Fatalf("segments = %+v, want 1 segment for SCH-001", res.Segments)
+	}
+	if res.Engine != "mkddc-schedule-sim --point" {
+		t.Fatalf("engine = %q, want mkddc-schedule-sim --point", res.Engine)
 	}
 }
