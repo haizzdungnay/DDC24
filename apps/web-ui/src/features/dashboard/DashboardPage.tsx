@@ -51,7 +51,6 @@ import {
 } from '../../shared/utils'
 
 const MAX_LANDING_TREND_SERIES = 4
-const TREND_SAMPLE_LIMIT = 60
 const trendColors = ['var(--c-accent)', 'var(--c-good-fg)', 'var(--c-warn-fg)', 'var(--c-accent-2)']
 /* T63-108 (PERF-API-03): nhật ký hoạt động của Landing — một vòng poll cho mỗi
  * loại, dùng chung giữa các khối (`useSharedPoll`). */
@@ -780,7 +779,16 @@ function WorkspaceTile({ id, point, onUnpin }: { id: string; point: Point | unde
 /* ── 6. Trend preview ───────────────────────────────────────────────────── */
 
 const trendPrefsKey = 'mkddc:v1:landing-trend-points'
-const TREND_WINDOW_MS = TREND_SAMPLE_LIMIT * 2000
+const landingRangePrefsKey = 'mkddc:v1:landing-trend-range'
+
+export const landingRangeOptions = [
+  { labelVi: '5 phút', labelEn: '5 min', minutes: 5 },
+  { labelVi: '15 phút', labelEn: '15 min', minutes: 15 },
+  { labelVi: '30 phút', labelEn: '30 min', minutes: 30 },
+  { labelVi: '1 giờ', labelEn: '1 hour', minutes: 60 }
+] as const
+
+const DEFAULT_LANDING_RANGE_MINUTES = 15
 
 function TrendPreview() {
   const { pick } = useI18n()
@@ -795,14 +803,23 @@ function TrendPreview() {
       return []
     }
   })
+  const [rangeMinutes, setRangeMinutes] = useState<number>(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(landingRangePrefsKey))
+      return landingRangeOptions.some((item) => item.minutes === stored) ? stored : DEFAULT_LANDING_RANGE_MINUTES
+    } catch {
+      return DEFAULT_LANDING_RANGE_MINUTES
+    }
+  })
   const [pickerOpen, setPickerOpen] = useState(false)
   const [samples, setSamples] = useState<TrendSample[]>([])
 
+  const windowMs = rangeMinutes * 60_000
   const latestTs = samples[samples.length - 1]?.__ts
   const xDomain = useMemo<[number, number] | undefined>(() => {
     if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
-    return [latestTs - TREND_WINDOW_MS, latestTs]
-  }, [latestTs])
+    return [latestTs - windowMs, latestTs]
+  }, [latestTs, windowMs])
 
   const candidates = useMemo(
     () => points.filter((point) => pointNumber(point) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
@@ -817,8 +834,7 @@ function TrendPreview() {
     [chosen]
   )
 
-  /* Mốc `updatedAt` gần nhất ĐÃ ghi vào buffer, theo từng điểm. Đây là thứ
-     phân biệt "producer vừa phát giá trị mới" với "trình duyệt vừa tick". */
+  /* Mốc updatedAt gần nhất ĐÃ ghi vào buffer, theo từng điểm. */
   const lastSampledAtRef = useRef<Record<string, string>>({})
   useEffect(() => {
     lastSampledAtRef.current = {}
@@ -827,61 +843,38 @@ function TrendPreview() {
       return
     }
     let cancelled = false
-    fetchRecentTrendSamples(selected, TREND_WINDOW_MS, TREND_SAMPLE_LIMIT).then((initialSamples) => {
+    const maxPoints = Math.max(120, Math.min(600, rangeMinutes * 20))
+    fetchRecentTrendSamples(selected, windowMs, maxPoints).then((initialSamples) => {
       if (cancelled || !initialSamples.length) return
       setSamples((current) => {
-        if (current.length === 0) return initialSamples
+        const cutoff = Date.now() - windowMs
         const byTs = new Map<number, TrendSample>()
-        for (const s of initialSamples) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
-        for (const s of current) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-        return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-TREND_SAMPLE_LIMIT)
+        for (const s of initialSamples) {
+          if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, s)
+        }
+        for (const s of current) {
+          if (typeof s.__ts === 'number' && s.__ts >= cutoff) {
+            byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+          }
+        }
+        return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-1000)
       })
     })
     return () => {
       cancelled = true
     }
-  }, [selected])
+  }, [selected, windowMs, rangeMinutes])
 
-  /* F-UX-14 (`REV-FE-UIUX-UC-2026-08-18` §7.1) — lấy mẫu theo producer, không
-     theo đồng hồ trình duyệt.
-  
-     TRIỆU CHỨNG: buffer được dựng bằng `setInterval(append, 1000)`, nên mỗi
-     giây ghi một mẫu bất kể producer có phát gì mới hay không. Một điểm Modbus
-     cập nhật 5 s/lần cho ra 5 mẫu giống hệt nhau: mật độ dữ liệu GIẢ. Biểu đồ
-     trông dày và mượt đúng ở chỗ ta không biết gì thêm, và người đọc không có
-     cách nào phân biệt "đo được liên tục" với "đọc lại đúng con số cũ".
-  
-     NGUYÊN NHÂN GỐC: nhịp lấy mẫu lấy từ tab trình duyệt thay vì từ `updatedAt`
-     của chính điểm — cùng lớp lỗi với việc đóng dấu giờ máy trạm lên số đo.
-  
-     CÁCH SỬA: chỉ ghi mẫu khi `updatedAt` của ít nhất một điểm đang chọn ĐỔI,
-     và trục thời gian lấy từ chính mốc đó chứ không phải `Date.now()`. Điểm nào
-     không có mốc mới thì KHÔNG có khoá trong mẫu ⇒ `TrendChart`
-     (`connectNulls={false}`) để ĐỨT đường. Đứt mới là đúng: giữ giá trị cuối sẽ
-     vẽ một đường thẳng khẳng định "vẫn đo được" trong khoảng mà không producer
-     nào nói gì (quyết định Q3, Plan 57 §12). */
   useEffect(() => {
     if (!chosen.length) return
-    /* N-01 (kiểm tra viên độc lập): MỘT HÀNG CHO MỖI MỐC THỜI GIAN, không gộp
-       cả nhóm vào một hàng rồi đóng dấu mốc mới nhất lên tất cả.
-       Bản trước lấy `newestStamp` của cả nhóm làm nhãn thời gian cho mọi giá
-       trị trong hàng, nên số đo của điểm A tại t1 bị vẽ dưới nhãn t2 của điểm
-       B. Đó đúng là lớp lỗi mà chú thích ngay bên trên cấm ("tuyệt đối không
-       đóng dấu giờ máy trạm lên số đo") — chỉ khác ở chỗ đóng dấu đồng hồ của
-       producer khác thay vì của trình duyệt. */
     const byStamp = new Map<number, Record<string, number>>()
     for (const point of chosen) {
       const stamp = point.updatedAt
-      /* Không có mốc thời gian thật ⇒ bỏ qua, tuyệt đối không đóng dấu giờ máy
-         trạm lên số đo của producer (PA3-F04). */
       if (!stamp) continue
       const stampMs = Date.parse(stamp)
       if (Number.isNaN(stampMs)) continue
       if (lastSampledAtRef.current[point.id] === stamp) continue
       const value = pointNumber(point)
-      /* G-04: chỉ "đốt" mốc SAU khi đã có giá trị dùng được. Ghi ref trước phép
-         kiểm này làm một mốc kèm giá trị hỏng khoá luôn mốc đó, và nếu sau đó
-         đọc lại được giá trị dưới cùng mốc thì nó không bao giờ vào biểu đồ. */
       if (value === null) continue
       lastSampledAtRef.current[point.id] = stamp
       const row = byStamp.get(stampMs) ?? {}
@@ -892,20 +885,18 @@ function TrendPreview() {
     const rows: TrendSample[] = [...byStamp.entries()]
       .sort(([left], [right]) => left - right)
       .map(([stampMs, values]) => ({
-        /* `__ts` bật trục thời gian SỐ của `TrendChart`: khoảng cách trên trục
-           phản ánh khoảng cách thật, thay vì trục `category` vẽ đều nhau bất kể
-           nhịp lấy mẫu (N-02). */
         __ts: stampMs,
         time: new Date(stampMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         ...values
       }))
     setSamples((previous) => {
       const byTs = new Map<number, TrendSample>()
-      for (const s of previous) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
-      for (const s of rows) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-      return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-TREND_SAMPLE_LIMIT)
+      const cutoff = (rows[rows.length - 1]?.__ts ?? Date.now()) - windowMs
+      for (const s of previous) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, s)
+      for (const s of rows) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
+      return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-1000)
     })
-  }, [chosen])
+  }, [chosen, windowMs])
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -917,12 +908,34 @@ function TrendPreview() {
     })
   }
 
+  function changeRange(minutes: number) {
+    setRangeMinutes(minutes)
+    try {
+      window.localStorage.setItem(landingRangePrefsKey, String(minutes))
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <Panel
       title={pick('XU HƯỚNG NHANH', 'TREND PREVIEW')}
       className="p-3"
       action={
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] p-0.5 bg-[var(--c-surface-2)]">
+            {landingRangeOptions.map((item) => (
+              <Button
+                key={item.minutes}
+                size="sm"
+                variant={rangeMinutes === item.minutes ? 'primary' : 'ghost'}
+                className="h-7 px-2 text-xs"
+                onClick={() => changeRange(item.minutes)}
+              >
+                {pick(item.labelVi, item.labelEn)}
+              </Button>
+            ))}
+          </div>
           <Button size="sm" variant="secondary" icon={<ListFilter className="h-4 w-4" />} onClick={() => setPickerOpen(true)}>
             {pick('Điểm', 'Points')} {selected.length}/{MAX_LANDING_TREND_SERIES}
           </Button>

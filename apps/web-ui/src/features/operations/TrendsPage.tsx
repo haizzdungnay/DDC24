@@ -37,6 +37,8 @@ interface TrendRow {
 }
 
 const rangeOptions = [
+  { labelVi: '5 phút', labelEn: '5 min', minutes: 5 },
+  { labelVi: '15 phút', labelEn: '15 min', minutes: 15 },
   { labelVi: '30 phút', labelEn: '30 min', minutes: 30 },
   { labelVi: '1 giờ', labelEn: '1 hour', minutes: 60 },
   { labelVi: '6 giờ', labelEn: '6 hours', minutes: 360 },
@@ -812,6 +814,8 @@ export function historySourceForRange(customRange: TrendCustomRange | null): 'ca
 
 export function historyPresetForMinutes(minutes: number): HistoryPresetRange {
   switch (minutes) {
+    case 5: return '5m'
+    case 15: return '15m'
     case 30: return '30m'
     case 60: return '1h'
     case 360: return '6h'
