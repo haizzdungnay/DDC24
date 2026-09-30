@@ -295,6 +295,9 @@ type coreScheduleTargetState struct {
 	WrittenValue float64 `json:"writtenValue"`
 	ErrorCode    string  `json:"errorCode"`
 	OverriddenBy string  `json:"overriddenBy"`
+	ShouldClaim  *bool   `json:"shouldClaim,omitempty"`
+	InDelay      *bool   `json:"inDelay,omitempty"`
+	DelayRemainingSec *int `json:"delayRemainingSec,omitempty"`
 }
 
 // ReadScheduleStates hỏi controller trạng thái runtime của mọi lịch.

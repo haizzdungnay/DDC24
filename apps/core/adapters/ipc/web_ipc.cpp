@@ -529,6 +529,9 @@ void WebIpc::respond_schedule_state(const WebCommand& cmd, const std::vector<Sch
             json += ",\"writtenValue\":" + std::to_string(tr.written_value);
             json += ",\"errorCode\":\"" + std::string(schedule_error_code(tr.error)) + "\"";
             json += ",\"overriddenBy\":\"" + std::string(tr.override_source) + "\"";
+            json += ",\"shouldClaim\":" + std::string(tr.should_claim ? "true" : "false");
+            json += ",\"inDelay\":" + std::string(tr.in_staggered_delay ? "true" : "false");
+            json += ",\"delayRemainingSec\":" + std::to_string(tr.delay_remaining_sec);
             json += "}";
         }
         json += "]}";
