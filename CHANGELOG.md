@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Added — Sổ tay toàn bộ lệnh tích hợp IOP V3.0 (2026-09-30)
+
+- **Phạm vi:** thêm `IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md`: đủ 16 CMD, payload/bitfield, 41 frame request/response đầy đủ CRC cho hai profile, 4 đầu vào lỗi, giải mã dữ liệu/cấu hình và luồng khởi động/RESYNC/retry/mất poll. Liên kết từ ICD, ví dụ và chỉ mục; chuẩn bị bản gói R3.
+- **Kiểm chứng:** `verify_iop_v3_command_reference.py` PASS 41 frame, 16/16 CMD, 4 ca đầu vào lỗi, 2 digest; Python đối chiếu header qua C99/C11/C++11/C++17. `docs_iso_harness.py --expect` PASS; byte giao thức và runtime không đổi, P1/P2/P3 chưa chạy.
+- **Đóng gói:** builder kiểm fixture khi dựng; chuẩn hóa SHA nguồn đầy đủ để cùng commit cho cùng mã băm ZIP, kể cả tham số SHA viết tắt.
+
 ### Changed — Gói IOP V3.0 R2 ghim lại sau rà nguồn/rủi ro (2026-09-30)
 
 - **Phạm vi:** dựng lại 17 file gói từ commit nguồn `9e62fc11ed15` để bản FW-REQ có nguồn/lý do 11 nhóm và bản VVP có 5 rủi ro giao diện; thay bản ZIP R2 trước đó, chưa gửi các team nhận.

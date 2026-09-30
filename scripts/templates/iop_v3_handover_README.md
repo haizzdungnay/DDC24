@@ -2,7 +2,7 @@
 
 **Mã gói:** IOP-HANDOVER-MK-DDC-24-VI
 
-**Bản gói:** R2 (2026-09-30)
+**Bản gói:** R3 (2026-09-30)
 
 **Người nhận:** team HW, FW MCU và SOM; System Architect/Safety phê duyệt các mục liên quan
 
@@ -22,6 +22,7 @@ Một giao thức IOP V3.0 cho cả profile 16 UI / 4 AO / 4 DO và 16 UI / 8 AO
 | 4 | [Ví dụ tích hợp](IOP_V3_INTEGRATION_EXAMPLES_MK-DDC-24_VI.md) | `IOP-EX-MK-DDC-24-VI` v1.0; EX-01 4/4, EX-02 8/8, EX-03 mất poll/RESYNC | Minh họa, chưa đo bo |
 | 5 | [Kế hoạch và ma trận kiểm chứng](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md) | `IOP-VVP-MK-DDC-24-VI` v1.0; 16 quy trình ICD, 8 nhóm FW, ma trận 74/74 và 5 rủi ro giao diện | Mọi Test Result `NOT RUN`; rủi ro chưa được Safety chấp nhận |
 | 6 | [Phiếu đầu vào HW](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md) | `IOP-HW-IN-MK-DDC-24-VI` v1.0; thông tin cần cho từng revision bo | Chưa nhận hồ sơ chuẩn 8/8 |
+| 7 | [Sổ tay toàn bộ lệnh](IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md) | `IOP-CMD-GUIDE-MK-DDC-24-VI` v1.0; 16 CMD, 41 frame, 4 đầu vào lỗi, payload/bitfield và luồng vận hành | Fixture host, chưa đo bo |
 
 Bốn hình SVG đọc ngoại tuyến và file DOT nguồn nằm trong `assets/iop-v3/`: ranh giới, xử lý frame, RESYNC và mốc thời gian. Các hình thể hiện **hợp đồng logic/giới hạn thiết kế**, không phải pinout hoặc số đo thực tế.
 
@@ -40,7 +41,7 @@ Ví dụ điểm cần hai phía thống nhất: trên bo 4/4, `SET_AO` **vẫn 
 
 | Mốc | Điều kiện thực tế | Trạng thái hiện tại |
 |---|---|---|
-| Tài liệu sẵn sàng review | Link/manifest sạch; 3 ví dụ, 4 hình, 74/74 mapping, 16 quy trình, các mục mở có owner/cổng | Tự kiểm bằng script; cần team tiêu thụ review |
+| Tài liệu sẵn sàng review | Link/manifest sạch; 3 ví dụ tích hợp, sổ tay 16 CMD, 4 hình, 74/74 mapping, 16 quy trình, các mục mở có owner/cổng | Tự kiểm bằng script; cần team tiêu thụ review |
 | P0 | Các quyết định liên quan safe/O-9 đóng, ICD/FW-REQ và header được ghim/ký | Chưa ký |
 | P1 | Source hai phía V3.0; test host 4/4 và 8/8 có log thật | `NOT RUN` |
 | P2/P3 | Có hồ sơ HW từng revision, bo thật, thiết bị hiệu chuẩn và kết quả UART/HIL | `BLOCKED`/`NOT RUN` |
@@ -55,5 +56,6 @@ Trong thư mục gói chạy `sha256sum -c MANIFEST.sha256`; ZIP được dựng
 
 | Bản gói | Ngày | Thay đổi |
 |---|---|---|
+| R3 | 2026-09-30 | Thêm sổ tay toàn bộ 16 CMD, 41 frame đầy đủ CRC, 4 đầu vào lỗi và đường tra cứu; giữ giao thức V3.0. |
 | R2 | 2026-09-30 | Thêm ví dụ, SVG/DOT, phiếu HW, ma trận/quy trình kiểm; sửa P0/P1 và ghim commit nguồn. |
 | R1 | 2026-09-30 | Ba file nội dung ban đầu; chưa gửi. |

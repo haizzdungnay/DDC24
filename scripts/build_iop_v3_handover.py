@@ -11,6 +11,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
+from verify_iop_v3_command_reference import verify as verify_commands
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs/01_specs"
@@ -18,6 +20,7 @@ PACKAGE = ROOT / "fw-mcu-handover-2026-09-30"
 ZIP_PATH = ROOT / "fw-mcu-handover-2026-09-30.zip"
 TEMPLATE = ROOT / "scripts/templates/iop_v3_handover_README.md"
 DOCS = (
+    "IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md",
     "SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md",
     "FW_REQUIREMENTS_MK-DDC-24_VI.md",
     "iop_protocol_v3_DRAFT.h",
@@ -92,6 +95,7 @@ def validate_package(manifest_names: list[str]) -> int:
     for i in range(1, 6):
         if f"`RSK-IOP-{i:03d}`" not in vvp:
             raise ValueError(f"Thiếu rủi ro RSK-IOP-{i:03d}")
+    verify_commands(PACKAGE / "IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md", compile_header=False)
     return local_links
 
 
@@ -101,8 +105,8 @@ def main() -> None:
         "--source-commit", help="Commit chứa đúng toàn bộ file nguồn; mặc định HEAD"
     )
     args = parser.parse_args()
-    commit = args.source_commit or subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "--verify", args.source_commit or "HEAD"], cwd=ROOT, text=True
     ).strip()
     inputs = [SOURCE / name for name in DOCS] + list(ASSETS) + [TEMPLATE]
     for path in inputs:
@@ -137,7 +141,7 @@ def main() -> None:
     lines = [
         "# Nguồn gốc và mã băm gói tích hợp IOP V3.0",
         "",
-        "**Bản gói:** R2 · **Ngày:** 2026-09-30",
+        "**Bản gói:** R3 · **Ngày:** 2026-09-30",
         "",
         f"**Commit nguồn tài liệu:** `{commit}`",
         "",

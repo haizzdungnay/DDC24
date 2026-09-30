@@ -17,3 +17,5 @@ Các specification nguồn được phục hồi để giữ đầy đủ ration
 - [Kế hoạch kiểm chứng IOP V3.0: 16 quy trình ICD và ma trận 74 yêu cầu FW](IOP_V3_VERIFICATION_PLAN_MK-DDC-24_VI.md)
 - [Phiếu yêu cầu đầu vào HW cho từng revision bo](IOP_V3_HW_INPUT_FORM_MK-DDC-24_VI.md)
 - [SW/FW design plan](DESIGN_PLAN_SWFW_MK-DDC-24_VI.md)
+
+- [Sổ tay toàn bộ 16 lệnh IOP V3.0: payload, request/response, CRC và xử lý lỗi](IOP_V3_COMMAND_REFERENCE_MK-DDC-24_VI.md)
