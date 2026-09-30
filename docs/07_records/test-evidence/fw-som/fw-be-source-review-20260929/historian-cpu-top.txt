@@ -1,0 +1,29 @@
+File: app.test
+Build ID: a888e2f4e765f609f29ea66b8a22c367be81efd7
+Type: cpu
+Time: 2026-09-29 13:12:01 +07
+Duration: 19.12s, Total samples = 20830ms (108.97%)
+Showing nodes accounting for 8770ms, 42.10% of 20830ms total
+Dropped 543 nodes (cum <= 104.15ms)
+Showing top 20 nodes out of 238
+      flat  flat%   sum%        cum   cum%
+    1120ms  5.38%  5.38%     1120ms  5.38%  internal/sync.(*Mutex).Lock (inline)
+    1060ms  5.09% 10.47%     1300ms  6.24%  runtime.tryDeferToSpanScan
+     800ms  3.84% 14.31%     2240ms 10.75%  modernc.org/sqlite/lib._sqlite3VdbeExec
+     720ms  3.46% 17.76%      720ms  3.46%  internal/sync.(*Mutex).Unlock (inline)
+     680ms  3.26% 21.03%     2210ms 10.61%  runtime.scanObject
+     570ms  2.74% 23.76%      570ms  2.74%  runtime.memmove
+     390ms  1.87% 25.64%      390ms  1.87%  runtime.memclrNoHeapPointers
+     370ms  1.78% 27.41%      370ms  1.78%  modernc.org/libc.Xmemcpy
+     320ms  1.54% 28.95%      320ms  1.54%  crypto/internal/fips140/sha256.blockAVX2
+     280ms  1.34% 30.29%      990ms  4.75%  modernc.org/sqlite/lib.mutexFromPtr
+     270ms  1.30% 31.59%      270ms  1.30%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     260ms  1.25% 32.84%      260ms  1.25%  aeshashbody
+     260ms  1.25% 34.09%      380ms  1.82%  fmt.(*fmt).fmtInteger
+     260ms  1.25% 35.33%     4710ms 22.61%  modernc.org/sqlite/lib._yy_reduce
+     250ms  1.20% 36.53%      250ms  1.20%  runtime.madvise
+     240ms  1.15% 37.69%     2190ms 10.51%  mkddc-web/internal/historian.foldHistorianTierBaseRows
+     240ms  1.15% 38.84%      490ms  2.35%  modernc.org/sqlite/lib._exprDup
+     230ms  1.10% 39.94%      580ms  2.78%  database/sql.convertAssignRows
+     230ms  1.10% 41.05%      340ms  1.63%  modernc.org/sqlite/lib.Xsqlite3_str_vappendf
+     220ms  1.06% 42.10%      220ms  1.06%  modernc.org/libc.(*TLS).Alloc

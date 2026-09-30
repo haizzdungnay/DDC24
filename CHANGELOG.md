@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — Rà soát hiện trạng và dư địa hiệu năng FW SOM / Backend (2026-09-29)
+
+- Thêm `REC-DDC-FW-BE-PERF-20260929` tại source `origin/main@895444be`: kiến trúc và logic Core/IOBus/Go/SHM/IPC/Historian/compiler/platform; đối chiếu tối ưu Plan 63 đã merge và các task còn chờ cổng/số đo target. Ghi 10 finding cùng phương án, ưu tiên, effort/risk, pilot và tiêu chí đo; giữ nguyên source sản phẩm và tài liệu UI đang sửa.
+- Bằng chứng HOST mới: benchmark có sẵn Historian 8 điểm/24 giờ/auto qua 3 lượt × 3 query, 1,121–1,152 s/lượt, khoảng 256,34 MiB tổng cấp phát và 1,893 triệu allocation/lượt; không phải RSS hoặc số đo SOM. Lưu log/pprof top/source hash; profile toàn lệnh có setup/warmup.
+- Kiểm chứng: Go test/vet 4 package PASS (`-count=1`, 4 test compiler production SKIP vì worktree chưa build compiler); C++ timing/RT primitive 24/24 PASS. Kiểm link/hash/JSON, docs ISO và diff check ghi tại `fw-be-source-review-20260929/HOST_EVIDENCE.md`. Full build, TARGET/HIL/soak và browser NOT RUN theo phạm vi review source; chưa nâng gate sản phẩm.
+
+
 ### Changed — Mở rộng review giao diện và phương án cạnh tranh cho đơn vị tích hợp BMS (2026-09-29)
 
 - Nâng `REC-DDC-UI-REVIEW-20260929` và `REC-DDC-UI-PROPOSAL-20260929` lên 1.1; mở rộng 29 tuyến trang Dashboard/Monitor/I/O/Commissioning/Alarm/Trend/Scheduler/Modbus/Diagnostics/Hệ thống/Help. Baseline mới `origin/main@101d1fdf`; giữ finding và bằng chứng Programming 1.0 tại `265f1a8b`, không coi số đo cũ là phép kiểm mới.
