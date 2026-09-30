@@ -1,10 +1,10 @@
 # Quy trình Clean Code & Clean Documentation — MK-DDC-24
 
 **ID:** `WF-CLEAN-001`
-**Phiên bản:** 1.5
+**Phiên bản:** 1.6
 **Trạng thái:** Active
 **Chủ quản:** CTO / Project Engineering
-**Cập nhật:** 2026-09-16 (`§6.2`: thêm cổng `scripts/verify-project.sh --component bacnet` — bản thi hành `ADR-060` điều (4), bắt buộc cho PR chạm `apps/iobus/adapters/bacnet/**`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.5)
+**Cập nhật:** 2026-09-30 (`§8.4` bước 9: xử lý conflict khi đồng bộ nhánh mặc định theo quy trình gỡ conflict PR ở `AGENTS.md`/`CLAUDE.md`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.6)
 
 Tài liệu này là **authority duy nhất** cho quy trình dọn dẹp mã nguồn và tài liệu
 DDC-24. Khi nội dung ở `AGENTS.md`, `CLAUDE.md` hoặc skill khác nhau, bản này đúng.
@@ -869,8 +869,11 @@ trước khi mã vào `main`. Đừng cắt bớt cổng vì "CI sẽ bắt".
    Đọc lại với con mắt của người sẽ FAIL nó: có file nào ngoài Source ownership
    không; có đổi hành vi nào không khai không; từng acceptance criteria có bằng
    chứng chỉ tới được không; có số đo nào chép lại từ phiên trước không.
-   Rồi `git fetch origin main && git merge origin/main`. Conflict thì xử lý an
-   toàn — CHANGELOG conflict thì GIỮ CẢ HAI BÊN, không bên nào đè bên nào.
+   Rồi `git fetch origin main && git merge origin/main`. Conflict thì xử lý theo
+   mục "Quy trình gỡ conflict của một PR" trong `AGENTS.md`/`CLAUDE.md`: hiểu ý
+   định của cả hai phía trước khi chọn, soát cả file git tự gộp, không
+   `--ours`/`--theirs` cả file mã nguồn, kiểm đột biến khi chọn một phía.
+   CHANGELOG conflict thì GIỮ CẢ HAI BÊN, không bên nào đè bên nào.
    Sau khi merge xong phải CHẠY LẠI toàn bộ cổng ở bước 8. Số đo trước khi merge
    không còn đúng cho mã sau khi merge.
 
@@ -1158,6 +1161,7 @@ Phiên Routine KHÔNG có `gh` CLI; mọi thao tác GitHub đi qua `mcp__github_
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.6 | 2026-09-30 | `§8.4` bước 9: câu "Conflict thì xử lý an toàn" không nói an toàn nghĩa là gì. Khi gỡ conflict PR #844, phía `main` (PR #845) đã chuyển quy đổi giá trị lịch lên `evaluate_schedule` theo từng target; giữ phía PR sẽ ép `active_value = 50` của AO lên 100 %. Cả hai lựa chọn đều hết dấu conflict và build được. Bước 9 nay trỏ về quy trình gỡ conflict ở `AGENTS.md`/`CLAUDE.md`: hiểu ý định cả hai phía, soát file tự gộp, cấm `--ours`/`--theirs` cả file mã nguồn, kiểm đột biến khi chọn một phía. Không đổi vai, quyền hay cổng. |
 | 1.5 | 2026-09-16 | `§6.2`: thêm cổng `scripts/verify-project.sh --component bacnet` — bản thi hành `ADR-060` điều (4) (*`BACNET=OFF` không được là đường build duy nhất được kiểm*). Trước đó §6.2 chỉ có khối `cmake`/`ctest` dựng host, không khẳng định gì về việc bacnet-stack có thật sự được biên dịch vào: ngày 2026-09-10 bộ cổng báo **1440/1440 PASS** trong khi `SubscribeCOV` chưa đăng ký và 64/88 object không có dữ liệu. Cổng mới chạy bốn tầng (host `BACNET=ON` → symbol `bip_init` → tầng `LOOPBACK` `#626` chạy thật, không `SKIP` → cross aarch64 + ba cổng kiểm binary `#627`) và ghi rõ hai gói toolchain phải cài, lý do cổng **không** nằm trong `--component all`, cùng trạng thái `NOT_RUN (#414)` của job CI tương ứng. Refs `#628` (`T-BAC-012`). |
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
 | 1.4 | 2026-09-11 | `§1` N1 + `§3.2` mới + `§7`: mẫu `03-finding.yml` không có ô `Manager-Run`, nên mọi finding được triage lên `state:ready` đều bị `N1-MGR` chặn merge ở bước cuối — một lớp Issue không bao giờ merge được, và lối thoát nhanh nhất là Implementer tự bịa một dòng `Manager-Run`. Mẫu nay có ô `Manager-Run` dành riêng cho lượt triage của Manager, và ô người mở đổi nhãn thành `Finder-Run`. Vì trên finding người **tạo** Issue là người phát hiện chứ không phải Manager, guard thêm mã chặn `N1-FINDER` (người mở finding tự implement) và ghi nhận `CẢNH BÁO triage` (tự điền ô triage). Refs `#653`. |
