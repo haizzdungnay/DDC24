@@ -1393,7 +1393,7 @@ function useAiLiveTrend(
         const byTs = new Map<number, LiveTrendSample>()
         for (const s of initialSamples as LiveTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
         for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-limit) }
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-Math.max(200, limit * 2)) }
       })
     })
     return () => {
@@ -1416,7 +1416,7 @@ function useAiLiveTrend(
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-limit)
+      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-Math.max(200, limit * 2))
       return { ...current, [pointId]: next }
     })
   }, [pointId, point, limit])

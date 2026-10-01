@@ -837,7 +837,7 @@ function useOutputTrend(
       const existing = current[pointId] ?? []
       const stampMs = point.updatedAt ? Date.parse(point.updatedAt) : 0
       const ts = Number.isFinite(stampMs) ? stampMs : 0
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-outputTrendLimit) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-Math.max(200, limit * 2)) }
     })
   }, [pointId, point])
 

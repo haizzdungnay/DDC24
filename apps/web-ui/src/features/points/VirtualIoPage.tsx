@@ -592,7 +592,7 @@ function useVpTrend(
         const byTs = new Map<number, VpTrendSample>()
         for (const s of initialSamples as VpTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
         for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-limit) }
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-Math.max(200, limit * 2)) }
       })
     })
     return () => {
@@ -615,7 +615,7 @@ function useVpTrend(
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __ts: ts }].slice(-limit) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __ts: ts }].slice(-Math.max(200, limit * 2)) }
     })
   }, [pointId, point, limit])
 
