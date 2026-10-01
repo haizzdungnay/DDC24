@@ -891,7 +891,7 @@ function TrendPreview() {
       }))
     setSamples((previous) => {
       const byTs = new Map<number, TrendSample>()
-      const cutoff = (rows[rows.length - 1]?.__ts ?? Date.now()) - windowMs
+      const cutoff = Number(rows[rows.length - 1]?.__ts ?? Date.now()) - windowMs
       for (const s of previous) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, s)
       for (const s of rows) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
       return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-1000)

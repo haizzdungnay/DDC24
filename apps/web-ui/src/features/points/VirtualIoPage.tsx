@@ -4,6 +4,9 @@ import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, normalizePointTag, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { fetchRecentTrendSamples } from '../../shared/api/history'
+
+export const VP_LIVE_TREND_WINDOW_MS = 120_000
+export const VP_LIVE_TREND_SAMPLE_LIMIT = 60
 import { Button } from '../../shared/components/Button'
 import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
@@ -568,13 +571,18 @@ export function RestartPolicyField({ item, onChange }: { item: VirtualPoint; onC
 
 type VpTrendSample = TrendSample & { raw: number }
 
-function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; reset: () => void } {
+function useVpTrend(
+  pointId: string,
+  point?: Point,
+  windowMs = VP_LIVE_TREND_WINDOW_MS,
+  limit = VP_LIVE_TREND_SAMPLE_LIMIT
+): { data: VpTrendSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, VpTrendSample[]>>({})
 
   useEffect(() => {
     if (!pointId) return
     let cancelled = false
-    fetchRecentTrendSamples([pointId], 120_000, 60).then((initialSamples) => {
+    fetchRecentTrendSamples([pointId], windowMs, limit).then((initialSamples) => {
       if (cancelled || !initialSamples.length) return
       setBuffers((current) => {
         const existing = current[pointId] ?? []
@@ -584,13 +592,13 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
         const byTs = new Map<number, VpTrendSample>()
         for (const s of initialSamples as VpTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
         for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-60) }
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-limit) }
       })
     })
     return () => {
       cancelled = true
     }
-  }, [pointId])
+  }, [pointId, windowMs, limit])
 
   useEffect(() => {
     if (!point) return
@@ -607,9 +615,9 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __ts: ts }].slice(-60) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __ts: ts }].slice(-limit) }
     })
-  }, [pointId, point])
+  }, [pointId, point, limit])
 
   function reset() {
     const value = point ? pointNumber(point) : null
@@ -635,12 +643,13 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
   useEffect(() => {
     setDraft(String(livePoint?.value ?? item.value ?? defaultValue(item.signalType)))
   }, [item.id, item.signalType, item.value, livePoint?.value])
-  const { data, reset } = useVpTrend(item.id, livePoint)
+  const windowMs = VP_LIVE_TREND_WINDOW_MS
+  const { data, reset } = useVpTrend(item.id, livePoint, windowMs)
   const latestTs = data[data.length - 1]?.__ts
   const xDomain = useMemo<[number, number] | undefined>(() => {
     if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
-    return [latestTs - 120_000, latestTs]
-  }, [latestTs])
+    return [latestTs - windowMs, latestTs]
+  }, [latestTs, windowMs])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),

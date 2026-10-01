@@ -16,6 +16,9 @@ export function displayTrendValue(value: TrendSample[string] | undefined, kind?:
   if (Array.isArray(value)) return value.length === 2 ? `${value[0]} … ${value[1]}` : 'No value'
   if (typeof value === 'string') return value
   if (stepped || kind === 'DO' || kind === 'DI') return value ? 'ON' : 'OFF'
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2)
+  }
   return String(value)
 }
 

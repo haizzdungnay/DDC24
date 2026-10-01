@@ -138,6 +138,54 @@ func TestHistoryRejectsBadRange(t *testing.T) {
 	}
 }
 
+func TestParseHistoryRange(t *testing.T) {
+	cases := []struct {
+		raw     string
+		wantSec int64
+		wantErr bool
+	}{
+		{"5m", 300, false},
+		{"15m", 900, false},
+		{"30m", 1800, false},
+		{"1h", 3600, false},
+		{"6h", 21600, false},
+		{"24h", 86400, false},
+		{"2h", 0, true},
+		{"", 0, true},
+		{"invalid", 0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			got, err := parseHistoryRange(tc.raw)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error for %q, got nil", tc.raw)
+			}
+			if !tc.wantErr && (err != nil || got != tc.wantSec) {
+				t.Fatalf("parseHistoryRange(%q) = (%d, %v), want (%d, nil)", tc.raw, got, err, tc.wantSec)
+			}
+		})
+	}
+}
+
+func TestHistoryAccepts5mAnd15mRanges(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	now := time.Now().UTC().UnixMilli()
+	if err := app.trends.InsertBatch(context.Background(), []Sample{
+		{TS: now - 60_000, PointID: "AI1", Value: 21.5, Quality: 0},
+	}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	for _, r := range []string{"5m", "15m"} {
+		req := newAuthRequest(http.MethodGet, "/api/v1/history?point=UI-01&range="+r, "", token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("range=%s status = %d body=%s", r, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestTrendConfigValidation(t *testing.T) {
 	cases := []struct {
 		name string
