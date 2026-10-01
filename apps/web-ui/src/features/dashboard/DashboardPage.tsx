@@ -843,11 +843,13 @@ function TrendPreview() {
       return
     }
     let cancelled = false
-    const maxPoints = Math.max(120, Math.min(600, rangeMinutes * 20))
+    const maxPoints = Math.max(300, Math.min(1000, rangeMinutes * 30))
     fetchRecentTrendSamples(selected, windowMs, maxPoints).then((initialSamples) => {
       if (cancelled || !initialSamples.length) return
       setSamples((current) => {
-        const cutoff = Date.now() - windowMs
+        // Giữ buffer trước windowMs để Recharts vẽ đường giao cắt trọn vẹn mép trái xDomain
+        const bufferMs = 120_000
+        const cutoff = Date.now() - windowMs - bufferMs
         const byTs = new Map<number, TrendSample>()
         for (const s of initialSamples) {
           if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, s)
@@ -891,7 +893,8 @@ function TrendPreview() {
       }))
     setSamples((previous) => {
       const byTs = new Map<number, TrendSample>()
-      const cutoff = (rows[rows.length - 1]?.__ts ?? Date.now()) - windowMs
+      const bufferMs = 120_000
+      const cutoff = Number(rows[rows.length - 1]?.__ts ?? Date.now()) - windowMs - bufferMs
       for (const s of previous) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, s)
       for (const s of rows) if (typeof s.__ts === 'number' && s.__ts >= cutoff) byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
       return [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-1000)

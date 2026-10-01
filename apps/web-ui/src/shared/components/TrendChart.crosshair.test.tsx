@@ -89,19 +89,27 @@ describe('T57-2.4   HistoryTooltip chi hien thi gon gang ten - gia tri - don vi
     'UI-01:tier': 'cache'
   }
 
-  it('chi hien thi ten, gia tri, don vi va khong chua Quality/Source/Tier/Raw', () => {
+  it('chi hien thi ten, gia tri lam tron, don vi, bo header timestamp va khong chua Quality/Source/Tier/Raw hay series trong', () => {
+    const unroundedSample: TrendSample = {
+      time: '2026-09-30T04:43:00.000Z',
+      'UI-01': 87.937255859375,
+      'UI-01:quality': 'GOOD',
+      'UI-01:source': 'io',
+      'UI-01:tier': 'cache'
+    }
     render(
       <HistoryTooltip
         active
-        payload={[{ dataKey: 'UI-01', value: 87.83, payload: sample }]}
+        payload={[{ dataKey: 'UI-01', value: 87.937255859375, payload: unroundedSample }]}
         label="2026-09-30T04:43:00.000Z"
         series={series}
         timeZone="UTC"
       />
     )
 
-    expect(screen.getByText(/UI-01: 87\.83 V/)).toBeInTheDocument()
-    expect(screen.getByText(/UI-02: \u2014/)).toBeInTheDocument()
+    expect(screen.getByText(/UI-01: 87\.94 V/)).toBeInTheDocument()
+    expect(screen.queryByText(/UI-02/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/2026/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Quality/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Source/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Tier/i)).not.toBeInTheDocument()

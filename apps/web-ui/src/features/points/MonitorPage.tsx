@@ -1,3 +1,43 @@
+function PointForceInput({ point, value, onChange }: { point: Point; value: string; onChange: (val: string) => void }) {
+  if (point.kind === 'DO' || point.signalType === 'boolean') {
+    const isTrue = value === 'true' || value === '1' || String(value).toUpperCase() === 'ON'
+    return (
+      <select
+        value={isTrue ? 'true' : 'false'}
+        onChange={(e) => onChange(e.target.value)}
+        className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+      >
+        <option value="true">ON (True)</option>
+        <option value="false">OFF (False)</option>
+      </select>
+    )
+  }
+  if (point.signalType === 'multistate' && point.states?.length) {
+    return (
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+      >
+        {point.states.map((st) => (
+          <option key={st.value} value={String(st.value)}>
+            {st.value} — {st.label}
+          </option>
+        ))}
+      </select>
+    )
+  }
+  const isNumber = point.signalType === 'integer' || point.signalType === 'float' || point.kind === 'AO' || point.kind === 'UI'
+  return (
+    <input
+      inputMode={isNumber ? 'decimal' : undefined}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+    />
+  )
+}
+
 import { CheckCircle2, Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -132,7 +172,11 @@ function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): P
       logEnabled: meta.logEnabled,
       logIntervalMs: meta.logIntervalMs,
       namespaceState: meta.namespaceState,
-      updatedAt: meta.updatedAt ?? point.updatedAt
+      updatedAt: meta.updatedAt ?? point.updatedAt,
+      states: meta.states ?? point.states,
+      virtualSource: meta.source ?? point.virtualSource,
+      initialValue: meta.initialValue,
+      restartPolicy: meta.restartPolicy
     }]
   })
 }
@@ -143,11 +187,15 @@ function isBinaryPoint(point: Point): boolean {
 }
 
 function canForcePoint(point: Point): boolean {
-  return point.kind === 'DO' || point.kind === 'AO' || (point.kind === 'virtual' && point.writable === true)
+  if (point.kind === 'virtual') {
+    return point.writable === true && point.virtualSource !== 'PROGRAM' && point.source !== 'PROGRAM'
+  }
+  return point.kind === 'DO' || point.kind === 'AO'
 }
 
 function defaultForceValue(point: Point): string {
-  if (point.kind === 'DO') return String(!point.value)
+  if (point.kind === 'DO' || point.signalType === 'boolean') return typeof point.value === 'boolean' ? String(point.value) : 'false'
+  if (point.signalType === 'multistate') return String(point.value ?? 0)
   if (point.kind === 'virtual') return String(point.value ?? '')
   /* `pointNumber` trả `null` khi point chưa có số đo dùng được. `String(null)`
      cho ra chuỗi `"null"` và nó ĐI THẲNG vào ô "Giá trị mới" của hộp thoại ép
@@ -161,6 +209,11 @@ function defaultForceValue(point: Point): string {
 function parseForceValue(point: Point, raw: string): number | boolean | string {
   const value = raw.trim()
   if (point.kind === 'DO' || point.signalType === 'boolean') return value === 'true' || value === '1' || value.toUpperCase() === 'ON'
+  if (point.signalType === 'multistate') {
+    const num = Number(value)
+    if (!Number.isFinite(num)) throw new Error('Force value must be a valid state number')
+    return Math.trunc(num)
+  }
   if (point.signalType === 'string') return value
   if (point.signalType === 'datetime') {
     if (Number.isNaN(new Date(value).getTime())) throw new Error('Force value must be a datetime')
@@ -355,7 +408,11 @@ export function MonitorPage() {
     UI: filtered.filter((point) => point.kind === 'UI'),
     DO: filtered.filter((point) => point.kind === 'DO'),
     AO: filtered.filter((point) => point.kind === 'AO'),
-    Virtual: filtered.filter((point) => point.kind === 'virtual'),
+    Virtual: filtered.filter((point) => point.kind === 'virtual').sort((a, b) => {
+      const numA = parseInt(a.id.replace(/\D/g, ''), 10) || 0
+      const numB = parseInt(b.id.replace(/\D/g, ''), 10) || 0
+      return numA - numB
+    }),
     Modbus: filtered.filter((point) => point.kind === 'modbus_rtu')
   }), [filtered])
 
@@ -793,7 +850,7 @@ export function MonitorPage() {
 
             <label className="block text-sm">
               {pick('Giá trị mới', 'New value')}
-              <input value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" />
+              <PointForceInput point={selected} value={forceValue} onChange={setForceValue} />
             </label>
             {selected.kind !== 'virtual' && (
               <label className="block text-sm">
@@ -842,7 +899,7 @@ function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDe
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="flex border-b border-[var(--c-border)] py-2 pl-3 text-[10px] uppercase text-[var(--c-text-dim)]">
         {bulkSelection && <span className="w-[30px] shrink-0" />}
-        <div className={`grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_112px_128px_104px]`}>
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(140px,200px)_minmax(150px,1fr)_112px_128px_104px] items-center gap-x-3">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Trạng thái', 'Status')}</span><span>{pick('Thời gian cập nhật', 'Updated at')}</span><span>{pick('Còn lại', 'Remaining')}</span></div><span className="w-[60px] shrink-0" />
       </div>
       {rows.map((point) => <DigitalRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />)}
@@ -882,10 +939,10 @@ function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onT
         type="button"
         onClick={() => onSelect(point.id)}
         onDoubleClick={() => onOpenDetails(point)}
-        className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_112px_128px_104px] items-center py-2 pl-3 text-left transition hover:bg-[var(--c-accent-bg)]"
+        className="grid min-w-0 flex-1 grid-cols-[minmax(140px,200px)_minmax(150px,1fr)_112px_128px_104px] items-center gap-x-3 py-2 pl-3 text-left transition hover:bg-[var(--c-accent-bg)]"
       >
-        <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-        <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
+        <span className="mono min-w-0 truncate font-semibold" title={pointDisplayTag(point)}>{pointDisplayTag(point)}</span>
+        <span className="min-w-0 truncate font-semibold" title={point.name}>{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
         <span className={cn('inline-flex items-center gap-2 rounded px-1 font-semibold', flash)} style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
         <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
         {/* T57-1.3 (§6.2-P1b) — cột "Còn lại" ngay trên bảng.
@@ -919,7 +976,7 @@ function AnalogSection({ title, rows, selectedId, conflicts, onSelect, onOpenDet
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="flex border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
         {bulkSelection && <span className="w-[30px] shrink-0" />}
-        <div className={`grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px]`}>
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(140px,200px)_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center gap-x-3">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Đơn vị', 'Unit')}</span><span>{pick('Trạng thái', 'Status')}</span><span>Trend</span><span>{pick('Cập nhật', 'Updated')}</span><span>{pick('Còn lại', 'Remaining')}</span></div><span className="w-[76px] shrink-0" />
       </div>
       {rows.map((point) => <AnalogRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />)}
@@ -1017,9 +1074,9 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
        cùng một trang. */
     <div className={cn('flex w-full items-center border-b border-[var(--c-border)] px-3 text-xs transition last:border-0', selected && 'bg-[var(--c-accent-bg)]')}>
       <BulkSelectCell point={point} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />
-      <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center py-2 text-left transition hover:bg-[var(--c-accent-bg)]">
-        <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-        <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
+      <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className="grid min-w-0 flex-1 grid-cols-[minmax(140px,200px)_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center gap-x-3 py-2 text-left transition hover:bg-[var(--c-accent-bg)]">
+        <span className="mono min-w-0 truncate font-semibold" title={point.kind === 'virtual' ? point.id : pointDisplayTag(point)}>{point.kind === 'virtual' ? point.id : pointDisplayTag(point)}</span>
+        <span className="min-w-0 truncate font-semibold" title={point.kind === 'virtual' ? (point.name && point.name !== point.id ? point.name : point.tag) : point.name}>{point.kind === 'virtual' ? (point.name && point.name !== point.id ? point.name : point.tag) : point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
         <span className={cn('mono rounded px-1', flash)}>{notConfigured ? NO_DATA : point.signalType === 'multistate' || typeof point.value !== 'number' ? formatPointValue(point) : point.value.toFixed(1)}</span>
         {/* AO: số ở cột bên là tín hiệu ra thô của Core, nên nhãn phải là đơn vị
             tín hiệu thật (`rawUnit`: V hay mA theo MODE của kênh) chứ không
@@ -1508,14 +1565,7 @@ function PointDetailsModal({
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Force value', 'Force value')}</span>
-                {point.kind === 'DO' ? (
-                  <select value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]">
-                    <option value="true">ON</option>
-                    <option value="false">OFF</option>
-                  </select>
-                ) : (
-                  <input type={point.kind === 'virtual' && (point.signalType === 'string' || point.signalType === 'datetime') ? 'text' : 'number'} value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
-                )}
+                <PointForceInput point={point} value={forceValue} onChange={setForceValue} />
               </label>
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Duration (min)', 'Duration (min)')}</span>

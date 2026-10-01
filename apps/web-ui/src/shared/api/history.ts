@@ -406,7 +406,10 @@ export async function fetchRecentTrendSamples(
   const canonicalIds = pointIds.filter(isCanonicalPointId).slice(0, 8)
   if (!canonicalIds.length) return []
   const now = Date.now()
-  const from = new Date(now - windowMs)
+  // Bổ sung buffer lùi quá khứ để mẫu cũ nhất luôn nằm trước mép trái biểu đồ,
+  // bù trừ độ trễ chốt bucket 15s của backend và tránh bị khoảng trắng đầu trục.
+  const lookbackBufferMs = Math.max(120_000, Math.round(windowMs * 0.25))
+  const from = new Date(now - windowMs - lookbackBufferMs)
   const to = new Date(now)
 
   if (HISTORIAN_V2_TRENDS_ENABLED) {

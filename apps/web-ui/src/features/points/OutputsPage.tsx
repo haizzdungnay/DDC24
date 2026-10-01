@@ -27,6 +27,7 @@ type Translate = ReturnType<typeof useI18n>['t']
 type LiveSample = TrendSample & { raw: number }
 
 const emptyOutputs: OutputsConfig = { ao: [], do: [] }
+export const OUTPUT_LIVE_TREND_WINDOW_MS = 120_000
 const outputTrendLimit = 60
 const aoWizardKeys: Array<keyof AoConfig> = ['mode', 'units', 'minPv', 'maxPv', 'safeValue', 'manualValue']
 const doWizardKeys: Array<keyof DoConfig> = ['safeState', 'manualValue']
@@ -498,11 +499,12 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
       return engineering === null ? sample : { ...sample, raw: engineering, [output.id]: engineering }
     })
   }, [signalData, output])
+  const windowMs = OUTPUT_LIVE_TREND_WINDOW_MS
   const latestTs = data[data.length - 1]?.__ts
   const xDomain = useMemo<[number, number] | undefined>(() => {
     if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
-    return [latestTs - 120_000, latestTs]
-  }, [latestTs])
+    return [latestTs - windowMs, latestTs]
+  }, [latestTs, windowMs])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
@@ -789,14 +791,19 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
   )
 }
 
-function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; reset: () => void } {
+function useOutputTrend(
+  pointId: string,
+  point?: Point,
+  windowMs = OUTPUT_LIVE_TREND_WINDOW_MS,
+  limit = outputTrendLimit
+): { data: LiveSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, LiveSample[]>>({})
   const lastKeyRef = useRef('')
 
   useEffect(() => {
     if (!pointId) return
     let cancelled = false
-    fetchRecentTrendSamples([pointId], 120_000, outputTrendLimit).then((initialSamples) => {
+    fetchRecentTrendSamples([pointId], windowMs, limit).then((initialSamples) => {
       if (cancelled || !initialSamples.length) return
       setBuffers((current) => {
         const existing = current[pointId] ?? []
@@ -830,7 +837,7 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
       const existing = current[pointId] ?? []
       const stampMs = point.updatedAt ? Date.parse(point.updatedAt) : 0
       const ts = Number.isFinite(stampMs) ? stampMs : 0
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-outputTrendLimit) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-Math.max(200, limit * 2)) }
     })
   }, [pointId, point])
 

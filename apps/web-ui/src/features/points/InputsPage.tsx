@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { fetchRecentTrendSamples } from '../../shared/api/history'
+
+export const AI_LIVE_TREND_WINDOW_MS = 120_000
+export const AI_LIVE_TREND_SAMPLE_LIMIT = 60
 import { Button } from '../../shared/components/Button'
 import { DraftDiffTable } from '../../shared/components/DraftDiffTable'
 import { Modal } from '../../shared/components/Modal'
@@ -1249,12 +1252,13 @@ function DiagnosticsTab({
   const { pick } = useI18n()
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)
-  const { data, reset } = useAiLiveTrend(pointId, point)
+  const windowMs = AI_LIVE_TREND_WINDOW_MS
+  const { data, reset } = useAiLiveTrend(pointId, point, windowMs)
   const latestTs = data[data.length - 1]?.__ts
   const xDomain = useMemo<[number, number] | undefined>(() => {
     if (typeof latestTs !== 'number' || !Number.isFinite(latestTs)) return undefined
-    return [latestTs - 120_000, latestTs]
-  }, [latestTs])
+    return [latestTs - windowMs, latestTs]
+  }, [latestTs, windowMs])
   const booleanInput = isDigitalContact(config.signalType) || typeof point?.value === 'boolean'
   const values = booleanInput ? [] : data.map((sample) => sample.raw)
   const stats = values.length > 0
@@ -1368,13 +1372,18 @@ function LiveDataItem({ label, value }: { label: string; value: string }) {
   )
 }
 
-function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample[]; reset: () => void } {
+function useAiLiveTrend(
+  pointId: string,
+  point?: Point,
+  windowMs = AI_LIVE_TREND_WINDOW_MS,
+  limit = AI_LIVE_TREND_SAMPLE_LIMIT
+): { data: LiveTrendSample[]; reset: () => void } {
   const [buffers, setBuffers] = useState<Record<string, LiveTrendSample[]>>({})
 
   useEffect(() => {
     if (!pointId) return
     let cancelled = false
-    fetchRecentTrendSamples([pointId], 120_000, 60).then((initialSamples) => {
+    fetchRecentTrendSamples([pointId], windowMs, limit).then((initialSamples) => {
       if (cancelled || !initialSamples.length) return
       setBuffers((current) => {
         const existing = current[pointId] ?? []
@@ -1384,13 +1393,13 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
         const byTs = new Map<number, LiveTrendSample>()
         for (const s of initialSamples as LiveTrendSample[]) if (typeof s.__ts === 'number') byTs.set(s.__ts, s)
         for (const s of existing) if (typeof s.__ts === 'number') byTs.set(s.__ts, { ...byTs.get(s.__ts), ...s })
-        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-60) }
+        return { ...current, [pointId]: [...byTs.values()].sort((a, b) => Number(a.__ts ?? 0) - Number(b.__ts ?? 0)).slice(-Math.max(200, limit * 2)) }
       })
     })
     return () => {
       cancelled = true
     }
-  }, [pointId])
+  }, [pointId, windowMs, limit])
 
   useEffect(() => {
     if (!point) return
@@ -1407,10 +1416,10 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-60)
+      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null, __ts: ts }].slice(-Math.max(200, limit * 2))
       return { ...current, [pointId]: next }
     })
-  }, [pointId, point])
+  }, [pointId, point, limit])
 
   function reset() {
     const value = point ? pointNumber(point) : null

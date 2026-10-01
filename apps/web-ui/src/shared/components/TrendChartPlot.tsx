@@ -87,29 +87,22 @@ export function TrendChartPlot({ data, series, rawUnit, timeZone, hasTimeAxis, b
   )
 }
 
-export function HistoryTooltip({ active, payload, label, series, rawUnit: _rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
+export function HistoryTooltip({ active, payload, series }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone?: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
-  /* `T57-2.4` — CON TRỎ ĐỌC GIÁ TRỊ: duyệt theo `series`, không theo `payload`.
-   *
-   * `payload` của recharts chỉ chứa những chuỗi CÓ giá trị ở đúng hàng đang
-   * hover. Với dữ liệu thưa (mỗi điểm một nhịp lấy mẫu riêng), chuỗi thiếu mẫu
-   * ở hàng đó biến mất khỏi tooltip — người dùng không phân biệt được "chuỗi
-   * này không có dữ liệu tại đây" với "chuỗi này không được chọn".
-   *
-   * So sánh setpoint với giá trị thực tại đúng thời điểm sự cố là thao tác chẩn
-   * đoán cơ bản nhất; nó chỉ làm được khi mọi chuỗi cùng xuất hiện tại một mốc.
-   * Chuỗi không có mẫu hiện `—` — đúng luật "thiếu dữ liệu thì nói ra". */
-  const row: TrendSample = payload[0]?.payload ?? { time: String(label ?? '') }
+  const row: TrendSample = payload[0]?.payload ?? { time: '' }
+  const activeSeries = series.filter((item) => {
+    const raw = row[item.key]
+    return raw !== undefined && raw !== null
+  })
+  if (!activeSeries.length) return null
   return (
     <div className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-xs shadow-lg">
-      <div className="mb-1 font-semibold">{formatTrendTime(label ?? '', timeZone)}</div>
-      {series.map((item) => {
+      {activeSeries.map((item) => {
         const raw = row[item.key]
-        const missing = raw === undefined || raw === null
         return (
           <div key={item.key}>
             <span style={{ color: item.color }}>■</span>{' '}
-            <span>{item.label}: {missing ? '—' : displayTrendValue(raw as number, item.kind, item.stepped)}{!missing && item.unit ? ` ${item.unit}` : ''}</span>
+            <span>{item.label}: {displayTrendValue(raw, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</span>
           </div>
         )
       })}
