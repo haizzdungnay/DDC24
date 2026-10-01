@@ -700,6 +700,10 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	}
 	item.Value = nextValue
 	item.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if item.InitialValue != nil || normalizeVirtualPointRestartPolicy(item.RestartPolicy) == virtualPointRestartInitial {
+		item.InitialValue = nextValue
+	}
+	item.RestartPolicy = virtualPointRestartRetain
 	cfg.Items[index] = item
 	timing.mark(nil)
 	if err := a.writeVirtualPointsConfig(r, cfg, "write"); err != nil {
