@@ -266,6 +266,22 @@ bool SimSession::set_input(const std::string& observation_id, const StValue& val
      * giá trị trước đó y nguyên, không phải một giá trị nửa vời. */
     input_values_[found] = value;
     input_written_[found] = 1;
+
+    for (std::size_t index = 0; index < programs_.size(); ++index) {
+        if (programs_[index].program_name == descriptor.program_name) {
+            runtimes_[index].runtime->set_variable(descriptor.variable, value);
+            break;
+        }
+    }
+
+    for (SimObservation& observation : observations_) {
+        if (observation.observation_id == observation_id) {
+            observation.value = value;
+            observation.has_value = true;
+            break;
+        }
+    }
+    ++snapshot_sequence_;
     return true;
 }
 

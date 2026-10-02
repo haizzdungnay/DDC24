@@ -251,56 +251,26 @@ export function useSimulation({ recoverActiveSession = false }: UseSimulationOpt
           return updated
         })
 
-        // Chạy nhịp ngay để bộ mô phỏng tính toán đầu vào mới và cập nhật frame
-        if (readBack.state === 'PAUSED') {
-          try {
-            const stepBack = await client.request<SimulationSessionView>('actProgrammingSimulationSession', {
-              path: { sessionId: readBack.sessionId },
-              body: { schemaVersion: '1.0', action: 'STEP_CYCLE' },
-              ifMatch: readBack.etag,
-              idempotencyKey: createUuid(),
-              correlationId: createUuid(),
-            })
-            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
-              path: { sessionId: readBack.sessionId },
-              correlationId: createUuid(),
-            })
-            if (mountedRef.current) {
-              setSlice((current) => acceptFrame(acceptSession(current, stepBack), frame))
-            }
-          } catch {
-            try {
-              const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
-                path: { sessionId: readBack.sessionId },
-                correlationId: createUuid(),
-              })
-              if (mountedRef.current) {
-                setSlice((current) => acceptFrame(current, frame))
-              }
-            } catch {
-              /* ignore */
-            }
+        // Luôn đọc lại frame quan sát mới nhất sau khi ghi input
+        try {
+          const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+            path: { sessionId: readBack.sessionId },
+            correlationId: createUuid(),
+          })
+          if (mountedRef.current) {
+            setSlice((current) => acceptFrame(current, frame))
           }
-        } else {
-          try {
-            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
-              path: { sessionId: readBack.sessionId },
-              correlationId: createUuid(),
-            })
-            if (mountedRef.current) {
-              setSlice((current) => acceptFrame(current, frame))
-            }
-          } catch {
-            /* ignore */
-          }
+        } catch {
+          /* ignore */
         }
       } catch (reason) {
         if (!mountedRef.current) return
         const described = describe(reason, 'Không ghi được giá trị mô phỏng.', 'Could not write the simulation value.')
         setSlice((current) => acceptDenial(current, described))
+        await reconcile()
       }
     },
-    [client, describe],
+    [client, describe, reconcile],
   )
 
   const loadActive = useCallback<SimulationController['loadActive']>(async () => {
