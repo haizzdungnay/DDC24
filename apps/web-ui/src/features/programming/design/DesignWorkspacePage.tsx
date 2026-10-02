@@ -1116,6 +1116,7 @@ export function DesignWorkspacePage({
             role={session?.role}
             slice={simulation.slice}
             inputs={simulation.inputs}
+            bindings={workspaceDocument?.bindings}
             objectId={selectedObjectId}
             program={selectedProgram}
             draftDirty={draftDirty}

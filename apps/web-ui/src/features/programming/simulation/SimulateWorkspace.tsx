@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useI18n } from '../../../shared/i18n'
-import { useProgrammingRevision } from '../api/queries'
+import { useLazyProgrammingPointCatalog, useProgrammingRevision } from '../api/queries'
 import { activeProgramSource } from '../overview/activeProgramSet'
 import { LiveFbdView } from '../design/LiveFbdView'
 import { parseLiveFbd } from '../design/LiveProgramView'
@@ -16,7 +16,7 @@ import {
   type SimulationInputDescriptor,
   type SimulationSlice,
 } from './simulationSession'
-import type { ProgrammingProgram, ProgrammingSimulationCapability } from '../model/types'
+import type { ProgrammingBinding, ProgrammingPointCatalogEntry, ProgrammingProgram, ProgrammingSimulationCapability } from '../model/types'
 import type { FbdDocument } from '../fbd/model'
 
 /**
@@ -37,6 +37,8 @@ export function SimulateWorkspace({
   role,
   slice,
   inputs,
+  bindings,
+  pointCatalogItems: pointCatalogItemsProp,
   objectId,
   draftDirty,
   draftRevisionId,
@@ -53,6 +55,8 @@ export function SimulateWorkspace({
   role: string | undefined
   slice: SimulationSlice
   inputs: readonly SimulationInputDescriptor[]
+  bindings?: readonly ProgrammingBinding[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   objectId: string | undefined
   draftDirty: boolean
   /** Revision đã lưu gần nhất — nguồn hợp lệ DUY NHẤT để mở phiên. */
@@ -72,6 +76,16 @@ export function SimulateWorkspace({
   const { pick } = useI18n()
   const session = currentSession(slice)
   const supported = isSimulationSupported(capability)
+  const lazyCatalog = useLazyProgrammingPointCatalog()
+  const { ensureLoaded } = lazyCatalog
+
+  useEffect(() => {
+    if (!pointCatalogItemsProp) {
+      ensureLoaded()
+    }
+  }, [pointCatalogItemsProp, ensureLoaded])
+
+  const pointCatalogItems = pointCatalogItemsProp ?? lazyCatalog.data?.items
   const canControl = allowMutation && canControlSimulation(capability, role)
 
   const isStaleSession = Boolean(
@@ -338,8 +352,15 @@ export function SimulateWorkspace({
               runtime={simulationOverlayState}
             />
           </div>
-          <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto">
-            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto min-h-0 max-h-[380px] lg:max-h-[460px] [scrollbar-gutter:stable]">
+            <VirtualInputs
+              inputs={inputs}
+              slice={slice}
+              canControl={canControl}
+              onCommit={onSetInput}
+              bindings={bindings}
+              pointCatalogItems={pointCatalogItems}
+            />
           </aside>
         </div>
       ) : sealed.source !== null && sealed.language !== 'FBD' ? (
@@ -359,8 +380,15 @@ export function SimulateWorkspace({
             </label>
           </div>
 
-          <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 min-h-0 max-h-[380px] lg:max-h-[460px] overflow-y-auto [scrollbar-gutter:stable]">
+            <VirtualInputs
+              inputs={inputs}
+              slice={slice}
+              canControl={canControl}
+              onCommit={onSetInput}
+              bindings={bindings}
+              pointCatalogItems={pointCatalogItems}
+            />
           </aside>
         </div>
       ) : (
