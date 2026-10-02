@@ -6,6 +6,8 @@ import { LiveFbdView } from '../design/LiveFbdView'
 import { parseLiveFbd } from '../design/LiveProgramView'
 import { SimulationControls } from './SimulationControls'
 import { VirtualInputs } from './VirtualInputs'
+import { StSimulatedSourceViewer } from './StSimulatedSourceViewer'
+
 import { StRuntimeValueOverlay, type StRuntimeOverlayItem, type StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
 import {
   canControlSimulation,
@@ -365,20 +367,15 @@ export function SimulateWorkspace({
         </div>
       ) : sealed.source !== null && sealed.language !== 'FBD' ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="space-y-2">
-            <label className="block space-y-1">
-              <span className="text-[11px] uppercase text-[var(--c-text-dim)]">
-                {pick('Mã nguồn đang mô phỏng', 'Simulated source')}
-              </span>
-              <textarea
-                readOnly
-                aria-label={pick('Mã nguồn đang mô phỏng', 'Simulated source')}
-                value={sealed.source}
-                rows={16}
-                className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 font-mono text-xs"
-              />
-            </label>
-          </div>
+          <StSimulatedSourceViewer
+            source={sealed.source}
+            runtime={simulationOverlayState}
+            slice={slice}
+            inputs={inputs}
+            bindings={bindings}
+            pointCatalogItems={pointCatalogItems}
+            programName={program?.name}
+          />
 
           <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 min-h-0 max-h-[380px] lg:max-h-[460px] overflow-y-auto [scrollbar-gutter:stable]">
             <VirtualInputs

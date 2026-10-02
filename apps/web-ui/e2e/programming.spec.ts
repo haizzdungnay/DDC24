@@ -2663,7 +2663,7 @@ test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
     /* Nguồn hiện trên màn hình phải là bản đã NIÊM PHONG của phiên, không phải
        Draft đang gõ và cũng không phải bản đang chạy trên tủ. */
     const sealed = page.getByLabel(/Mã nguồn đang mô phỏng|Simulated source/)
-    await expect(sealed).toHaveValue(/AHU_DA_NIEM_PHONG/)
+    await expect(sealed).toContainText(/AHU_DA_NIEM_PHONG/)
 
     await page.getByRole('button', { name: /^(Một nhịp|Step)$/ }).click()
 
