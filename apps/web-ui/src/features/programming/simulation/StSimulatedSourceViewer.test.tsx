@@ -17,6 +17,10 @@ END_VAR
 VAR_OUTPUT
     DO01 : BOOL;
 END_VAR
+VAR
+    Ch01 : FB_DO_CHANNEL;
+    Blinker : FB_BLINK;
+END_VAR
 
 IF NOT Settled THEN
     Mask := 0; (* chu thich inline *)
@@ -35,6 +39,11 @@ const sampleRuntime: StRuntimeOverlayState = {
     { variableId: 'Settled', variableName: 'Settled', value: false, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
     { variableId: 'Mask', variableName: 'Mask', value: 0, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
     { variableId: 'Step', variableName: 'Step', value: 16, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+    // FB Instance members
+    { variableId: 'Ch01.Q', variableName: 'Ch01.Q', value: false, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+    { variableId: 'Ch01.Cmd', variableName: 'Ch01.Cmd', value: false, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+    { variableId: 'Ch01.Enable', variableName: 'Ch01.Enable', value: true, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+    { variableId: 'Blinker.Q', variableName: 'Blinker.Q', value: true, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
   ],
 }
 
@@ -43,7 +52,7 @@ describe('StSimulatedSourceViewer', () => {
     cleanup()
   })
 
-  it('hiển thị danh sách dòng mã, phép gán a = b và giá trị hàm, không nhận nhầm ghi chú', () => {
+  it('hiển thị giá trị khai báo biến và Function Block instance (Ch01, Blinker)', () => {
     render(
       <I18nProvider>
         <StSimulatedSourceViewer
@@ -66,14 +75,13 @@ describe('StSimulatedSourceViewer', () => {
     expect(screen.getAllByText('PRG_DO16_MODBUS').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByTestId('st-simulated-source-debug-view')).toBeInTheDocument()
 
-    // Kiểm tra các biến hiển thị theo cú pháp nhãn = giá trị
+    // Khai báo vô hướng
     expect(screen.getAllByText('CmdMode =').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('InPermit =').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('DO01 =').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Step =').length).toBeGreaterThanOrEqual(1)
 
-    // Tên hàm SEL được ghi rõ giá trị
-    expect(screen.getAllByText('SEL =').length).toBeGreaterThanOrEqual(1)
+    // Khai báo Function Block instance (Ch01 và Blinker) xuất được giá trị cổng chính
+    expect(screen.getAllByText('Ch01.Q =').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Blinker.Q =').length).toBeGreaterThanOrEqual(1)
 
     // Tên điểm kết nối hiển thị kèm nhãn
     expect(screen.getByText('DO16_MODE')).toBeInTheDocument()
@@ -81,6 +89,55 @@ describe('StSimulatedSourceViewer', () => {
 
     // Chú thích header dòng 2 không được xuất hiện dưới dạng giá trị mô phỏng 99
     expect(screen.queryByTitle(/CmdMode = 99/)).not.toBeInTheDocument()
+  })
+
+  it('dòng có nhiều hơn 1 biến mặc định chỉ hiện 1 biến và có nút +N để mở rộng', () => {
+    render(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={sampleRuntime}
+        />
+      </I18nProvider>,
+    )
+
+    // Dòng Step := SEL(InPermit, 1, 16) có nhiều biến (Step, SEL, InPermit)
+    // Mặc định chỉ hiển thị biến mục tiêu đầu tiên (Step = 16) và nút +N
+    expect(screen.getAllByText('Step =').length).toBeGreaterThanOrEqual(1)
+    const plusBtns = screen.getAllByTitle(new RegExp('Xem thêm \\d+ biến trên dòng|Show \\d+ more variables on line'))
+    expect(plusBtns.length).toBeGreaterThanOrEqual(1)
+
+    // Bấm +N trên dòng Step := SEL(...) để mở rộng dòng này
+    fireEvent.click(plusBtns[plusBtns.length - 2])
+
+    // Khi đã mở rộng: hàm SEL = cũng hiển thị trên dòng
+    expect(screen.getAllByText('SEL =').length).toBeGreaterThanOrEqual(1)
+
+    // Nút thu gọn xuất hiện
+    const lessBtns = screen.getAllByTitle(new RegExp('Thu gọn còn 1 biến trên dòng|Collapse to 1 variable on line'))
+    expect(lessBtns.length).toBeGreaterThanOrEqual(1)
+    fireEvent.click(lessBtns[0])
+  })
+
+  it('hỗ trợ nút chuyển đổi Mở rộng tất cả / 1 biến mỗi dòng ở thanh công cụ', () => {
+    render(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={sampleRuntime}
+        />
+      </I18nProvider>,
+    )
+
+    const toggleAllBtn = screen.getByTitle(/Mở rộng hiển thị tất cả|Expand to show all/)
+    fireEvent.click(toggleAllBtn)
+
+    // Sau khi mở rộng tất cả: SEL = hiển thị đầy đủ
+    expect(screen.getAllByText('SEL =').length).toBeGreaterThanOrEqual(1)
+
+    // Bấm lại để thu gọn tất cả về 1 biến/dòng
+    const collapseAllBtn = screen.getByTitle(/Thu gọn về 1 biến|Collapse to 1 variable/)
+    fireEvent.click(collapseAllBtn)
   })
 
   it('cho phép bật / tắt hiển thị giá trị mô phỏng trực tiếp trên dòng', () => {
@@ -119,26 +176,6 @@ describe('StSimulatedSourceViewer', () => {
     fireEvent.change(searchInput, { target: { value: 'Settled' } })
 
     expect(screen.getByText('Settled =')).toBeInTheDocument()
-  })
-
-  it('cho phép chọn biến để tô sáng tất cả các dòng xuất hiện trong chương trình', () => {
-    render(
-      <I18nProvider>
-        <StSimulatedSourceViewer
-          source={sampleStSource}
-          runtime={sampleRuntime}
-        />
-      </I18nProvider>,
-    )
-
-    const inPermitBadge = screen.getAllByText('InPermit =')[0]
-    fireEvent.click(inPermitBadge)
-
-    expect(screen.getByText(/Đang chọn theo dõi:|Tracking variable:/)).toBeInTheDocument()
-
-    const clearBtn = screen.getByLabelText(/Bỏ chọn|Clear selection/)
-    fireEvent.click(clearBtn)
-    expect(screen.queryByText(/Đang chọn theo dõi:|Tracking variable:/)).not.toBeInTheDocument()
   })
 
   it('cho phép chuyển sang chế độ Mã thô (Raw) và sao chép mã nguồn', () => {

@@ -8,6 +8,9 @@ import {
   Code2,
   X,
   Activity,
+  ChevronLeft,
+  UnfoldHorizontal,
+  FoldHorizontal,
 } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import {
@@ -73,6 +76,9 @@ const ST_KEYWORDS_SET = new Set([
   'AND', 'OR', 'XOR', 'NOT', 'MOD', 'TRUE', 'FALSE', 'RETURN', 'EXIT',
   'BOOL', 'INT', 'DINT', 'UINT', 'SINT', 'USINT', 'REAL', 'LREAL', 'TIME', 'STRING', 'BYTE', 'WORD', 'DWORD',
 ])
+
+// Ưu tiên cổng xuất chính của Function Block để hiển thị huy hiệu đầu tiên
+const PRIORITY_PORTS = ['q', 'out', 'pulse', 'stages', 'cv', 'y', 'mask', 'starts', 'waiting', 'cmd', 'enable']
 
 /**
  * Loại bỏ toàn bộ chú thích (cả block (* ... *) lẫn line // ...) trên toàn văn bản,
@@ -160,6 +166,7 @@ export interface LineBadgeItem {
 
 export interface ResolvedVariableValue {
   variableName: string
+  fullName?: string
   observationId: string
   displayValue: string
   state: 'live' | 'uncertain' | 'stale' | 'invalid'
@@ -205,6 +212,10 @@ export function StSimulatedSourceViewer({
     return true
   })
 
+  // Mặc định: thu gọn chỉ hiện 1 biến mỗi dòng; người dùng có thể bấm 'Mở rộng tất cả' hoặc nút '+N' từng dòng
+  const [expandAll, setExpandAll] = useState<boolean>(false)
+  const [expandedLines, setExpandedLines] = useState<Set<number>>(new Set())
+
   const [viewMode, setViewMode] = useState<'debug' | 'raw'>('debug')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedVariable, setSelectedVariable] = useState<string | null>(null)
@@ -220,6 +231,18 @@ export function StSimulatedSourceViewer({
     x: number
     y: number
   } | null>(null)
+
+  const toggleLineExpand = (lineNumber: number) => {
+    setExpandedLines((prev) => {
+      const next = new Set(prev)
+      if (next.has(lineNumber)) {
+        next.delete(lineNumber)
+      } else {
+        next.add(lineNumber)
+      }
+      return next
+    })
+  }
 
   const toggleInlineValues = () => {
     setShowInlineValues((prev) => {
@@ -277,6 +300,7 @@ export function StSimulatedSourceViewer({
 
       const resolved: ResolvedVariableValue = {
         variableName: cleanVarName,
+        fullName: item.variableName,
         observationId: item.variableId,
         displayValue: presentation.displayValue,
         state: presentation.state,
@@ -317,6 +341,7 @@ export function StSimulatedSourceViewer({
 
         const resolved: ResolvedVariableValue = {
           variableName: cleanVar,
+          fullName: obs.variable || obs.observationId,
           observationId: obs.observationId,
           displayValue: presentation.displayValue,
           state: presentation.state,
@@ -370,7 +395,7 @@ export function StSimulatedSourceViewer({
     return maskAllComments(source)
   }, [source])
 
-  // Phân tích dòng chuyên sâu: gán a := b, gọi hàm func(...), khai báo var : TYPE
+  // Phân tích dòng chuyên sâu: gán a := b, gọi hàm func(...), khai báo var : TYPE và FB instance
   const analyzeLine = useMemo(() => {
     return (lineIndex: number): {
       badges: LineBadgeItem[]
@@ -398,8 +423,10 @@ export function StSimulatedSourceViewer({
       // 2. Kiểm tra khai báo: varName : TYPE;
       const declMatch = maskedText.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:;|:=)/)
       let declVar: string | null = null
+      let declType: string | null = null
       if (declMatch && !ST_KEYWORDS_SET.has(declMatch[1].toUpperCase())) {
         declVar = declMatch[1]
+        declType = declMatch[2]
       }
 
       // 3. Kiểm tra các hàm được gọi trên dòng: funcName(...)
@@ -449,12 +476,10 @@ export function StSimulatedSourceViewer({
 
       // Nạp kết quả gọi hàm trên dòng (ví dụ SEL = 1 hoặc FN_NEXT_STEP = 1)
       for (const fn of funcCalls) {
-        // Nếu có biến mục tiêu được gán từ hàm này, giá trị hàm chính là giá trị mục tiêu
         let fnVal: string | undefined
         if (targetVar && badges.length > 0 && badges[0].label === targetVar) {
           fnVal = badges[0].value
         } else if (fn.toUpperCase() === 'SEL') {
-          // Tự suy đoán hàm SEL nếu có tham số cơ bản
           const selArgsMatch = maskedText.match(/SEL\s*\(\s*([A-Za-z0-9_.]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/i)
           if (selArgsMatch) {
             const gName = selArgsMatch[1]
@@ -480,7 +505,7 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      // Nạp biến khai báo (ví dụ CmdMode : UINT -> CmdMode = 0)
+      // Nạp biến khai báo: kiểm tra cả biến vô hướng lẫn Function Block Instance
       if (declVar && !seen.has(declVar.toLowerCase())) {
         const resolved = variableValueMap.get(declVar.toLowerCase())
         if (resolved) {
@@ -497,6 +522,50 @@ export function StSimulatedSourceViewer({
             isBoolFalse: resolved.value === false || resolved.displayValue.toUpperCase() === 'FALSE',
             isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
+        } else {
+          // Nếu là khai báo Function Block instance (ví dụ Ch01 : FB_DO_CHANNEL; hoặc Blinker : FB_BLINK;)
+          // Quét tất cả các cổng thành viên thuộc tiền tố instanceName.
+          const prefix = `${declVar.toLowerCase()}.`
+          const fbMembers: ResolvedVariableValue[] = []
+          for (const [key, res] of variableValueMap.entries()) {
+            if (key.startsWith(prefix)) {
+              const sub = key.slice(prefix.length)
+              if (!sub.includes('.')) {
+                fbMembers.push(res)
+              }
+            }
+          }
+
+          if (fbMembers.length > 0) {
+            // Sắp xếp cổng xuất chính lên đầu (Q, Out, Pulse, Stages, CV, Y...)
+            fbMembers.sort((a, b) => {
+              const portA = a.variableName.slice(prefix.length).toLowerCase()
+              const portB = b.variableName.slice(prefix.length).toLowerCase()
+              const idxA = PRIORITY_PORTS.indexOf(portA)
+              const idxB = PRIORITY_PORTS.indexOf(portB)
+              const rankA = idxA === -1 ? 999 : idxA
+              const rankB = idxB === -1 ? 999 : idxB
+              return rankA - rankB
+            })
+
+            for (const mem of fbMembers) {
+              const fullPortName = mem.fullName || mem.variableName
+              seen.add(mem.variableName.toLowerCase())
+              seen.add(fullPortName.toLowerCase())
+              badges.push({
+                label: fullPortName,
+                value: mem.displayValue,
+                isTarget: true,
+                pointName: mem.pointName,
+                dataType: mem.dataType,
+                quality: mem.quality,
+                isChanged: changedVars.has(mem.variableName.toLowerCase()),
+                isBoolTrue: mem.value === true || mem.displayValue.toUpperCase() === 'TRUE',
+                isBoolFalse: mem.value === false || mem.displayValue.toUpperCase() === 'FALSE',
+                isInvalid: !mem.valid || mem.state === 'invalid',
+              })
+            }
+          }
         }
       }
 
@@ -602,7 +671,28 @@ export function StSimulatedSourceViewer({
             )}
           </div>
 
-          {/* Toggle Inline Values */}
+          {/* Toggle All Badges Expand / Collapse (1 per line vs All) */}
+          <button
+            type="button"
+            onClick={() => setExpandAll((v) => !v)}
+            aria-pressed={expandAll}
+            title={pick(
+              expandAll ? 'Thu gọn về 1 biến mỗi dòng (kèm nút +N)' : 'Mở rộng hiển thị tất cả các biến trên mỗi dòng',
+              expandAll ? 'Collapse to 1 variable per line (with +N button)' : 'Expand to show all variables on each line',
+            )}
+            className={`flex h-6.5 items-center gap-1 rounded border px-2 text-xs font-medium transition-colors ${
+              expandAll
+                ? 'border-[var(--c-accent)] bg-[var(--c-accent)] text-white shadow-xs'
+                : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)]'
+            }`}
+          >
+            {expandAll ? <FoldHorizontal className="h-3.5 w-3.5" /> : <UnfoldHorizontal className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">
+              {expandAll ? pick('1 biến/dòng', '1/line') : pick('Hiện tất cả', 'Show all')}
+            </span>
+          </button>
+
+          {/* Toggle Inline Values ON/OFF */}
           <button
             type="button"
             onClick={toggleInlineValues}
@@ -729,6 +819,11 @@ export function StSimulatedSourceViewer({
                   selectedVariable !== null &&
                   lineText.toLowerCase().includes(selectedVariable.toLowerCase())
 
+                // Kiểm tra dòng này có đang mở rộng hiển thị toàn bộ biến hay không
+                const isLineExpanded = expandAll || expandedLines.has(lineNumber)
+                const visibleBadges = isLineExpanded || badges.length <= 1 ? badges : [badges[0]]
+                const hiddenCount = badges.length - visibleBadges.length
+
                 return (
                   <div
                     key={lineNumber}
@@ -795,7 +890,7 @@ export function StSimulatedSourceViewer({
                     {/* Right: Inline Simulation Value Badges */}
                     {showInlineValues && badges.length > 0 && (
                       <div className="ml-auto pl-3 shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
-                        {badges.map((bItem, bIdx) => {
+                        {visibleBadges.map((bItem, bIdx) => {
                           let badgeClasses =
                             'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
                           let valueClasses = 'text-[var(--c-accent)] font-bold'
@@ -852,6 +947,43 @@ export function StSimulatedSourceViewer({
                             </button>
                           )
                         })}
+
+                        {/* Nút xem thêm +N biến khi đang ở chế độ thu gọn */}
+                        {hiddenCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleLineExpand(lineNumber)
+                            }}
+                            title={pick(
+                              `Xem thêm ${hiddenCount} biến trên dòng ${lineNumber}`,
+                              `Show ${hiddenCount} more variables on line ${lineNumber}`,
+                            )}
+                            className="inline-flex items-center gap-0.5 rounded-full border border-[var(--c-border)] bg-[var(--c-surface-3)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--c-accent)] hover:bg-[var(--c-accent)] hover:text-white transition-all shadow-2xs"
+                          >
+                            +{hiddenCount}
+                          </button>
+                        )}
+
+                        {/* Nút thu gọn lại còn 1 biến khi dòng đã mở rộng */}
+                        {!expandAll && isLineExpanded && badges.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleLineExpand(lineNumber)
+                            }}
+                            title={pick(
+                              `Thu gọn còn 1 biến trên dòng ${lineNumber}`,
+                              `Collapse to 1 variable on line ${lineNumber}`,
+                            )}
+                            className="inline-flex items-center gap-0.5 rounded-full border border-[var(--c-border)] bg-[var(--c-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--c-text-dim)] hover:text-[var(--c-text)] hover:border-[var(--c-accent)] transition-all"
+                          >
+                            <ChevronLeft className="h-3 w-3" />
+                            <span className="text-[10px]">{pick('Gọn', 'Less')}</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
