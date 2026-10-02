@@ -5,7 +5,11 @@ import { StSimulatedSourceViewer } from './StSimulatedSourceViewer'
 import { I18nProvider } from '../../../shared/i18n'
 import type { StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
 
-const sampleStSource = `PROGRAM PRG_DO16_MODBUS
+const sampleStSource = `(* Chu thich header nhieu dong
+   Dong 2: CmdMode = 99 khong duoc xuat gia tri vi nam trong comment
+   Dong 3: InPermit = TRUE cung vay
+*)
+PROGRAM PRG_DO16_MODBUS
 VAR_INPUT
     CmdMode : UINT;
     InPermit : BOOL;
@@ -15,10 +19,10 @@ VAR_OUTPUT
 END_VAR
 
 IF NOT Settled THEN
-    Mask := 0;
+    Mask := 0; (* chu thich inline *)
 END_IF;
 
-TMinOn := SEL(InPermit, T#0s, T#10s);
+Step := SEL(InPermit, 1, 16);
 DO01 := InPermit;
 END_PROGRAM`
 
@@ -30,6 +34,7 @@ const sampleRuntime: StRuntimeOverlayState = {
     { variableId: 'DO01', variableName: 'DO01', value: true, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
     { variableId: 'Settled', variableName: 'Settled', value: false, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
     { variableId: 'Mask', variableName: 'Mask', value: 0, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+    { variableId: 'Step', variableName: 'Step', value: 16, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
   ],
 }
 
@@ -38,7 +43,7 @@ describe('StSimulatedSourceViewer', () => {
     cleanup()
   })
 
-  it('hiển thị danh sách dòng mã và các huy hiệu giá trị mô phỏng tương ứng từng dòng từ trên xuống', () => {
+  it('hiển thị danh sách dòng mã, phép gán a = b và giá trị hàm, không nhận nhầm ghi chú', () => {
     render(
       <I18nProvider>
         <StSimulatedSourceViewer
@@ -61,15 +66,21 @@ describe('StSimulatedSourceViewer', () => {
     expect(screen.getAllByText('PRG_DO16_MODBUS').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByTestId('st-simulated-source-debug-view')).toBeInTheDocument()
 
-    // Kiểm tra các biến hiển thị giá trị mô phỏng tại từng dòng
-    expect(screen.getAllByText('CmdMode:').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('10').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('InPermit:').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('DO01:').length).toBeGreaterThanOrEqual(1)
+    // Kiểm tra các biến hiển thị theo cú pháp nhãn = giá trị
+    expect(screen.getAllByText('CmdMode =').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('InPermit =').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('DO01 =').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Step =').length).toBeGreaterThanOrEqual(1)
+
+    // Tên hàm SEL được ghi rõ giá trị
+    expect(screen.getAllByText('SEL =').length).toBeGreaterThanOrEqual(1)
 
     // Tên điểm kết nối hiển thị kèm nhãn
     expect(screen.getByText('DO16_MODE')).toBeInTheDocument()
     expect(screen.getAllByText('PUMP_START').length).toBeGreaterThanOrEqual(1)
+
+    // Chú thích header dòng 2 không được xuất hiện dưới dạng giá trị mô phỏng 99
+    expect(screen.queryByTitle(/CmdMode = 99/)).not.toBeInTheDocument()
   })
 
   it('cho phép bật / tắt hiển thị giá trị mô phỏng trực tiếp trên dòng', () => {
@@ -83,15 +94,15 @@ describe('StSimulatedSourceViewer', () => {
     )
 
     const toggleBtn = screen.getByTitle(/Ẩn giá trị giả lập trên từng dòng|Hiện giá trị giả lập trên từng dòng|Hide inline simulation values|Show inline simulation values/)
-    expect(screen.getAllByText('CmdMode:').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('CmdMode =').length).toBeGreaterThanOrEqual(1)
 
     // Bấm ẩn
     fireEvent.click(toggleBtn)
-    expect(screen.queryByText('CmdMode:')).not.toBeInTheDocument()
+    expect(screen.queryByText('CmdMode =')).not.toBeInTheDocument()
 
     // Bấm hiện lại
     fireEvent.click(toggleBtn)
-    expect(screen.getAllByText('CmdMode:').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('CmdMode =').length).toBeGreaterThanOrEqual(1)
   })
 
   it('hỗ trợ tìm kiếm dòng mã hoặc biến trong khung xem', () => {
@@ -107,7 +118,7 @@ describe('StSimulatedSourceViewer', () => {
     const searchInput = screen.getByPlaceholderText(new RegExp('Tìm biến/dòng…|Find variable/line…'))
     fireEvent.change(searchInput, { target: { value: 'Settled' } })
 
-    expect(screen.getByText('Settled:')).toBeInTheDocument()
+    expect(screen.getByText('Settled =')).toBeInTheDocument()
   })
 
   it('cho phép chọn biến để tô sáng tất cả các dòng xuất hiện trong chương trình', () => {
@@ -120,7 +131,7 @@ describe('StSimulatedSourceViewer', () => {
       </I18nProvider>,
     )
 
-    const inPermitBadge = screen.getAllByText('InPermit:')[0]
+    const inPermitBadge = screen.getAllByText('InPermit =')[0]
     fireEvent.click(inPermitBadge)
 
     expect(screen.getByText(/Đang chọn theo dõi:|Tracking variable:/)).toBeInTheDocument()

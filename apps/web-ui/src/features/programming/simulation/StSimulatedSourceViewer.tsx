@@ -74,6 +74,90 @@ const ST_KEYWORDS_SET = new Set([
   'BOOL', 'INT', 'DINT', 'UINT', 'SINT', 'USINT', 'REAL', 'LREAL', 'TIME', 'STRING', 'BYTE', 'WORD', 'DWORD',
 ])
 
+/**
+ * Loại bỏ toàn bộ chú thích (cả block (* ... *) lẫn line // ...) trên toàn văn bản,
+ * thay bằng khoảng trắng để giữ nguyên độ dài và số thứ tự dòng.
+ */
+function maskAllComments(source: string): string[] {
+  const chars = Array.from(source)
+  let inBlock = 0
+  let inLine = false
+  let inStr = false
+
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i]
+    const next = i + 1 < chars.length ? chars[i + 1] : ''
+
+    if (inLine) {
+      if (c === '\n') {
+        inLine = false
+      } else {
+        chars[i] = ' '
+      }
+      continue
+    }
+
+    if (inBlock > 0) {
+      if (c === '*' && next === ')') {
+        chars[i] = ' '
+        chars[i + 1] = ' '
+        i++
+        inBlock--
+      } else if (c === '(' && next === '*') {
+        chars[i] = ' '
+        chars[i + 1] = ' '
+        i++
+        inBlock++
+      } else if (c !== '\n' && c !== '\r') {
+        chars[i] = ' '
+      }
+      continue
+    }
+
+    if (inStr) {
+      if (c === "'") inStr = false
+      continue
+    }
+
+    if (c === "'") {
+      inStr = true
+      continue
+    }
+
+    if (c === '/' && next === '/') {
+      chars[i] = ' '
+      chars[i + 1] = ' '
+      i++
+      inLine = true
+      continue
+    }
+
+    if (c === '(' && next === '*') {
+      chars[i] = ' '
+      chars[i + 1] = ' '
+      i++
+      inBlock = 1
+      continue
+    }
+  }
+
+  return chars.join('').split('\n')
+}
+
+export interface LineBadgeItem {
+  label: string
+  value: string
+  isFunction?: boolean
+  isTarget?: boolean
+  pointName?: string
+  dataType?: string
+  quality?: string
+  isChanged?: boolean
+  isBoolTrue?: boolean
+  isBoolFalse?: boolean
+  isInvalid?: boolean
+}
+
 export interface ResolvedVariableValue {
   variableName: string
   observationId: string
@@ -162,11 +246,10 @@ export function StSimulatedSourceViewer({
     return slice?.frame?.observations ?? []
   }, [slice?.frame?.observations])
 
-  // Build indexed map of variables
+  // Bảng tra cứu giá trị biến toàn diện (từ runtime, observation, bindings)
   const variableValueMap = useMemo(() => {
     const map = new Map<string, ResolvedVariableValue>()
 
-    // Index from runtime items
     for (const item of runtimeItems) {
       const cleanVarName = item.variableName.includes('.')
         ? item.variableName.slice(item.variableName.lastIndexOf('.') + 1)
@@ -188,7 +271,8 @@ export function StSimulatedSourceViewer({
       const obs = observations.find(
         (o) =>
           o.variable.toUpperCase() === cleanVarName.toUpperCase() ||
-          o.observationId.toUpperCase() === item.variableId.toUpperCase(),
+          o.observationId.toUpperCase() === item.variableId.toUpperCase() ||
+          o.variable.toUpperCase() === item.variableName.toUpperCase(),
       )
 
       const resolved: ResolvedVariableValue = {
@@ -209,10 +293,10 @@ export function StSimulatedSourceViewer({
       map.set(item.variableId.toLowerCase(), resolved)
     }
 
-    // Direct observation indexing for variables not in runtimeItems
     for (const obs of observations) {
       const cleanVar = obs.variable || obs.observationId
-      if (!map.has(cleanVar.toLowerCase())) {
+      const key = cleanVar.toLowerCase()
+      if (!map.has(key)) {
         const item: StRuntimeOverlayItem = {
           variableId: obs.observationId,
           variableName: cleanVar,
@@ -243,7 +327,7 @@ export function StSimulatedSourceViewer({
           pointId,
           pointName,
         }
-        map.set(cleanVar.toLowerCase(), resolved)
+        map.set(key, resolved)
         map.set(obs.observationId.toLowerCase(), resolved)
       }
     }
@@ -251,7 +335,7 @@ export function StSimulatedSourceViewer({
     return map
   }, [runtimeItems, observations, bindings, pointCatalogItems])
 
-  // Track value changes between simulation ticks
+  // Theo dõi biến thay đổi giá trị giữa các chu kỳ
   useEffect(() => {
     const newlyChanged = new Set<string>()
     const prev = prevValuesRef.current
@@ -275,56 +359,174 @@ export function StSimulatedSourceViewer({
     }
   }, [variableValueMap, slice?.frame?.snapshotSequence])
 
-  const lines = useMemo(() => {
+  const rawLines = useMemo(() => {
     if (!source) return []
     return source.split('\n')
   }, [source])
 
+  // Tách dòng đã che chú thích (multi-line comment lẫn single-line comment)
+  const maskedLines = useMemo(() => {
+    if (!source) return []
+    return maskAllComments(source)
+  }, [source])
+
+  // Phân tích dòng chuyên sâu: gán a := b, gọi hàm func(...), khai báo var : TYPE
   const analyzeLine = useMemo(() => {
-    return (lineText: string): {
-      lineValues: ResolvedVariableValue[]
+    return (lineIndex: number): {
+      badges: LineBadgeItem[]
       tokens: ReturnType<typeof tokenizeStSource>
     } => {
-      const tokens = tokenizeStSource(lineText)
+      const rawText = rawLines[lineIndex] ?? ''
+      const maskedText = maskedLines[lineIndex] ?? ''
+      const tokens = tokenizeStSource(rawText)
 
-      const codeWithoutComments = lineText
-        .replace(/\(\*.*?\*\)/g, ' ')
-        .replace(/\/\/.*$/, ' ')
+      // Nếu dòng hoàn toàn là chú thích hoặc khoảng trắng rỗng -> KHÔNG xuất huy hiệu
+      if (!maskedText.trim()) {
+        return { badges: [], tokens }
+      }
 
-      const identifierMatches = codeWithoutComments.match(/\b[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)?\b/g) ?? []
-
-      const foundVars: ResolvedVariableValue[] = []
+      const badges: LineBadgeItem[] = []
       const seen = new Set<string>()
 
-      for (const rawMatch of identifierMatches) {
-        const upper = rawMatch.toUpperCase()
-        if (ST_KEYWORDS_SET.has(upper)) continue
+      // 1. Kiểm tra phép gán mục tiêu: target := expr (ví dụ Step := SEL(...) hoặc Mask := 0 hoặc DO01 := Ch01.Out)
+      const assignMatch = maskedText.match(/^\s*(?:\d+\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*:=/)
+      let targetVar: string | null = null
+      if (assignMatch) {
+        targetVar = assignMatch[1]
+      }
 
-        const lookupKey = rawMatch.toLowerCase()
-        const resolved = variableValueMap.get(lookupKey)
+      // 2. Kiểm tra khai báo: varName : TYPE;
+      const declMatch = maskedText.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:;|:=)/)
+      let declVar: string | null = null
+      if (declMatch && !ST_KEYWORDS_SET.has(declMatch[1].toUpperCase())) {
+        declVar = declMatch[1]
+      }
 
-        if (resolved && !seen.has(resolved.variableName)) {
-          seen.add(resolved.variableName)
-          foundVars.push({
-            ...resolved,
+      // 3. Kiểm tra các hàm được gọi trên dòng: funcName(...)
+      const funcCalls: string[] = []
+      const funcRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
+      let fm: RegExpExecArray | null
+      while ((fm = funcRegex.exec(maskedText)) !== null) {
+        const name = fm[1]
+        if (!ST_KEYWORDS_SET.has(name.toUpperCase())) {
+          funcCalls.push(name)
+        }
+      }
+
+      // Nạp biến mục tiêu gán targetVar trước tiên (ví dụ Step = 1 hoặc a = 3)
+      if (targetVar) {
+        const resolved = variableValueMap.get(targetVar.toLowerCase())
+        if (resolved) {
+          seen.add(targetVar.toLowerCase())
+          badges.push({
+            label: targetVar,
+            value: resolved.displayValue,
+            isTarget: true,
+            pointName: resolved.pointName,
+            dataType: resolved.dataType,
+            quality: resolved.quality,
             isChanged: changedVars.has(resolved.variableName.toLowerCase()),
+            isBoolTrue: resolved.value === true || resolved.displayValue.toUpperCase() === 'TRUE',
+            isBoolFalse: resolved.value === false || resolved.displayValue.toUpperCase() === 'FALSE',
+            isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
-        } else if (rawMatch.includes('.')) {
-          const memberKey = rawMatch.toLowerCase()
-          const memberResolved = variableValueMap.get(memberKey)
-          if (memberResolved && !seen.has(memberResolved.variableName)) {
-            seen.add(memberResolved.variableName)
-            foundVars.push({
-              ...memberResolved,
-              isChanged: changedVars.has(memberResolved.variableName.toLowerCase()),
+        } else {
+          // Nếu là gán hằng số trực tiếp (ví dụ Mask := 0; hoặc LoadMode := TRUE;)
+          const directLiteralMatch = maskedText.match(/\:=\s*(TRUE|FALSE|\d+(?:\.\d+)?|T#[0-9a-zA-Z_]+)\s*;/i)
+          if (directLiteralMatch) {
+            const litVal = directLiteralMatch[1].toUpperCase()
+            seen.add(targetVar.toLowerCase())
+            badges.push({
+              label: targetVar,
+              value: litVal,
+              isTarget: true,
+              isBoolTrue: litVal === 'TRUE',
+              isBoolFalse: litVal === 'FALSE',
             })
           }
         }
       }
 
-      return { lineValues: foundVars, tokens }
+      // Nạp kết quả gọi hàm trên dòng (ví dụ SEL = 1 hoặc FN_NEXT_STEP = 1)
+      for (const fn of funcCalls) {
+        // Nếu có biến mục tiêu được gán từ hàm này, giá trị hàm chính là giá trị mục tiêu
+        let fnVal: string | undefined
+        if (targetVar && badges.length > 0 && badges[0].label === targetVar) {
+          fnVal = badges[0].value
+        } else if (fn.toUpperCase() === 'SEL') {
+          // Tự suy đoán hàm SEL nếu có tham số cơ bản
+          const selArgsMatch = maskedText.match(/SEL\s*\(\s*([A-Za-z0-9_.]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/i)
+          if (selArgsMatch) {
+            const gName = selArgsMatch[1]
+            const in0 = selArgsMatch[2].trim()
+            const in1 = selArgsMatch[3].trim()
+            const gRes = variableValueMap.get(gName.toLowerCase())
+            if (gRes && gRes.valid) {
+              const isGTrue = gRes.value === true || gRes.displayValue.toUpperCase() === 'TRUE'
+              fnVal = isGTrue ? in1 : in0
+            }
+          }
+        }
+
+        if (fnVal && !seen.has(fn.toLowerCase())) {
+          seen.add(fn.toLowerCase())
+          badges.push({
+            label: fn,
+            value: fnVal,
+            isFunction: true,
+            isBoolTrue: fnVal.toUpperCase() === 'TRUE',
+            isBoolFalse: fnVal.toUpperCase() === 'FALSE',
+          })
+        }
+      }
+
+      // Nạp biến khai báo (ví dụ CmdMode : UINT -> CmdMode = 0)
+      if (declVar && !seen.has(declVar.toLowerCase())) {
+        const resolved = variableValueMap.get(declVar.toLowerCase())
+        if (resolved) {
+          seen.add(declVar.toLowerCase())
+          badges.push({
+            label: declVar,
+            value: resolved.displayValue,
+            isTarget: true,
+            pointName: resolved.pointName,
+            dataType: resolved.dataType,
+            quality: resolved.quality,
+            isChanged: changedVars.has(resolved.variableName.toLowerCase()),
+            isBoolTrue: resolved.value === true || resolved.displayValue.toUpperCase() === 'TRUE',
+            isBoolFalse: resolved.value === false || resolved.displayValue.toUpperCase() === 'FALSE',
+            isInvalid: !resolved.valid || resolved.state === 'invalid',
+          })
+        }
+      }
+
+      // Nạp các biến tham số/đọc khác trên dòng (ví dụ CmdReverse = FALSE)
+      const idMatches = maskedText.match(/\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?\b/g) ?? []
+      for (const rawMatch of idMatches) {
+        const lower = rawMatch.toLowerCase()
+        if (seen.has(lower)) continue
+        if (ST_KEYWORDS_SET.has(rawMatch.toUpperCase())) continue
+
+        const resolved = variableValueMap.get(lower)
+        if (resolved) {
+          seen.add(lower)
+          badges.push({
+            label: resolved.variableName,
+            value: resolved.displayValue,
+            pointName: resolved.pointName,
+            dataType: resolved.dataType,
+            quality: resolved.quality,
+            isChanged: changedVars.has(resolved.variableName.toLowerCase()),
+            isBoolTrue: resolved.value === true || resolved.displayValue.toUpperCase() === 'TRUE',
+            isBoolFalse: resolved.value === false || resolved.displayValue.toUpperCase() === 'FALSE',
+            isInvalid: !resolved.valid || resolved.state === 'invalid',
+          })
+        }
+      }
+
+      return { badges, tokens }
     }
-  }, [variableValueMap, changedVars])
+  }, [rawLines, maskedLines, variableValueMap, changedVars])
 
   const copyToClipboard = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -345,6 +547,7 @@ export function StSimulatedSourceViewer({
   return (
     <section
       aria-label={pick('Khung mô phỏng ST', 'ST simulation viewer')}
+      data-testid="st-simulated-source-section"
       className="flex min-h-0 min-w-0 flex-1 flex-col space-y-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2.5 shadow-xs"
     >
       {/* Toolbar Header */}
@@ -361,13 +564,13 @@ export function StSimulatedSourceViewer({
           )}
           {observedCount > 0 && (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-[var(--c-accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--c-accent)]"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--c-text)]"
               title={pick(
                 'Số lượng biến/tín hiệu có giá trị mô phỏng',
                 'Number of variables with simulation values',
               )}
             >
-              <Activity className="h-3 w-3 animate-pulse" />
+              <Activity className="h-3 w-3 animate-pulse text-[var(--c-accent)]" />
               <span>
                 {observedCount} {pick('giá trị mô phỏng', 'simulation values')}
               </span>
@@ -456,7 +659,7 @@ export function StSimulatedSourceViewer({
             {copied ? (
               <>
                 <Check className="h-3.5 w-3.5 text-[var(--c-good-fg)]" />
-                <span className="text-[var(--c-good-fg)]">{pick('Đã chép', 'Copied')}</span>
+                <span className="text-[var(--c-good-fg)] font-medium">{pick('Đã chép', 'Copied')}</span>
               </>
             ) : (
               <>
@@ -476,8 +679,7 @@ export function StSimulatedSourceViewer({
             <span className="font-bold">{selectedVariable}</span>
             {variableValueMap.get(selectedVariable.toLowerCase()) && (
               <span className="font-semibold text-[var(--c-text)]">
-                ={' '}
-                {variableValueMap.get(selectedVariable.toLowerCase())?.displayValue}
+                = {variableValueMap.get(selectedVariable.toLowerCase())?.displayValue}
               </span>
             )}
           </div>
@@ -512,151 +714,151 @@ export function StSimulatedSourceViewer({
           />
           <div
             data-testid="st-simulated-source-debug-view"
-          className="relative min-h-[340px] max-h-[460px] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] font-mono text-xs [scrollbar-gutter:stable]"
-        >
-          <div className="min-w-fit">
-            {lines.map((lineText, index) => {
-              const lineNumber = index + 1
-              const { lineValues, tokens } = analyzeLine(lineText)
+            className="relative min-h-[340px] max-h-[460px] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] font-mono text-xs [scrollbar-gutter:stable]"
+          >
+            <div className="min-w-fit">
+              {rawLines.map((lineText, index) => {
+                const lineNumber = index + 1
+                const { badges, tokens } = analyzeLine(index)
 
-              const isMatchSearch =
-                searchQuery.trim().length > 0 &&
-                lineText.toLowerCase().includes(searchQuery.trim().toLowerCase())
+                const isMatchSearch =
+                  searchQuery.trim().length > 0 &&
+                  lineText.toLowerCase().includes(searchQuery.trim().toLowerCase())
 
-              const hasSelectedVariable =
-                selectedVariable !== null &&
-                lineText.toLowerCase().includes(selectedVariable.toLowerCase())
+                const hasSelectedVariable =
+                  selectedVariable !== null &&
+                  lineText.toLowerCase().includes(selectedVariable.toLowerCase())
 
-              return (
-                <div
-                  key={lineNumber}
-                  className={`flex items-center justify-between min-h-[1.65rem] px-2 py-0.5 border-b border-[var(--c-border)]/20 transition-colors ${
-                    hasSelectedVariable
-                      ? 'bg-[var(--c-accent)]/15 border-l-3 border-l-[var(--c-accent)]'
-                      : isMatchSearch
-                      ? 'bg-[var(--c-warn-bg)]/30'
-                      : 'hover:bg-[var(--c-surface-2)]/60'
-                  }`}
-                >
-                  {/* Left: Line Number & Code */}
-                  <div className="flex items-center min-w-0 pr-4">
-                    <span className="w-10 shrink-0 text-right pr-3 select-none text-[var(--c-text-dim)]/50 text-[11px]">
-                      {lineNumber}
-                    </span>
-                    <div className="whitespace-pre overflow-x-hidden text-[var(--c-text)]">
-                      {tokens.map((token, tIdx) => {
-                        const tokenText = token.text
-                        const upper = tokenText.toUpperCase()
-                        const cleanToken = tokenText.toLowerCase()
-                        const resolved = variableValueMap.get(cleanToken)
-                        const isIecFunc = IEC_STANDARD_FUNCTIONS[upper] !== undefined
-                        const isIecFb = IEC_STANDARD_FBS[upper] !== undefined
+                return (
+                  <div
+                    key={lineNumber}
+                    className={`flex items-center justify-between min-h-[1.65rem] px-2 py-0.5 border-b border-[var(--c-border)]/20 transition-colors ${
+                      hasSelectedVariable
+                        ? 'bg-[var(--c-accent)]/15 border-l-3 border-l-[var(--c-accent)]'
+                        : isMatchSearch
+                        ? 'bg-[var(--c-warn-bg)]/30'
+                        : 'hover:bg-[var(--c-surface-2)]/60'
+                    }`}
+                  >
+                    {/* Left: Line Number & Code */}
+                    <div className="flex items-center min-w-0 pr-4">
+                      <span className="w-10 shrink-0 text-right pr-3 select-none text-[var(--c-text-dim)]/50 text-[11px]">
+                        {lineNumber}
+                      </span>
+                      <div className="whitespace-pre overflow-x-hidden text-[var(--c-text)]">
+                        {tokens.map((token, tIdx) => {
+                          const tokenText = token.text
+                          const upper = tokenText.toUpperCase()
+                          const cleanToken = tokenText.toLowerCase()
+                          const resolved = variableValueMap.get(cleanToken)
+                          const isIecFunc = IEC_STANDARD_FUNCTIONS[upper] !== undefined
+                          const isIecFb = IEC_STANDARD_FBS[upper] !== undefined
 
-                        const isHoverable =
-                          resolved !== undefined || isIecFunc || isIecFb
+                          const isHoverable =
+                            resolved !== undefined || isIecFunc || isIecFb
 
-                        return (
-                          <span
-                            key={tIdx}
-                            className={`${ST_TOKEN_CLASS[token.kind as StTokenKind] ?? ''} ${isHoverable ? 'cursor-pointer hover:underline hover:font-bold' : ''} ${selectedVariable && cleanToken === selectedVariable.toLowerCase() ? 'bg-[var(--c-accent)]/20 rounded px-0.5 text-[var(--c-accent)] font-bold' : ''}`}
-                            onMouseEnter={(e) => {
-                              if (!isHoverable) return
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              setHoveredSymbol({
-                                name: tokenText,
-                                displayValue: resolved?.displayValue,
-                                dataType: resolved?.dataType || (isIecFunc ? 'FUNCTION' : isIecFb ? 'FUNCTION_BLOCK' : undefined),
-                                kind: isIecFunc ? 'Hàm chuẩn IEC' : isIecFb ? 'Khối hàm chuẩn' : resolved?.pointName ? 'Biến gán điểm' : 'Biến chương trình',
-                                quality: resolved?.quality,
-                                pointName: resolved?.pointName,
-                                description: isIecFunc ? IEC_STANDARD_FUNCTIONS[upper] : isIecFb ? IEC_STANDARD_FBS[upper] : undefined,
-                                x: rect.left,
-                                y: rect.bottom + 4,
-                              })
-                            }}
-                            onMouseLeave={() => setHoveredSymbol(null)}
-                            onClick={() => {
-                              if (resolved) {
+                          return (
+                            <span
+                              key={tIdx}
+                              className={`${ST_TOKEN_CLASS[token.kind as StTokenKind] ?? ''} ${isHoverable ? 'cursor-pointer hover:underline hover:font-bold' : ''} ${selectedVariable && cleanToken === selectedVariable.toLowerCase() ? 'bg-[var(--c-accent)]/20 rounded px-0.5 text-[var(--c-accent)] font-bold' : ''}`}
+                              onMouseEnter={(e) => {
+                                if (!isHoverable) return
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                setHoveredSymbol({
+                                  name: tokenText,
+                                  displayValue: resolved?.displayValue,
+                                  dataType: resolved?.dataType || (isIecFunc ? 'FUNCTION' : isIecFb ? 'FUNCTION_BLOCK' : undefined),
+                                  kind: isIecFunc ? 'Hàm chuẩn IEC' : isIecFb ? 'Khối hàm chuẩn' : resolved?.pointName ? 'Biến gán điểm' : 'Biến chương trình',
+                                  quality: resolved?.quality,
+                                  pointName: resolved?.pointName,
+                                  description: isIecFunc ? IEC_STANDARD_FUNCTIONS[upper] : isIecFb ? IEC_STANDARD_FBS[upper] : undefined,
+                                  x: rect.left,
+                                  y: rect.bottom + 4,
+                                })
+                              }}
+                              onMouseLeave={() => setHoveredSymbol(null)}
+                              onClick={() => {
+                                if (resolved) {
+                                  setSelectedVariable((curr) =>
+                                    curr === resolved.variableName ? null : resolved.variableName,
+                                  )
+                                }
+                              }}
+                            >
+                              {tokenText}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Right: Inline Simulation Value Badges */}
+                    {showInlineValues && badges.length > 0 && (
+                      <div className="ml-auto pl-3 shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
+                        {badges.map((bItem, bIdx) => {
+                          let badgeClasses =
+                            'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                          let valueClasses = 'text-[var(--c-accent)] font-bold'
+
+                          if (bItem.isBoolTrue) {
+                            badgeClasses =
+                              'border-[var(--c-good-fg)]/40 bg-[var(--c-good-bg)]/80 text-[var(--c-good-fg)]'
+                            valueClasses = 'text-[var(--c-good-fg)] font-extrabold'
+                          } else if (bItem.isBoolFalse) {
+                            badgeClasses =
+                              'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+                            valueClasses = 'text-[var(--c-text-dim)] font-semibold'
+                          } else if (bItem.isInvalid) {
+                            badgeClasses =
+                              'border-dashed border-[var(--c-border)] bg-[var(--c-surface-2)]/60 text-[var(--c-text-dim)]'
+                            valueClasses = 'text-[var(--c-text-dim)] font-normal'
+                          } else if (bItem.isTarget) {
+                            badgeClasses =
+                              'border-[var(--c-accent)]/40 bg-[var(--c-accent)]/10 text-[var(--c-text)]'
+                            valueClasses = 'text-[var(--c-accent)] font-bold'
+                          } else if (bItem.isFunction) {
+                            badgeClasses =
+                              'border-[var(--c-accent)]/30 bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                            valueClasses = 'text-[var(--c-accent)] font-semibold'
+                          }
+
+                          if (bItem.isChanged) {
+                            badgeClasses += ' ring-2 ring-[var(--c-accent)] animate-pulse'
+                          }
+
+                          return (
+                            <button
+                              key={`${bItem.label}-${bIdx}`}
+                              type="button"
+                              onClick={() =>
                                 setSelectedVariable((curr) =>
-                                  curr === resolved.variableName ? null : resolved.variableName,
+                                  curr === bItem.label ? null : bItem.label,
                                 )
                               }
-                            }}
-                          >
-                            {tokenText}
-                          </span>
-                        )
-                      })}
-                    </div>
+                              title={`${bItem.label} = ${bItem.value}${bItem.pointName ? ` (${bItem.pointName})` : ''}`}
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-mono transition-all hover:brightness-110 ${badgeClasses} ${
+                                selectedVariable === bItem.label
+                                  ? 'ring-2 ring-[var(--c-accent)] shadow-sm'
+                                  : ''
+                              }`}
+                            >
+                              <span className="opacity-75">{bItem.label} =</span>
+                              <span className={valueClasses}>{bItem.value}</span>
+                              {bItem.pointName && (
+                                <span className="opacity-60 text-[10px] pl-1 border-l border-current/20">
+                                  {bItem.pointName}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Right: Inline Simulation Value Badges */}
-                  {showInlineValues && lineValues.length > 0 && (
-                    <div className="ml-auto pl-3 shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
-                      {lineValues.map((val) => {
-                        const isBoolTrue =
-                          val.value === true ||
-                          val.displayValue.toUpperCase() === 'TRUE'
-                        const isBoolFalse =
-                          val.value === false ||
-                          val.displayValue.toUpperCase() === 'FALSE'
-                        const isInvalid = !val.valid || val.state === 'invalid'
-
-                        let badgeClasses =
-                          'border-[var(--c-accent)]/30 bg-[var(--c-accent)]/10 text-[var(--c-text)]'
-                        let valueClasses = 'text-[var(--c-accent)] font-bold'
-
-                        if (isBoolTrue) {
-                          badgeClasses =
-                            'border-[var(--c-good-fg)]/40 bg-[var(--c-good-bg)]/80 text-[var(--c-good-fg)]'
-                          valueClasses = 'text-[var(--c-good-fg)] font-extrabold'
-                        } else if (isBoolFalse) {
-                          badgeClasses =
-                            'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
-                          valueClasses = 'text-[var(--c-text-dim)] font-semibold'
-                        } else if (isInvalid) {
-                          badgeClasses =
-                            'border-dashed border-[var(--c-border)] bg-[var(--c-surface-2)]/60 text-[var(--c-text-dim)]'
-                          valueClasses = 'text-[var(--c-text-dim)] font-normal'
-                        }
-
-                        if (val.isChanged) {
-                          badgeClasses += ' ring-2 ring-[var(--c-accent)] animate-pulse'
-                        }
-
-                        return (
-                          <button
-                            key={val.variableName}
-                            type="button"
-                            onClick={() =>
-                              setSelectedVariable((curr) =>
-                                curr === val.variableName ? null : val.variableName,
-                              )
-                            }
-                            title={`${val.variableName}: ${val.displayValue} (${val.dataType || 'VAR'} · ${val.quality})`}
-                            className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-mono transition-all hover:brightness-110 ${badgeClasses} ${
-                              selectedVariable === val.variableName
-                                ? 'ring-2 ring-[var(--c-accent)] shadow-sm'
-                                : ''
-                            }`}
-                          >
-                            <span className="opacity-75">{val.variableName}:</span>
-                            <span className={valueClasses}>{val.displayValue}</span>
-                            {val.pointName && (
-                              <span className="opacity-60 text-[10px] pl-1 border-l border-current/20">
-                                {val.pointName}
-                              </span>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
         </>
       )}
 

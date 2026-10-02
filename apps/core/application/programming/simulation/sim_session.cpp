@@ -203,8 +203,11 @@ void SimSession::build_manifest()
                 inputs_.push_back(std::move(descriptor));
             }
 
-            if (variable.storage == StStorage::VAR_INPUT ||
-                variable.storage == StStorage::VAR_OUTPUT) {
+            if ((variable.storage == StStorage::VAR_INPUT ||
+                 variable.storage == StStorage::VAR_OUTPUT ||
+                 variable.storage == StStorage::VAR_LOCAL ||
+                 variable.storage == StStorage::VAR_RETAIN) &&
+                variable.name.rfind("__", 0) != 0) {
                 SimObservation observation;
                 observation.observation_id = observation_id;
                 observation.program_name = program_name;
