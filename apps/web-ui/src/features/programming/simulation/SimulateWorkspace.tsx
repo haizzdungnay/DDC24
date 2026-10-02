@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { useLazyProgrammingPointCatalog, useProgrammingRevision } from '../api/queries'
 import { activeProgramSource } from '../overview/activeProgramSet'
@@ -88,6 +88,24 @@ export function SimulateWorkspace({
   }, [pointCatalogItemsProp, ensureLoaded])
 
   const pointCatalogItems = pointCatalogItemsProp ?? lazyCatalog.data?.items
+  const [lastCommittedInput, setLastCommittedInput] = useState<{
+    variable: string
+    observationId: string
+    timestamp: number
+  } | null>(null)
+
+  const handleCommitInput = useCallback(
+    (descriptor: SimulationInputDescriptor, raw: string) => {
+      setLastCommittedInput({
+        variable: descriptor.variable || descriptor.observationId,
+        observationId: descriptor.observationId,
+        timestamp: Date.now(),
+      })
+      onSetInput(descriptor, raw)
+    },
+    [onSetInput],
+  )
+
   const canControl = allowMutation && canControlSimulation(capability, role)
 
   const isStaleSession = Boolean(
@@ -359,7 +377,7 @@ export function SimulateWorkspace({
               inputs={inputs}
               slice={slice}
               canControl={canControl}
-              onCommit={onSetInput}
+              onCommit={handleCommitInput}
               bindings={bindings}
               pointCatalogItems={pointCatalogItems}
             />
@@ -375,6 +393,7 @@ export function SimulateWorkspace({
             bindings={bindings}
             pointCatalogItems={pointCatalogItems}
             programName={program?.name}
+            lastCommittedInput={lastCommittedInput}
           />
 
           <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 min-h-0 max-h-[380px] lg:max-h-[460px] overflow-y-auto [scrollbar-gutter:stable]">
@@ -382,7 +401,7 @@ export function SimulateWorkspace({
               inputs={inputs}
               slice={slice}
               canControl={canControl}
-              onCommit={onSetInput}
+              onCommit={handleCommitInput}
               bindings={bindings}
               pointCatalogItems={pointCatalogItems}
             />

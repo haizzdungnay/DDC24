@@ -241,4 +241,68 @@ describe('StSimulatedSourceViewer', () => {
     fireEvent.click(debugBtn)
     expect(screen.getByTestId('st-simulated-source-debug-view')).toBeInTheDocument()
   })
+
+  it('tự động nhảy con trỏ về dòng biến vừa được gán khi nhận lastCommittedInput', () => {
+    const { rerender } = render(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={sampleRuntime}
+        />
+      </I18nProvider>,
+    )
+
+    // Gán một input ảo mới: InPermit
+    rerender(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={sampleRuntime}
+          lastCommittedInput={{
+            variable: 'InPermit',
+            observationId: 'InPermit',
+            timestamp: Date.now(),
+          }}
+        />
+      </I18nProvider>,
+    )
+
+    // Tự động chuyển sang chế độ Gỡ lỗi và xuất hiện thanh điều khiển
+    expect(screen.getByTestId('st-debug-control-bar')).toBeInTheDocument()
+    // Con trỏ đang trỏ vào dòng có data-active-line="true"
+    const activeLine = screen.getByTestId('st-simulated-source-debug-view').querySelector('[data-active-line="true"]')
+    expect(activeLine).toBeInTheDocument()
+  })
+
+  it('chế độ Gỡ lỗi theo dõi luồng logic và làm mờ các nhánh IF không thỏa mãn', () => {
+    // Settled = true => NOT Settled = false => Mask := 0; bị bỏ qua
+    const trueSettledRuntime: StRuntimeOverlayState = {
+      status: 'ready',
+      items: [
+        ...sampleRuntime.items.filter((i) => i.variableName !== 'Settled'),
+        { variableId: 'Settled', variableName: 'Settled', value: true, valid: true, quality: 'GOOD', freshness: 'SIMULATION' },
+      ],
+    }
+
+    render(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={trueSettledRuntime}
+        />
+      </I18nProvider>,
+    )
+
+    const debugModeBtn = screen.getByText(/Gỡ lỗi|Debug/)
+    fireEvent.click(debugModeBtn)
+
+    // Dòng chứa Mask := 0; bị bỏ qua trong luồng thực thi
+    const container = screen.getByTestId('st-simulated-source-debug-view')
+    const maskLine = Array.from(container.querySelectorAll('[data-line-number]')).find((el) =>
+      el.textContent?.includes('Mask := 0'),
+    )
+    expect(maskLine).toBeInTheDocument()
+    // Nhánh không thực thi có style làm mờ (opacity-35)
+    expect(maskLine?.className).toContain('opacity-35')
+  })
 })

@@ -227,19 +227,73 @@ export function useSimulation({ recoverActiveSession = false }: UseSimulationOpt
       if (!session) return
       setSlice((current) => ({ ...current, pending: 'SET_INPUT', lastDenial: null }))
       try {
+        const encoded = encodeSimulationInput(descriptor, raw)
         const readBack = await client.request<SimulationSessionView>('setProgrammingSimulationInput', {
           path: { sessionId: session.sessionId, observationId: descriptor.observationId },
           body: {
             schemaVersion: '1.0',
             dataType: descriptor.dataType,
-            value: encodeSimulationInput(descriptor, raw),
+            value: encoded,
           },
           ifMatch: session.etag,
           idempotencyKey: createUuid(),
           correlationId: createUuid(),
         })
         if (!mountedRef.current) return
-        setSlice((current) => acceptSession(current, readBack))
+        setSlice((current) => {
+          let updated = acceptSession(current, readBack)
+          if (updated.frame) {
+            const nextObs = updated.frame.observations.map((o) =>
+              o.observationId === descriptor.observationId ? { ...o, value: encoded } : o,
+            )
+            updated = { ...updated, frame: { ...updated.frame, observations: nextObs } }
+          }
+          return updated
+        })
+
+        // Chạy nhịp ngay để bộ mô phỏng tính toán đầu vào mới và cập nhật frame
+        if (readBack.state === 'PAUSED') {
+          try {
+            const stepBack = await client.request<SimulationSessionView>('actProgrammingSimulationSession', {
+              path: { sessionId: readBack.sessionId },
+              body: { schemaVersion: '1.0', action: 'STEP_CYCLE' },
+              ifMatch: readBack.etag,
+              idempotencyKey: createUuid(),
+              correlationId: createUuid(),
+            })
+            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+              path: { sessionId: readBack.sessionId },
+              correlationId: createUuid(),
+            })
+            if (mountedRef.current) {
+              setSlice((current) => acceptFrame(acceptSession(current, stepBack), frame))
+            }
+          } catch {
+            try {
+              const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+                path: { sessionId: readBack.sessionId },
+                correlationId: createUuid(),
+              })
+              if (mountedRef.current) {
+                setSlice((current) => acceptFrame(current, frame))
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        } else {
+          try {
+            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+              path: { sessionId: readBack.sessionId },
+              correlationId: createUuid(),
+            })
+            if (mountedRef.current) {
+              setSlice((current) => acceptFrame(current, frame))
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } catch (reason) {
         if (!mountedRef.current) return
         const described = describe(reason, 'Không ghi được giá trị mô phỏng.', 'Could not write the simulation value.')

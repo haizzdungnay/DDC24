@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { computeExecutedLineSequence, findFirstUsageLine } from './stControlFlow'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import {
   Search,
   Eye,
@@ -188,6 +189,11 @@ export interface StSimulatedSourceViewerProps {
   bindings?: readonly ProgrammingBinding[]
   pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   programName?: string
+  lastCommittedInput?: {
+    variable: string
+    observationId: string
+    timestamp: number
+  } | null
 }
 
 export function StSimulatedSourceViewer({
@@ -198,6 +204,7 @@ export function StSimulatedSourceViewer({
   bindings,
   pointCatalogItems,
   programName,
+  lastCommittedInput,
 }: StSimulatedSourceViewerProps) {
   const { pick } = useI18n()
 
@@ -415,16 +422,48 @@ export function StSimulatedSourceViewer({
     return maskAllComments(source)
   }, [source])
 
-  // Lọc danh sách các dòng có mã thực thi (bỏ qua dòng trắng và chú thích thuần)
+  const lookupVarForControlFlow = useCallback(
+    (name: string) => {
+      const res = variableValueMap.get(name.toLowerCase())
+      return res?.value !== undefined ? res.value : res?.displayValue
+    },
+    [variableValueMap],
+  )
+
+  // Danh sách các dòng thực thi theo đúng luồng logic (bỏ qua các nhánh IF/CASE không thỏa mãn)
   const executableLineIndices = useMemo(() => {
-    const indices: number[] = []
-    for (let i = 0; i < rawLines.length; i++) {
-      if ((maskedLines[i]?.trim().length ?? 0) > 0) {
-        indices.push(i)
+    if (!source) return []
+    const lines = computeExecutedLineSequence(rawLines, maskedLines, lookupVarForControlFlow)
+    return lines.length > 0 ? lines : [0]
+  }, [source, rawLines, maskedLines, lookupVarForControlFlow])
+
+  // Tự động nhảy con trỏ về dòng biến vừa được gán để chạy lại
+  useEffect(() => {
+    if (!lastCommittedInput) return
+    const varName = lastCommittedInput.variable.includes('.')
+      ? lastCommittedInput.variable.slice(lastCommittedInput.variable.lastIndexOf('.') + 1)
+      : lastCommittedInput.variable
+
+    const targetLine = findFirstUsageLine(rawLines, maskedLines, varName)
+    if (targetLine !== -1) {
+      let stepIdx = executableLineIndices.indexOf(targetLine)
+      if (stepIdx === -1) {
+        stepIdx = executableLineIndices.findIndex((idx) => idx >= targetLine)
+      }
+      if (stepIdx !== -1) {
+        setActiveStepIndex(stepIdx)
+        setViewMode('debug')
+        setIsAutoPlaying(true)
       }
     }
-    return indices
-  }, [rawLines, maskedLines])
+  }, [lastCommittedInput, rawLines, maskedLines, executableLineIndices])
+
+  // Giới hạn activeStepIndex trong phạm vi dòng thực thi hợp lệ
+  useEffect(() => {
+    if (executableLineIndices.length > 0 && activeStepIndex >= executableLineIndices.length) {
+      setActiveStepIndex(Math.max(0, executableLineIndices.length - 1))
+    }
+  }, [executableLineIndices, activeStepIndex])
 
   // Dòng thực thi hiện tại trong chế độ Gỡ lỗi
   const currentExecutingLineIndex = executableLineIndices[activeStepIndex] ?? -1
@@ -458,6 +497,10 @@ export function StSimulatedSourceViewer({
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
   }, [viewMode, currentExecutingLineIndex])
+
+  const executedSet = useMemo(() => {
+    return new Set(executableLineIndices.slice(0, activeStepIndex + 1))
+  }, [executableLineIndices, activeStepIndex])
 
   const handleLineClick = (lineIndex: number) => {
     if (viewMode !== 'debug') return
@@ -1000,7 +1043,9 @@ export function StSimulatedSourceViewer({
             className="relative min-h-[340px] max-h-[460px] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] font-mono text-xs [scrollbar-gutter:stable]"
           >
             <div className="min-w-fit">
-              {rawLines.map((lineText, index) => {
+              {
+              /* executedSet đã được tính toán */
+              rawLines.map((lineText, index) => {
                 const lineNumber = index + 1
                 const { badges, tokens } = analyzeLine(index)
 
@@ -1013,9 +1058,11 @@ export function StSimulatedSourceViewer({
                   lineText.toLowerCase().includes(selectedVariable.toLowerCase())
 
                 // Trạng thái trong chế độ Gỡ lỗi (Debug Mode):
+                const isExecutable = executableLineIndices.includes(index)
                 const isCurrentExecuting = viewMode === 'debug' && index === currentExecutingLineIndex
-                // Trong chế độ Debug: code chạy đến đâu thì hiện giá trị tới đó (dòng đã hoặc đang chạy)
-                const hasExecutedInDebug = viewMode === 'debug' ? index <= currentExecutingLineIndex : true
+                // Trong chế độ Debug: code chạy đến đâu thì hiện giá trị tới đó (chỉ dòng nằm trên luồng thực thi đã chạy)
+                const hasExecutedInDebug = viewMode === 'debug' ? executedSet.has(index) : true
+                const isSkippedInDebug = viewMode === 'debug' && !isExecutable
 
                 const isLineExpanded = expandAll || expandedLines.has(lineNumber)
                 const visibleBadges = isLineExpanded || badges.length <= 1 ? badges : [badges[0]]
@@ -1034,6 +1081,8 @@ export function StSimulatedSourceViewer({
                         ? 'bg-[var(--c-accent)]/15 border-l-3 border-l-[var(--c-accent)]'
                         : isMatchSearch
                         ? 'bg-[var(--c-warn-bg)]/30'
+                        : isSkippedInDebug
+                        ? 'opacity-35 italic bg-[var(--c-surface-2)]/10 cursor-pointer'
                         : viewMode === 'debug' && !hasExecutedInDebug
                         ? 'opacity-65 hover:bg-[var(--c-surface-2)]/30 cursor-pointer'
                         : 'hover:bg-[var(--c-surface-2)]/60 cursor-pointer'
