@@ -11,6 +11,12 @@ import {
   ChevronLeft,
   UnfoldHorizontal,
   FoldHorizontal,
+  Play,
+  Pause,
+  SkipForward,
+  RotateCcw,
+  Gauge,
+  Bug,
 } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import {
@@ -77,13 +83,8 @@ const ST_KEYWORDS_SET = new Set([
   'BOOL', 'INT', 'DINT', 'UINT', 'SINT', 'USINT', 'REAL', 'LREAL', 'TIME', 'STRING', 'BYTE', 'WORD', 'DWORD',
 ])
 
-// Ưu tiên cổng xuất chính của Function Block để hiển thị huy hiệu đầu tiên
 const PRIORITY_PORTS = ['q', 'out', 'pulse', 'stages', 'cv', 'y', 'mask', 'starts', 'waiting', 'cmd', 'enable']
 
-/**
- * Loại bỏ toàn bộ chú thích (cả block (* ... *) lẫn line // ...) trên toàn văn bản,
- * thay bằng khoảng trắng để giữ nguyên độ dài và số thứ tự dòng.
- */
 function maskAllComments(source: string): string[] {
   const chars = Array.from(source)
   let inBlock = 0
@@ -212,11 +213,31 @@ export function StSimulatedSourceViewer({
     return true
   })
 
-  // Mặc định: thu gọn chỉ hiện 1 biến mỗi dòng; người dùng có thể bấm 'Mở rộng tất cả' hoặc nút '+N' từng dòng
   const [expandAll, setExpandAll] = useState<boolean>(false)
   const [expandedLines, setExpandedLines] = useState<Set<number>>(new Set())
 
-  const [viewMode, setViewMode] = useState<'debug' | 'raw'>('debug')
+  // Chế độ xem: inspect (Giám sát tĩnh) | debug (Gỡ lỗi nhảy từng dòng) | raw (Mã thô)
+  const [viewMode, setViewMode] = useState<'inspect' | 'debug' | 'raw'>('inspect')
+
+  // Trạng thái gỡ lỗi từng dòng
+  const [activeStepIndex, setActiveStepIndex] = useState<number>(0)
+  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true)
+  const [stepSpeedMs, setStepSpeedMs] = useState<number>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = window.localStorage.getItem('mkddc.programming.sim.stepSpeedMs')
+        if (stored) {
+          const num = parseInt(stored, 10)
+          if (!isNaN(num) && num >= 100 && num <= 5000) return num
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return 1000 // Mặc định 1 giây / dòng đủ chậm để quan sát
+  })
+  const [isLooping, setIsLooping] = useState<boolean>(true)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedVariable, setSelectedVariable] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -231,6 +252,8 @@ export function StSimulatedSourceViewer({
     x: number
     y: number
   } | null>(null)
+
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
   const toggleLineExpand = (lineNumber: number) => {
     setExpandedLines((prev) => {
@@ -269,7 +292,6 @@ export function StSimulatedSourceViewer({
     return slice?.frame?.observations ?? []
   }, [slice?.frame?.observations])
 
-  // Bảng tra cứu giá trị biến toàn diện (từ runtime, observation, bindings)
   const variableValueMap = useMemo(() => {
     const map = new Map<string, ResolvedVariableValue>()
 
@@ -360,7 +382,6 @@ export function StSimulatedSourceViewer({
     return map
   }, [runtimeItems, observations, bindings, pointCatalogItems])
 
-  // Theo dõi biến thay đổi giá trị giữa các chu kỳ
   useEffect(() => {
     const newlyChanged = new Set<string>()
     const prev = prevValuesRef.current
@@ -389,13 +410,68 @@ export function StSimulatedSourceViewer({
     return source.split('\n')
   }, [source])
 
-  // Tách dòng đã che chú thích (multi-line comment lẫn single-line comment)
   const maskedLines = useMemo(() => {
     if (!source) return []
     return maskAllComments(source)
   }, [source])
 
-  // Phân tích dòng chuyên sâu: gán a := b, gọi hàm func(...), khai báo var : TYPE và FB instance
+  // Lọc danh sách các dòng có mã thực thi (bỏ qua dòng trắng và chú thích thuần)
+  const executableLineIndices = useMemo(() => {
+    const indices: number[] = []
+    for (let i = 0; i < rawLines.length; i++) {
+      if ((maskedLines[i]?.trim().length ?? 0) > 0) {
+        indices.push(i)
+      }
+    }
+    return indices
+  }, [rawLines, maskedLines])
+
+  // Dòng thực thi hiện tại trong chế độ Gỡ lỗi
+  const currentExecutingLineIndex = executableLineIndices[activeStepIndex] ?? -1
+
+  // Tự động nhảy dòng code theo timer trong chế độ Gỡ lỗi
+  useEffect(() => {
+    if (viewMode !== 'debug' || !isAutoPlaying || executableLineIndices.length === 0) return
+
+    const timer = setInterval(() => {
+      setActiveStepIndex((curr) => {
+        if (curr + 1 < executableLineIndices.length) {
+          return curr + 1
+        }
+        if (isLooping) {
+          return 0
+        }
+        setIsAutoPlaying(false)
+        return curr
+      })
+    }, stepSpeedMs)
+
+    return () => clearInterval(timer)
+  }, [viewMode, isAutoPlaying, executableLineIndices, stepSpeedMs, isLooping])
+
+  // Tự động cuộn theo dòng đang chạy trong chế độ Gỡ lỗi
+  useEffect(() => {
+    if (viewMode !== 'debug' || currentExecutingLineIndex === -1) return
+    const targetLineNumber = currentExecutingLineIndex + 1
+    const el = containerRef.current?.querySelector(`[data-line-number="${targetLineNumber}"]`)
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [viewMode, currentExecutingLineIndex])
+
+  const handleLineClick = (lineIndex: number) => {
+    if (viewMode !== 'debug') return
+    const stepIdx = executableLineIndices.indexOf(lineIndex)
+    if (stepIdx !== -1) {
+      setActiveStepIndex(stepIdx)
+    } else {
+      const closest = executableLineIndices.findIndex((idx) => idx >= lineIndex)
+      if (closest !== -1) {
+        setActiveStepIndex(closest)
+      }
+    }
+  }
+
   const analyzeLine = useMemo(() => {
     return (lineIndex: number): {
       badges: LineBadgeItem[]
@@ -405,7 +481,6 @@ export function StSimulatedSourceViewer({
       const maskedText = maskedLines[lineIndex] ?? ''
       const tokens = tokenizeStSource(rawText)
 
-      // Nếu dòng hoàn toàn là chú thích hoặc khoảng trắng rỗng -> KHÔNG xuất huy hiệu
       if (!maskedText.trim()) {
         return { badges: [], tokens }
       }
@@ -413,23 +488,18 @@ export function StSimulatedSourceViewer({
       const badges: LineBadgeItem[] = []
       const seen = new Set<string>()
 
-      // 1. Kiểm tra phép gán mục tiêu: target := expr (ví dụ Step := SEL(...) hoặc Mask := 0 hoặc DO01 := Ch01.Out)
       const assignMatch = maskedText.match(/^\s*(?:\d+\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*:=/)
       let targetVar: string | null = null
       if (assignMatch) {
         targetVar = assignMatch[1]
       }
 
-      // 2. Kiểm tra khai báo: varName : TYPE;
       const declMatch = maskedText.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:;|:=)/)
       let declVar: string | null = null
-      let declType: string | null = null
       if (declMatch && !ST_KEYWORDS_SET.has(declMatch[1].toUpperCase())) {
         declVar = declMatch[1]
-        declType = declMatch[2]
       }
 
-      // 3. Kiểm tra các hàm được gọi trên dòng: funcName(...)
       const funcCalls: string[] = []
       const funcRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
       let fm: RegExpExecArray | null
@@ -440,7 +510,6 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      // Nạp biến mục tiêu gán targetVar trước tiên (ví dụ Step = 1 hoặc a = 3)
       if (targetVar) {
         const resolved = variableValueMap.get(targetVar.toLowerCase())
         if (resolved) {
@@ -458,7 +527,6 @@ export function StSimulatedSourceViewer({
             isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
         } else {
-          // Nếu là gán hằng số trực tiếp (ví dụ Mask := 0; hoặc LoadMode := TRUE;)
           const directLiteralMatch = maskedText.match(/\:=\s*(TRUE|FALSE|\d+(?:\.\d+)?|T#[0-9a-zA-Z_]+)\s*;/i)
           if (directLiteralMatch) {
             const litVal = directLiteralMatch[1].toUpperCase()
@@ -474,7 +542,6 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      // Nạp kết quả gọi hàm trên dòng (ví dụ SEL = 1 hoặc FN_NEXT_STEP = 1)
       for (const fn of funcCalls) {
         let fnVal: string | undefined
         if (targetVar && badges.length > 0 && badges[0].label === targetVar) {
@@ -505,7 +572,6 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      // Nạp biến khai báo: kiểm tra cả biến vô hướng lẫn Function Block Instance
       if (declVar && !seen.has(declVar.toLowerCase())) {
         const resolved = variableValueMap.get(declVar.toLowerCase())
         if (resolved) {
@@ -523,8 +589,6 @@ export function StSimulatedSourceViewer({
             isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
         } else {
-          // Nếu là khai báo Function Block instance (ví dụ Ch01 : FB_DO_CHANNEL; hoặc Blinker : FB_BLINK;)
-          // Quét tất cả các cổng thành viên thuộc tiền tố instanceName.
           const prefix = `${declVar.toLowerCase()}.`
           const fbMembers: ResolvedVariableValue[] = []
           for (const [key, res] of variableValueMap.entries()) {
@@ -537,7 +601,6 @@ export function StSimulatedSourceViewer({
           }
 
           if (fbMembers.length > 0) {
-            // Sắp xếp cổng xuất chính lên đầu (Q, Out, Pulse, Stages, CV, Y...)
             fbMembers.sort((a, b) => {
               const portA = a.variableName.slice(prefix.length).toLowerCase()
               const portB = b.variableName.slice(prefix.length).toLowerCase()
@@ -569,7 +632,6 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      // Nạp các biến tham số/đọc khác trên dòng (ví dụ CmdReverse = FALSE)
       const idMatches = maskedText.match(/\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?\b/g) ?? []
       for (const rawMatch of idMatches) {
         const lower = rawMatch.toLowerCase()
@@ -713,11 +775,25 @@ export function StSimulatedSourceViewer({
             </span>
           </button>
 
-          {/* Switch View Mode: Debug vs Raw */}
+          {/* Switch View Mode: Giám sát (Inspect) vs Gỡ lỗi (Debug) vs Mã thô (Raw) */}
           <div className="flex items-center rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-0.5 text-xs">
             <button
               type="button"
-              onClick={() => setViewMode('debug')}
+              onClick={() => setViewMode('inspect')}
+              className={`rounded px-2 py-0.5 font-medium transition-colors ${
+                viewMode === 'inspect'
+                  ? 'bg-[var(--c-accent)] text-white shadow-xs'
+                  : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+              }`}
+            >
+              {pick('Giám sát', 'Inspect')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('debug')
+                setIsAutoPlaying(true)
+              }}
               className={`rounded px-2 py-0.5 font-medium transition-colors ${
                 viewMode === 'debug'
                   ? 'bg-[var(--c-accent)] text-white shadow-xs'
@@ -761,6 +837,122 @@ export function StSimulatedSourceViewer({
         </div>
       </div>
 
+      {/* Thanh điều khiển chuyên dụng cho CHẾ ĐỘ GỠ LỖI (Debug Mode Control Bar) */}
+      {viewMode === 'debug' && (
+        <div
+          data-testid="st-debug-control-bar"
+          className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--c-accent)]/30 bg-[var(--c-surface-2)] px-2.5 py-1.5 text-xs animate-in fade-in duration-200"
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1 text-[var(--c-accent)] font-bold uppercase tracking-wider text-[11px] mr-1">
+              <Bug className="h-3.5 w-3.5" />
+              <span>{pick('Gỡ lỗi từng dòng', 'Line Debug')}</span>
+            </div>
+
+            {/* Nút Play / Pause */}
+            <button
+              type="button"
+              onClick={() => setIsAutoPlaying((p) => !p)}
+              title={isAutoPlaying ? pick('Tạm dừng chạy mô phỏng từng dòng', 'Pause line debug') : pick('Bắt đầu chạy mô phỏng từng dòng', 'Start line debug')}
+              className={`flex h-6.5 items-center gap-1 rounded border px-2.5 text-xs font-semibold shadow-2xs transition-all ${
+                isAutoPlaying
+                  ? 'border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)] hover:brightness-105'
+                  : 'border-[var(--c-good-fg)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)] hover:brightness-105'
+              }`}
+            >
+              {isAutoPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+              <span>{isAutoPlaying ? pick('Tạm dừng', 'Pause') : pick('Chạy tiếp', 'Run')}</span>
+            </button>
+
+            {/* Nút Từng bước (Step Next) */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAutoPlaying(false)
+                setActiveStepIndex((curr) => Math.min(executableLineIndices.length - 1, curr + 1))
+              }}
+              title={pick('Nhảy tới dòng thực thi tiếp theo', 'Step to next line')}
+              className="flex h-6.5 items-center gap-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors"
+            >
+              <SkipForward className="h-3.5 w-3.5 text-[var(--c-accent)]" />
+              <span>{pick('Từng bước', 'Step')}</span>
+            </button>
+
+            {/* Nút Về đầu (Reset) */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveStepIndex(0)
+              }}
+              title={pick('Quay lại dòng đầu tiên của chương trình', 'Reset to top of program')}
+              className="flex h-6.5 items-center gap-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-[var(--c-text-dim)]" />
+              <span>{pick('Về đầu', 'Reset')}</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Bộ chỉnh tốc độ mô phỏng */}
+            <div className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
+              <Gauge className="h-3.5 w-3.5 text-[var(--c-accent)]" />
+              <span className="hidden sm:inline font-medium">{pick('Tốc độ:', 'Speed:')}</span>
+              <select
+                aria-label={pick('Tốc độ mô phỏng từng dòng', 'Line step simulation speed')}
+                value={stepSpeedMs}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10)
+                  setStepSpeedMs(val)
+                  try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                      window.localStorage.setItem('mkddc.programming.sim.stepSpeedMs', String(val))
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="h-6.5 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 text-xs font-mono text-[var(--c-text)] focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]"
+              >
+                <option value="2000">{pick('2.0 s (Rất chậm)', '2.0s (Very slow)')}</option>
+                <option value="1500">{pick('1.5 s (Chậm)', '1.5s (Slow)')}</option>
+                <option value="1000">{pick('1.0 s (Chuẩn)', '1.0s (Normal)')}</option>
+                <option value="600">{pick('0.6 s (Vừa)', '0.6s (Medium)')}</option>
+                <option value="300">{pick('0.3 s (Nhanh)', '0.3s (Fast)')}</option>
+                <option value="100">{pick('0.1 s (Rất nhanh)', '0.1s (Very fast)')}</option>
+              </select>
+            </div>
+
+            {/* Nút Lặp chu kỳ */}
+            <button
+              type="button"
+              onClick={() => setIsLooping((l) => !l)}
+              aria-pressed={isLooping}
+              title={pick(
+                isLooping ? 'Đang bật lặp lại chu kỳ khi chạy hết dòng cuối' : 'Chỉ chạy 1 lượt từ trên xuống rồi dừng',
+                isLooping ? 'Loop scan cycle is active' : 'Run once to the end and stop',
+              )}
+              className={`flex h-6.5 items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors ${
+                isLooping
+                  ? 'border-[var(--c-accent)] bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold'
+                  : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)]'
+              }`}
+            >
+              <span>{pick('Lặp chu kỳ', 'Loop')}</span>
+            </button>
+
+            {/* Chỉ báo dòng đang chạy */}
+            <div className="flex items-center gap-1 font-mono text-[11px] text-[var(--c-text-dim)] pl-1 border-l border-[var(--c-border)]">
+              <span className="text-[var(--c-accent)] font-bold">
+                {pick('Dòng', 'Line')} {currentExecutingLineIndex !== -1 ? currentExecutingLineIndex + 1 : 1}
+              </span>
+              <span>/</span>
+              <span>{rawLines.length}</span>
+              <span className="rounded bg-[var(--c-surface)] border border-[var(--c-border)]/60 px-1 text-[10px] font-semibold text-[var(--c-text)]">
+                {Math.round(((activeStepIndex + 1) / Math.max(1, executableLineIndices.length)) * 100)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Selected Variable Banner */}
       {selectedVariable && (
         <div className="flex items-center justify-between rounded bg-[var(--c-accent)]/10 px-2.5 py-1 text-xs text-[var(--c-accent)]">
@@ -803,6 +995,7 @@ export function StSimulatedSourceViewer({
             className="sr-only"
           />
           <div
+            ref={containerRef}
             data-testid="st-simulated-source-debug-view"
             className="relative min-h-[340px] max-h-[460px] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] font-mono text-xs [scrollbar-gutter:stable]"
           >
@@ -819,7 +1012,11 @@ export function StSimulatedSourceViewer({
                   selectedVariable !== null &&
                   lineText.toLowerCase().includes(selectedVariable.toLowerCase())
 
-                // Kiểm tra dòng này có đang mở rộng hiển thị toàn bộ biến hay không
+                // Trạng thái trong chế độ Gỡ lỗi (Debug Mode):
+                const isCurrentExecuting = viewMode === 'debug' && index === currentExecutingLineIndex
+                // Trong chế độ Debug: code chạy đến đâu thì hiện giá trị tới đó (dòng đã hoặc đang chạy)
+                const hasExecutedInDebug = viewMode === 'debug' ? index <= currentExecutingLineIndex : true
+
                 const isLineExpanded = expandAll || expandedLines.has(lineNumber)
                 const visibleBadges = isLineExpanded || badges.length <= 1 ? badges : [badges[0]]
                 const hiddenCount = badges.length - visibleBadges.length
@@ -827,17 +1024,29 @@ export function StSimulatedSourceViewer({
                 return (
                   <div
                     key={lineNumber}
-                    className={`flex items-center justify-between min-h-[1.65rem] px-2 py-0.5 border-b border-[var(--c-border)]/20 transition-colors ${
-                      hasSelectedVariable
+                    data-line-number={lineNumber}
+                    data-active-line={isCurrentExecuting ? 'true' : undefined}
+                    onClick={() => handleLineClick(index)}
+                    className={`flex items-center justify-between min-h-[1.65rem] px-2 py-0.5 border-b border-[var(--c-border)]/20 transition-all ${
+                      isCurrentExecuting
+                        ? 'bg-[var(--c-accent)]/20 border-l-4 border-l-[var(--c-accent)] ring-1 ring-[var(--c-accent)]/40 shadow-xs font-semibold'
+                        : hasSelectedVariable
                         ? 'bg-[var(--c-accent)]/15 border-l-3 border-l-[var(--c-accent)]'
                         : isMatchSearch
                         ? 'bg-[var(--c-warn-bg)]/30'
-                        : 'hover:bg-[var(--c-surface-2)]/60'
+                        : viewMode === 'debug' && !hasExecutedInDebug
+                        ? 'opacity-65 hover:bg-[var(--c-surface-2)]/30 cursor-pointer'
+                        : 'hover:bg-[var(--c-surface-2)]/60 cursor-pointer'
                     }`}
                   >
                     {/* Left: Line Number & Code */}
                     <div className="flex items-center min-w-0 pr-4">
-                      <span className="w-10 shrink-0 text-right pr-3 select-none text-[var(--c-text-dim)]/50 text-[11px]">
+                      <span className={`w-10 shrink-0 text-right pr-3 select-none text-[11px] font-mono flex items-center justify-end ${
+                        isCurrentExecuting
+                          ? 'text-[var(--c-accent)] font-bold'
+                          : 'text-[var(--c-text-dim)]/50'
+                      }`}>
+                        {isCurrentExecuting && <span className="text-[var(--c-accent)] mr-1 font-bold animate-pulse">▶</span>}
                         {lineNumber}
                       </span>
                       <div className="whitespace-pre overflow-x-hidden text-[var(--c-text)]">
@@ -872,8 +1081,9 @@ export function StSimulatedSourceViewer({
                                 })
                               }}
                               onMouseLeave={() => setHoveredSymbol(null)}
-                              onClick={() => {
+                              onClick={(e) => {
                                 if (resolved) {
+                                  e.stopPropagation()
                                   setSelectedVariable((curr) =>
                                     curr === resolved.variableName ? null : resolved.variableName,
                                   )
@@ -887,8 +1097,8 @@ export function StSimulatedSourceViewer({
                       </div>
                     </div>
 
-                    {/* Right: Inline Simulation Value Badges */}
-                    {showInlineValues && badges.length > 0 && (
+                    {/* Right: Inline Simulation Value Badges (Code chạy đến đâu thì hiện giá trị tới đó) */}
+                    {showInlineValues && hasExecutedInDebug && badges.length > 0 && (
                       <div className="ml-auto pl-3 shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
                         {visibleBadges.map((bItem, bIdx) => {
                           let badgeClasses =
@@ -917,7 +1127,9 @@ export function StSimulatedSourceViewer({
                             valueClasses = 'text-[var(--c-accent)] font-semibold'
                           }
 
-                          if (bItem.isChanged) {
+                          if (isCurrentExecuting) {
+                            badgeClasses += ' ring-2 ring-[var(--c-accent)] animate-pulse'
+                          } else if (bItem.isChanged) {
                             badgeClasses += ' ring-2 ring-[var(--c-accent)] animate-pulse'
                           }
 
@@ -925,11 +1137,12 @@ export function StSimulatedSourceViewer({
                             <button
                               key={`${bItem.label}-${bIdx}`}
                               type="button"
-                              onClick={() =>
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 setSelectedVariable((curr) =>
                                   curr === bItem.label ? null : bItem.label,
                                 )
-                              }
+                              }}
                               title={`${bItem.label} = ${bItem.value}${bItem.pointName ? ` (${bItem.pointName})` : ''}`}
                               className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-mono transition-all hover:brightness-110 ${badgeClasses} ${
                                 selectedVariable === bItem.label
@@ -948,7 +1161,6 @@ export function StSimulatedSourceViewer({
                           )
                         })}
 
-                        {/* Nút xem thêm +N biến khi đang ở chế độ thu gọn */}
                         {hiddenCount > 0 && (
                           <button
                             type="button"
@@ -966,7 +1178,6 @@ export function StSimulatedSourceViewer({
                           </button>
                         )}
 
-                        {/* Nút thu gọn lại còn 1 biến khi dòng đã mở rộng */}
                         {!expandAll && isLineExpanded && badges.length > 1 && (
                           <button
                             type="button"

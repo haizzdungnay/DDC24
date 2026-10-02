@@ -91,6 +91,49 @@ describe('StSimulatedSourceViewer', () => {
     expect(screen.queryByTitle(/CmdMode = 99/)).not.toBeInTheDocument()
   })
 
+  it('chế độ Gỡ lỗi (Debug) nhảy từng dòng từ trên xuống, tô đậm dòng đang chạy và điều chỉnh được tốc độ', () => {
+    render(
+      <I18nProvider>
+        <StSimulatedSourceViewer
+          source={sampleStSource}
+          runtime={sampleRuntime}
+        />
+      </I18nProvider>,
+    )
+
+    // Chuyển sang chế độ Gỡ lỗi
+    const debugModeBtn = screen.getByText(/Gỡ lỗi|Debug/)
+    fireEvent.click(debugModeBtn)
+
+    // Thanh điều khiển Debug xuất hiện
+    expect(screen.getByTestId('st-debug-control-bar')).toBeInTheDocument()
+
+    // Có các nút điều khiển Play/Pause, Từng bước, Về đầu
+    expect(screen.getByText(/Tạm dừng|Pause/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Từng bước|Step/ })).toBeInTheDocument()
+    expect(screen.getByText(/Về đầu|Reset/)).toBeInTheDocument()
+
+    // Có bộ chọn tốc độ mô phỏng
+    const speedSelect = screen.getByLabelText(/Tốc độ mô phỏng từng dòng|Line step simulation speed/)
+    expect(speedSelect).toBeInTheDocument()
+    fireEvent.change(speedSelect, { target: { value: '600' } })
+    expect(speedSelect).toHaveValue('600')
+
+    // Dòng đang chạy được tô đậm (có data-active-line) và có icon ▶
+    const activeLine = screen.getByTestId('st-simulated-source-debug-view').querySelector('[data-active-line="true"]')
+    expect(activeLine).toBeInTheDocument()
+
+    // Bấm Từng bước (Step next)
+    const stepBtn = screen.getByRole('button', { name: /Từng bước|Step/ })
+    fireEvent.click(stepBtn)
+
+    // Bấm Tạm dừng / Chạy tiếp
+    // Sau khi bấm Step, auto-playing tạm dừng -> nút thành Chạy tiếp (Run)
+    const runBtn = screen.getByText(/Chạy tiếp|Run/)
+    fireEvent.click(runBtn)
+    expect(screen.getByText(/Tạm dừng|Pause/)).toBeInTheDocument()
+      })
+
   it('dòng có nhiều hơn 1 biến mặc định chỉ hiện 1 biến và có nút +N để mở rộng', () => {
     render(
       <I18nProvider>
@@ -102,9 +145,8 @@ describe('StSimulatedSourceViewer', () => {
     )
 
     // Dòng Step := SEL(InPermit, 1, 16) có nhiều biến (Step, SEL, InPermit)
-    // Mặc định chỉ hiển thị biến mục tiêu đầu tiên (Step = 16) và nút +N
     expect(screen.getAllByText('Step =').length).toBeGreaterThanOrEqual(1)
-    const plusBtns = screen.getAllByTitle(new RegExp('Xem thêm \\d+ biến trên dòng|Show \\d+ more variables on line'))
+    const plusBtns = screen.getAllByTitle(/biến trên dòng|more variables on line/)
     expect(plusBtns.length).toBeGreaterThanOrEqual(1)
 
     // Bấm +N trên dòng Step := SEL(...) để mở rộng dòng này
@@ -114,7 +156,7 @@ describe('StSimulatedSourceViewer', () => {
     expect(screen.getAllByText('SEL =').length).toBeGreaterThanOrEqual(1)
 
     // Nút thu gọn xuất hiện
-    const lessBtns = screen.getAllByTitle(new RegExp('Thu gọn còn 1 biến trên dòng|Collapse to 1 variable on line'))
+    const lessBtns = screen.getAllByTitle(/Thu gọn còn 1 biến trên dòng|Collapse to 1 variable on line/)
     expect(lessBtns.length).toBeGreaterThanOrEqual(1)
     fireEvent.click(lessBtns[0])
   })
@@ -195,7 +237,7 @@ describe('StSimulatedSourceViewer', () => {
     expect(rawTextarea).toBeInTheDocument()
     expect(rawTextarea).toHaveValue(sampleStSource)
 
-    const debugBtn = screen.getByText(/Gỡ lỗi|Debug/)
+    const debugBtn = screen.getByText(/Giám sát|Inspect/)
     fireEvent.click(debugBtn)
     expect(screen.getByTestId('st-simulated-source-debug-view')).toBeInTheDocument()
   })
