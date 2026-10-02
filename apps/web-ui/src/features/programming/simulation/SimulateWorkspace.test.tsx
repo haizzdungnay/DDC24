@@ -13,7 +13,7 @@ import {
   type SimulationSessionView,
   type SimulationSlice,
 } from './simulationSession'
-import type { ProgrammingSimulationCapability } from '../model/types'
+import type { ProgrammingBinding, ProgrammingPointCatalogEntry, ProgrammingSimulationCapability } from '../model/types'
 
 const REVISION = '33333333-3333-4333-8333-333333333333'
 const OBJECT = '44444444-4444-4444-8444-444444444444'
@@ -23,6 +23,12 @@ const state = vi.hoisted(() => ({ revision: null as unknown }))
 
 vi.mock('../api/queries', () => ({
   useProgrammingRevision: () => state.revision,
+  useLazyProgrammingPointCatalog: () => ({
+    status: 'idle',
+    data: null,
+    error: null,
+    ensureLoaded: vi.fn(),
+  }),
 }))
 
 function sealedRevision() {
@@ -77,6 +83,8 @@ function renderWorkspace(overrides: {
   role?: string
   slice?: SimulationSlice
   inputs?: SimulationInputDescriptor[]
+  bindings?: readonly ProgrammingBinding[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   draftDirty?: boolean
   draftRevisionId?: string | null
   onStart?: () => void
@@ -90,6 +98,8 @@ function renderWorkspace(overrides: {
     role: overrides.role ?? 'admin',
     slice: overrides.slice ?? initialSimulationSlice,
     inputs: overrides.inputs ?? [],
+    bindings: overrides.bindings,
+    pointCatalogItems: overrides.pointCatalogItems,
     objectId: OBJECT,
     draftDirty: overrides.draftDirty ?? false,
     draftRevisionId: overrides.draftRevisionId === undefined ? REVISION : overrides.draftRevisionId,
@@ -299,5 +309,57 @@ describe('SIMULATE — ngõ vào ảo', () => {
     const slice = acceptSession(initialSimulationSlice, session())
     renderWorkspace({ slice, inputs: [] })
     expect(screen.getByText(/không khai ngõ vào nào ghi được/)).toBeInTheDocument()
+  })
+
+  it('hiển thị đúng tên điểm thay vì chuỗi mã UUID và có thanh cuộn overflow-y-auto trên aside', () => {
+    const slice = acceptSession(initialSimulationSlice, session({ state: 'RUNNING' }))
+    const uuidInput: SimulationInputDescriptor = {
+      observationId: 'a153aa91-f0e9-4b60-8741-3cadcfb7f579.CmdMode',
+      programId: 'a153aa91-f0e9-4b60-8741-3cadcfb7f579',
+      variable: 'CmdMode',
+      sourceKind: 'READ_BINDING',
+      dataType: 'UINT',
+      unit: null,
+      min: null,
+      max: null,
+      simulationWritable: true,
+    }
+    const binding: ProgrammingBinding = {
+      bindingId: 'b-1',
+      programId: 'a153aa91-f0e9-4b60-8741-3cadcfb7f579',
+      variableId: 'v-1',
+      variable: 'CmdMode',
+      direction: 'READ',
+      dataType: 'UINT',
+      point: { category: 'VP', pointId: 'MSV-01' },
+      qualityPolicy: 'REQUIRE_GOOD',
+      writable: true,
+    }
+    const catalogItem: ProgrammingPointCatalogEntry = {
+      category: 'VP',
+      pointId: 'MSV-01',
+      name: 'DO16_MODE',
+      dataType: 'UINT',
+      direction: 'READ',
+      writable: true,
+      quality: 'GOOD',
+      value: 0,
+    }
+
+    const { container } = renderWorkspace({
+      slice,
+      inputs: [uuidInput],
+      bindings: [binding],
+      pointCatalogItems: [catalogItem],
+    })
+
+    // Hiển thị tên điểm DO16_MODE thay vì chuỗi mã UUID
+    expect(screen.getByText('DO16_MODE')).toBeInTheDocument()
+    expect(screen.getByText('(CmdMode · MSV-01)')).toBeInTheDocument()
+    expect(screen.queryByText('a153aa91-f0e9-4b60-8741-3cadcfb7f579.CmdMode')).not.toBeInTheDocument()
+
+    // Aside có class overflow-y-auto và max-h
+    const aside = container.querySelector('aside')
+    expect(aside).toHaveClass('overflow-y-auto')
   })
 })

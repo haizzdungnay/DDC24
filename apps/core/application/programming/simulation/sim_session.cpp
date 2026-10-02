@@ -203,8 +203,11 @@ void SimSession::build_manifest()
                 inputs_.push_back(std::move(descriptor));
             }
 
-            if (variable.storage == StStorage::VAR_INPUT ||
-                variable.storage == StStorage::VAR_OUTPUT) {
+            if ((variable.storage == StStorage::VAR_INPUT ||
+                 variable.storage == StStorage::VAR_OUTPUT ||
+                 variable.storage == StStorage::VAR_LOCAL ||
+                 variable.storage == StStorage::VAR_RETAIN) &&
+                variable.name.rfind("__", 0) != 0) {
                 SimObservation observation;
                 observation.observation_id = observation_id;
                 observation.program_name = program_name;
@@ -263,6 +266,22 @@ bool SimSession::set_input(const std::string& observation_id, const StValue& val
      * giá trị trước đó y nguyên, không phải một giá trị nửa vời. */
     input_values_[found] = value;
     input_written_[found] = 1;
+
+    for (std::size_t index = 0; index < programs_.size(); ++index) {
+        if (programs_[index].program_name == descriptor.program_name) {
+            runtimes_[index].runtime->set_variable(descriptor.variable, value);
+            break;
+        }
+    }
+
+    for (SimObservation& observation : observations_) {
+        if (observation.observation_id == observation_id) {
+            observation.value = value;
+            observation.has_value = true;
+            break;
+        }
+    }
+    ++snapshot_sequence_;
     return true;
 }
 

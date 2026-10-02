@@ -906,6 +906,9 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 		if err != nil {
 			return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
 		}
+		s.mu.Lock()
+		s.latestFrames[session.SessionID] = frame
+		s.mu.Unlock()
 		next.State = programmingstore.SimStatePaused
 		next.VirtualTimeMS = frame.VirtualTimeMS
 		next.ObservationSequence = frame.SnapshotSequence
@@ -915,6 +918,9 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 		if err != nil {
 			return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
 		}
+		s.mu.Lock()
+		s.latestFrames[session.SessionID] = frame
+		s.mu.Unlock()
 		next.State = programmingstore.SimStatePaused
 		next.VirtualTimeMS = frame.VirtualTimeMS
 		next.ObservationSequence = frame.SnapshotSequence
@@ -992,6 +998,10 @@ func (s *SimulationService) SetInput(ctx context.Context, request SimulationRequ
 		return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
 	}
 
+	s.mu.Lock()
+	delete(s.latestFrames, sessionID)
+	s.mu.Unlock()
+
 	details, _ := json.Marshal(map[string]any{"observationId": observationID, "dataType": descriptor.DataType})
 	updated, err := s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
 		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
@@ -1035,9 +1045,15 @@ func (s *SimulationService) Observations(ctx context.Context, sessionID string) 
 		return simworker.Frame{}, public
 	}
 	s.mu.Lock()
-	if frame, ok := s.latestFrames[sessionID]; ok && frame.SnapshotSequence > 0 {
-		s.mu.Unlock()
-		return frame, nil
+	sessionRunning := false
+	if sess, err := s.store.GetSimulationSession(ctx, sessionID); err == nil && sess.State == programmingstore.SimStateRunning {
+		sessionRunning = true
+	}
+	if sessionRunning {
+		if frame, ok := s.latestFrames[sessionID]; ok && frame.SnapshotSequence > 0 {
+			s.mu.Unlock()
+			return frame, nil
+		}
 	}
 	s.mu.Unlock()
 

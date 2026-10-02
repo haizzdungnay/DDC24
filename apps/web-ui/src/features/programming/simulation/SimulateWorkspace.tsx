@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useI18n } from '../../../shared/i18n'
-import { useProgrammingRevision } from '../api/queries'
+import { useLazyProgrammingPointCatalog, useProgrammingRevision } from '../api/queries'
 import { activeProgramSource } from '../overview/activeProgramSet'
 import { LiveFbdView } from '../design/LiveFbdView'
 import { parseLiveFbd } from '../design/LiveProgramView'
 import { SimulationControls } from './SimulationControls'
 import { VirtualInputs } from './VirtualInputs'
+import { StSimulatedSourceViewer } from './StSimulatedSourceViewer'
+
 import { StRuntimeValueOverlay, type StRuntimeOverlayItem, type StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
 import {
   canControlSimulation,
@@ -16,7 +18,7 @@ import {
   type SimulationInputDescriptor,
   type SimulationSlice,
 } from './simulationSession'
-import type { ProgrammingProgram, ProgrammingSimulationCapability } from '../model/types'
+import type { ProgrammingBinding, ProgrammingPointCatalogEntry, ProgrammingProgram, ProgrammingSimulationCapability } from '../model/types'
 import type { FbdDocument } from '../fbd/model'
 
 /**
@@ -37,6 +39,8 @@ export function SimulateWorkspace({
   role,
   slice,
   inputs,
+  bindings,
+  pointCatalogItems: pointCatalogItemsProp,
   objectId,
   draftDirty,
   draftRevisionId,
@@ -53,6 +57,8 @@ export function SimulateWorkspace({
   role: string | undefined
   slice: SimulationSlice
   inputs: readonly SimulationInputDescriptor[]
+  bindings?: readonly ProgrammingBinding[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   objectId: string | undefined
   draftDirty: boolean
   /** Revision đã lưu gần nhất — nguồn hợp lệ DUY NHẤT để mở phiên. */
@@ -72,6 +78,34 @@ export function SimulateWorkspace({
   const { pick } = useI18n()
   const session = currentSession(slice)
   const supported = isSimulationSupported(capability)
+  const lazyCatalog = useLazyProgrammingPointCatalog()
+  const { ensureLoaded } = lazyCatalog
+
+  useEffect(() => {
+    if (!pointCatalogItemsProp) {
+      ensureLoaded()
+    }
+  }, [pointCatalogItemsProp, ensureLoaded])
+
+  const pointCatalogItems = pointCatalogItemsProp ?? lazyCatalog.data?.items
+  const [lastCommittedInput, setLastCommittedInput] = useState<{
+    variable: string
+    observationId: string
+    timestamp: number
+  } | null>(null)
+
+  const handleCommitInput = useCallback(
+    (descriptor: SimulationInputDescriptor, raw: string) => {
+      setLastCommittedInput({
+        variable: descriptor.variable || descriptor.observationId,
+        observationId: descriptor.observationId,
+        timestamp: Date.now(),
+      })
+      onSetInput(descriptor, raw)
+    },
+    [onSetInput],
+  )
+
   const canControl = allowMutation && canControlSimulation(capability, role)
 
   const isStaleSession = Boolean(
@@ -338,29 +372,39 @@ export function SimulateWorkspace({
               runtime={simulationOverlayState}
             />
           </div>
-          <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto">
-            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto min-h-0 max-h-[380px] lg:max-h-[460px] [scrollbar-gutter:stable]">
+            <VirtualInputs
+              inputs={inputs}
+              slice={slice}
+              canControl={canControl}
+              onCommit={handleCommitInput}
+              bindings={bindings}
+              pointCatalogItems={pointCatalogItems}
+            />
           </aside>
         </div>
       ) : sealed.source !== null && sealed.language !== 'FBD' ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="space-y-2">
-            <label className="block space-y-1">
-              <span className="text-[11px] uppercase text-[var(--c-text-dim)]">
-                {pick('Mã nguồn đang mô phỏng', 'Simulated source')}
-              </span>
-              <textarea
-                readOnly
-                aria-label={pick('Mã nguồn đang mô phỏng', 'Simulated source')}
-                value={sealed.source}
-                rows={16}
-                className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 font-mono text-xs"
-              />
-            </label>
-          </div>
+          <StSimulatedSourceViewer
+            source={sealed.source}
+            runtime={simulationOverlayState}
+            slice={slice}
+            inputs={inputs}
+            bindings={bindings}
+            pointCatalogItems={pointCatalogItems}
+            programName={program?.name}
+            lastCommittedInput={lastCommittedInput}
+          />
 
-          <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 min-h-0 max-h-[380px] lg:max-h-[460px] overflow-y-auto [scrollbar-gutter:stable]">
+            <VirtualInputs
+              inputs={inputs}
+              slice={slice}
+              canControl={canControl}
+              onCommit={handleCommitInput}
+              bindings={bindings}
+              pointCatalogItems={pointCatalogItems}
+            />
           </aside>
         </div>
       ) : (

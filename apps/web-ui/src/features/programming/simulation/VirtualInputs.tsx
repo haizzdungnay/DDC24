@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useI18n } from '../../../shared/i18n'
+import type { ProgrammingBinding, ProgrammingPointCatalogEntry } from '../model/types'
 import {
   simulationValuesByObservation,
   validateSimulationInput,
@@ -18,17 +19,60 @@ import {
  * Kiểm giá trị ở client chỉ để người dùng biết ngay; server vẫn là authority và
  * vẫn từ chối sai kiểu/đơn vị/miền.
  */
+export interface VirtualInputsProps {
+  inputs: readonly SimulationInputDescriptor[]
+  slice: SimulationSlice
+  canControl: boolean
+  onCommit: (descriptor: SimulationInputDescriptor, raw: string) => void
+  bindings?: readonly ProgrammingBinding[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
+}
+
+export function resolveInputIdentity(
+  descriptor: SimulationInputDescriptor,
+  bindings?: readonly ProgrammingBinding[],
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[],
+) {
+  const varName =
+    descriptor.variable?.trim() ||
+    (descriptor.observationId.includes('.')
+      ? descriptor.observationId.slice(descriptor.observationId.indexOf('.') + 1)
+      : descriptor.observationId)
+
+  const binding =
+    bindings?.find(
+      (b) =>
+        (b.programId === descriptor.programId || !descriptor.programId) &&
+        b.variable === (descriptor.variable || varName),
+    ) ?? bindings?.find((b) => b.variable === (descriptor.variable || varName))
+
+  const pointId = binding?.point.pointId
+  const pointCategory = binding?.point.category
+
+  const pointItem =
+    pointCatalogItems?.find(
+      (item) => item.pointId === pointId && (!pointCategory || item.category === pointCategory),
+    ) ?? pointCatalogItems?.find((item) => item.pointId === pointId)
+
+  const pointName = pointItem?.name?.trim()
+
+  return {
+    varName,
+    pointId,
+    pointCategory,
+    pointName: pointName && pointName !== pointId ? pointName : undefined,
+    displayName: pointName || varName,
+  }
+}
+
 export function VirtualInputs({
   inputs,
   slice,
   canControl,
   onCommit,
-}: {
-  inputs: readonly SimulationInputDescriptor[]
-  slice: SimulationSlice
-  canControl: boolean
-  onCommit: (descriptor: SimulationInputDescriptor, raw: string) => void
-}) {
+  bindings,
+  pointCatalogItems,
+}: VirtualInputsProps) {
   const { pick } = useI18n()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const values = simulationValuesByObservation(slice.frame)
@@ -44,20 +88,45 @@ export function VirtualInputs({
 
   return (
     <section aria-label={pick('Ngõ vào ảo', 'Virtual inputs')} className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase text-[var(--c-text)]">
-        {pick('Ngõ vào ảo', 'Virtual inputs')}
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase text-[var(--c-text)]">
+          {pick('Ngõ vào ảo', 'Virtual inputs')}
+        </h3>
+        <span className="font-mono text-[11px] text-[var(--c-text-dim)]">
+          {inputs.length}
+        </span>
+      </div>
       <ul className="space-y-2">
         {inputs.map((descriptor) => {
           const draft = drafts[descriptor.observationId] ?? ''
           const validation = validateSimulationInput(descriptor, draft)
           const committed = values[descriptor.observationId]
           const writable = canControl && descriptor.simulationWritable
+          const { varName, pointId, pointCategory, pointName, displayName } = resolveInputIdentity(
+            descriptor,
+            bindings,
+            pointCatalogItems,
+          )
           return (
             <li key={descriptor.observationId} className="space-y-1 rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-              <div className="flex flex-wrap items-baseline gap-1 text-[11px]">
-                <span className="font-mono text-[var(--c-text)]">{descriptor.observationId}</span>
-                <span className="text-[var(--c-text-dim)]">{descriptor.dataType}</span>
+              <div
+                className="flex flex-wrap items-baseline gap-1.5 text-[11px]"
+                title={descriptor.observationId}
+              >
+                <span className="font-semibold text-[var(--c-text)]">{displayName}</span>
+                {pointName && pointName !== varName && (
+                  <span className="font-mono text-[var(--c-text-dim)]">
+                    ({varName}{pointId && pointId !== pointName ? ' · ' + pointId : ''})
+                  </span>
+                )}
+                {!pointName && pointId && (
+                  <span className="font-mono text-[var(--c-text-dim)]">
+                    ({pointCategory ? pointCategory + ': ' : ''}{pointId})
+                  </span>
+                )}
+                <span className="rounded bg-[var(--c-surface-2)] px-1 py-0.2 font-mono text-[10px] text-[var(--c-text-dim)]">
+                  {descriptor.dataType}
+                </span>
                 {descriptor.unit && <span className="text-[var(--c-text-dim)]">{descriptor.unit}</span>}
                 {(descriptor.min !== null || descriptor.max !== null) && (
                   <span className="text-[var(--c-text-dim)]">
