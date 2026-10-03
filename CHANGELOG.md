@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Changed — Nâng cấp toàn diện ST simulation & debugging UX IDE PLC (2026-10-02)
+
+- **Function & FB Evaluation trên Viewer (`StSimulatedSourceViewer.tsx`, `stControlFlow.ts`):**
+  - Tích hợp `extractLineCalls`, `extractLineAssignments`, `extractLineExpressions` từ `stControlFlow.ts`.
+  - Hiển thị inline badges cho lời gọi hàm chuẩn IEC (`SEL`, `LIMIT`, `MIN`, `MAX`, `ABS`, `SQRT`) và hàm custom (`FN_SEC_TO_TIME`, `FN_MASK_FROM_REAL`, `FN_FIRST_N`, `FN_NEXT_STEP`, `DEADBAND`).
+  - Hiển thị trạng thái gọi Function Block (`AutoTmr(...)`, `StepClk(...)`, `TimerFB(...)`) kèm cổng chính (`.Q`, `.ET`, `.CV`).
+  - Trích xuất và giải quyết truy cập thuộc tính FB / Struct đa cấp (`AutoTmr.Q`, `Ch01.Waiting`) từ khóa trực tiếp hoặc unpack nested observation objects.
+  - Hỗ trợ câu lệnh gán đa dòng bằng cách gắn badge tại dòng kết thúc câu lệnh hoặc dòng liên quan.
+- **PLC IDE Debug UX (`StSimulatedSourceViewer.tsx`):**
+  - Thanh công cụ Debug IDE PLC: Play/Pause (F5), Step Over (F10), Step Back (bước lùi lại dòng trước), Reset (Shift+F5).
+  - Breakpoints: click vào cột số dòng (line gutter) để bật/tắt breakpoint (chấm đỏ `data-testid="breakpoint-N"`), auto-play tự động dừng khi gặp dòng có breakpoint.
+  - Phím tắt bàn phím: F10 (Step Over), F5 (Play/Pause), Shift+F5 (Reset) lắng nghe an toàn, không xung đột khi đang gõ vào input.
+  - Thanh trượt tốc độ (Speed Slider) mượt mà từ 50ms đến 2000ms song song cùng dropdown tốc độ chuẩn.
+  - Click trực tiếp vào bất kỳ dòng mã nào để định vị con trỏ debug tới dòng thực thi tương ứng hoặc gần nhất.
+  - Bảng Watch / Inspector: panel thu gọn/mở rộng ghim biến theo dõi (tên biến, kiểu dữ liệu, giá trị hiện tại, đơn vị, nút bỏ ghim), lưu tự động vào `localStorage` theo `programName`.
+  - Hover Card cao cấp: hiển thị kiểu dữ liệu, giá trị hiện tại, giá trị chu kỳ trước, đơn vị đo, điểm kết nối phần cứng I/O, và nút ghim trực tiếp vào bảng Watch.
+- **Đồng bộ Virtual Inputs tức thì (`VirtualInputs.tsx`, `useSimulation.ts`):**
+  - Hỗ trợ phím Enter để commit nhanh giá trị ảo.
+  - Tránh khóa nút Ghi khi sửa liên tiếp (`pending === 'SET_INPUT'`).
+  - Optimistic update trực tiếp vào local observation slice để UI phản hồi tức thì 0ms.
+  - Tự động bắt lỗi HTTP 412 (ETag mismatch), reconcile fetch ETag mới nhất từ session và retry 1 lần an toàn.
+- **Kiểm chứng:**
+  - `npx vitest run --environment jsdom src/features/programming/simulation`: 4 test files, 76/76 unit tests PASS.
+  - `npx vitest run --environment jsdom src/features/programming`: 158 test files, 2 488/2 488 tests PASS.
+  - `npx tsc --noEmit`: 0 lỗi TypeScript trên toàn bộ `apps/web-ui`.
+
 ### Changed — Phát hành hồ sơ tích hợp IOP V3.0 lên GitHub (2026-09-30)
 
 - **Bằng chứng đi kèm:** đưa 13 file log được dẫn trong hồ sơ/manifest vào Git bằng danh sách tường minh dù rule chung bỏ qua `*.log`; kiểm manifest hiệu năng 11/11 và manifest UI PASS.

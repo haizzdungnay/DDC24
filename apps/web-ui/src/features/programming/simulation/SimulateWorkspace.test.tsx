@@ -362,4 +362,34 @@ describe('SIMULATE — ngõ vào ảo', () => {
     const aside = container.querySelector('aside')
     expect(aside).toHaveClass('overflow-y-auto')
   })
+
+  it('nhấn Enter trong ô ngõ vào ảo để commit giá trị ngay lập tức', () => {
+    const onSetInput = vi.fn()
+    const slice = acceptSession(initialSimulationSlice, session())
+    renderWorkspace({ slice, inputs: [INPUT], onSetInput })
+
+    const field = screen.getByLabelText(/Giá trị ảo của AHU.Setpoint/)
+    fireEvent.change(field, { target: { value: '25.0' } })
+    fireEvent.keyDown(field, { key: 'Enter', code: 'Enter' })
+
+    expect(onSetInput).toHaveBeenCalledWith(INPUT, '25.0')
+  })
+
+  it('không khoá nút Ghi khi slice.pending là SET_INPUT để hỗ trợ sửa liên tiếp', () => {
+    const onSetInput = vi.fn()
+    const baseSlice = acceptSession(initialSimulationSlice, session())
+    const pendingSlice: SimulationSlice = {
+      ...baseSlice,
+      pending: 'SET_INPUT',
+    }
+    renderWorkspace({ slice: pendingSlice, inputs: [INPUT], onSetInput })
+
+    const field = screen.getByLabelText(/Giá trị ảo của AHU.Setpoint/)
+    fireEvent.change(field, { target: { value: '30.0' } })
+
+    const setButton = screen.getByRole('button', { name: 'Ghi' })
+    expect(setButton).toBeEnabled()
+    fireEvent.click(setButton)
+    expect(onSetInput).toHaveBeenCalledWith(INPUT, '30.0')
+  })
 })

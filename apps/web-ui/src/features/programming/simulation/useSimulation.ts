@@ -18,6 +18,7 @@ import {
   type SimulationAction,
   type SimulationFrame,
   type SimulationInputDescriptor,
+  type SimulationObservation,
   type SimulationSessionView,
   type SimulationSlice,
 } from './simulationSession'
@@ -225,20 +226,94 @@ export function useSimulation({ recoverActiveSession = false }: UseSimulationOpt
     async (descriptor, raw) => {
       const session = currentSession(sliceRef.current)
       if (!session) return
-      setSlice((current) => ({ ...current, pending: 'SET_INPUT', lastDenial: null }))
+
+      const encoded = encodeSimulationInput(descriptor, raw)
+
+      // 1. Optimistic update ngay lập tức vào local observation slice để UI phản hồi tức thì
+      setSlice((current) => {
+        const currentObs: SimulationObservation[] = current.frame?.observations ?? []
+        const hasObs = currentObs.some((o) => o.observationId === descriptor.observationId)
+        const nextObs: SimulationObservation[] = hasObs
+          ? currentObs.map((o) =>
+              o.observationId === descriptor.observationId
+                ? { ...o, value: encoded, quality: 'GOOD' as const }
+                : o,
+            )
+          : [
+              ...currentObs,
+              {
+                observationId: descriptor.observationId,
+                programId: descriptor.programId,
+                variable: descriptor.variable || descriptor.observationId,
+                kind: 'INPUT' as const,
+                dataType: descriptor.dataType,
+                value: encoded,
+                quality: 'GOOD' as const,
+              },
+            ]
+
+        return {
+          ...current,
+          pending: 'SET_INPUT',
+          lastDenial: null,
+          frame: current.frame
+            ? { ...current.frame, observations: nextObs }
+            : {
+                virtualTimeMs: 0,
+                snapshotSequence: 1,
+                resetEpoch: 1,
+                observations: nextObs,
+              },
+        }
+      })
+
       try {
-        const encoded = encodeSimulationInput(descriptor, raw)
-        const readBack = await client.request<SimulationSessionView>('setProgrammingSimulationInput', {
-          path: { sessionId: session.sessionId, observationId: descriptor.observationId },
-          body: {
-            schemaVersion: '1.0',
-            dataType: descriptor.dataType,
-            value: encoded,
-          },
-          ifMatch: session.etag,
-          idempotencyKey: createUuid(),
-          correlationId: createUuid(),
-        })
+        const sendInput = async (etag: string) => {
+          return await client.request<SimulationSessionView>('setProgrammingSimulationInput', {
+            path: { sessionId: session.sessionId, observationId: descriptor.observationId },
+            body: {
+              schemaVersion: '1.0',
+              dataType: descriptor.dataType,
+              value: encoded,
+            },
+            ifMatch: etag,
+            idempotencyKey: createUuid(),
+            correlationId: createUuid(),
+          })
+        }
+
+        let readBack: SimulationSessionView
+        try {
+          readBack = await sendInput(session.etag)
+        } catch (reason: unknown) {
+          // Xử lý 412 (Precondition Failed / ETag mismatch): tự động reconcile lấy etag mới nhất và retry 1 lần
+          const is412 =
+            (reason instanceof ProgrammingApiError &&
+              (reason.status === 412 ||
+                String(reason.envelope?.error?.code).includes('412') ||
+                String(reason.envelope?.error?.code).includes('PRECONDITION'))) ||
+            (typeof reason === 'object' &&
+              reason !== null &&
+              'status' in reason &&
+              (reason as { status: number }).status === 412)
+
+          if (is412) {
+            const freshSession = await client.request<SimulationSessionView>('getProgrammingSimulationSession', {
+              path: { sessionId: session.sessionId },
+              correlationId: createUuid(),
+            })
+            if (!mountedRef.current) return
+            if (freshSession) {
+              setSlice((current) => acceptSession(current, freshSession))
+              readBack = await sendInput(freshSession.etag)
+            } else {
+              throw reason
+            }
+          } else {
+            throw reason
+          }
+        }
+
         if (!mountedRef.current) return
         setSlice((current) => {
           let updated = acceptSession(current, readBack)
@@ -268,6 +343,10 @@ export function useSimulation({ recoverActiveSession = false }: UseSimulationOpt
         const described = describe(reason, 'Không ghi được giá trị mô phỏng.', 'Could not write the simulation value.')
         setSlice((current) => acceptDenial(current, described))
         await reconcile()
+      } finally {
+        if (mountedRef.current) {
+          setSlice((current) => (current.pending === 'SET_INPUT' ? { ...current, pending: null } : current))
+        }
       }
     },
     [client, describe, reconcile],

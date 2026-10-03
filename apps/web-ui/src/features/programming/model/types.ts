@@ -455,6 +455,8 @@ export interface ProgrammingPointIdentity {
 export interface ProgrammingBinding {
   bindingId: string
   variableId: string
+  programId?: string
+  variable?: string
   point: ProgrammingPointIdentity
   direction: 'READ' | 'WRITE' | 'READ_WRITE'
   dataType: string

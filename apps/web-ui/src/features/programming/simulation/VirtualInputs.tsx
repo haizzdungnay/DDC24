@@ -43,8 +43,13 @@ export function resolveInputIdentity(
     bindings?.find(
       (b) =>
         (b.programId === descriptor.programId || !descriptor.programId) &&
-        b.variable === (descriptor.variable || varName),
-    ) ?? bindings?.find((b) => b.variable === (descriptor.variable || varName))
+        (b.variable === (descriptor.variable || varName) || b.variableId === (descriptor.variable || varName)),
+    ) ??
+    bindings?.find(
+      (b) =>
+        b.variable === (descriptor.variable || varName) ||
+        b.variableId === (descriptor.variable || varName),
+    )
 
   const pointId = binding?.point.pointId
   const pointCategory = binding?.point.category
@@ -147,12 +152,20 @@ export function VirtualInputs({
                     onChange={(event) =>
                       setDrafts((current) => ({ ...current, [descriptor.observationId]: event.target.value }))
                     }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        if (writable && validation.ok && slice.pending !== 'STOP') {
+                          onCommit(descriptor, draft)
+                        }
+                      }
+                    }}
                     className="w-28 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 font-mono text-[11px] disabled:opacity-50"
                   />
                 </label>
                 <button
                   type="button"
-                  disabled={!writable || !validation.ok || slice.pending !== null}
+                  disabled={!writable || !validation.ok || (slice.pending !== null && slice.pending !== 'SET_INPUT')}
                   onClick={() => onCommit(descriptor, draft)}
                   className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-0.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
                 >

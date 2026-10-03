@@ -1,4 +1,13 @@
-import { computeExecutedLineSequence, findFirstUsageLine } from './stControlFlow'
+import {
+  computeExecutedLineSequence,
+  findFirstUsageLine,
+  extractLineCalls,
+  extractLineAssignments,
+  extractLineExpressions,
+  evaluateStExpression,
+  parseStProgram,
+  type StStatement,
+} from './stControlFlow'
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import {
   Search,
@@ -15,9 +24,12 @@ import {
   Play,
   Pause,
   SkipForward,
+  SkipBack,
   RotateCcw,
   Gauge,
   Bug,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import {
@@ -171,6 +183,7 @@ export interface ResolvedVariableValue {
   fullName?: string
   observationId: string
   displayValue: string
+  prevDisplayValue?: string
   state: 'live' | 'uncertain' | 'stale' | 'invalid'
   valid: boolean
   quality: string
@@ -178,6 +191,8 @@ export interface ResolvedVariableValue {
   value: unknown
   pointId?: string
   pointName?: string
+  unit?: string
+  connectionPoint?: string
   isChanged?: boolean
 }
 
@@ -248,14 +263,71 @@ export function StSimulatedSourceViewer({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedVariable, setSelectedVariable] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Breakpoints: tập hợp số dòng có điểm dừng
+  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
+
+  // Bảng Watch / Inspector: danh sách tên biến được ghim lưu theo programName / ID
+  const watchStorageKey = `mkddc.programming.sim.watch.${programName || 'default'}`
+  const [pinnedVariables, setPinnedVariables] = useState<string[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = window.localStorage.getItem(watchStorageKey)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed)) return parsed
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return []
+  })
+  const [isWatchExpanded, setIsWatchExpanded] = useState<boolean>(true)
+
+  const togglePinVariable = useCallback(
+    (varName: string) => {
+      setPinnedVariables((prev) => {
+        const next = prev.includes(varName)
+          ? prev.filter((v) => v !== varName)
+          : [...prev, varName]
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(watchStorageKey, JSON.stringify(next))
+          }
+        } catch {
+          // ignore
+        }
+        return next
+      })
+    },
+    [watchStorageKey],
+  )
+
+  const toggleBreakpoint = useCallback((lineNumber: number) => {
+    setBreakpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(lineNumber)) {
+        next.delete(lineNumber)
+      } else {
+        next.add(lineNumber)
+      }
+      return next
+    })
+  }, [])
+
   const [hoveredSymbol, setHoveredSymbol] = useState<{
     name: string
     displayValue?: string
+    prevDisplayValue?: string
     dataType?: string
     kind?: string
     quality?: string
     pointName?: string
+    unit?: string
+    connectionPoint?: string
     description?: string
+    isPinned?: boolean
     x: number
     y: number
   } | null>(null)
@@ -311,14 +383,23 @@ export function StSimulatedSourceViewer({
 
       const binding = bindings?.find(
         (b) =>
-          b.variableName?.toUpperCase() === cleanVarName.toUpperCase() ||
-          b.variableName?.toUpperCase() === item.variableName.toUpperCase(),
+          b.variableId?.toUpperCase() === cleanVarName.toUpperCase() ||
+          b.variableId?.toUpperCase() === item.variableName.toUpperCase(),
       )
-      const pointId = binding?.pointId
+      const pointId = binding?.point.pointId
       const catalogEntry = pointId
         ? pointCatalogItems?.find((p) => p.pointId === pointId)
         : undefined
-      const pointName = catalogEntry?.name || catalogEntry?.tag || pointId
+      const pointName = catalogEntry?.name || pointId
+      const unit =
+        catalogEntry?.unit ||
+        inputs?.find(
+          (i) => i.variable === cleanVarName || i.observationId === item.variableId,
+        )?.unit ||
+        undefined
+      const connectionPoint = binding?.point
+        ? `${binding.point.category ? binding.point.category + ': ' : ''}${binding.point.pointId}`
+        : undefined
 
       const obs = observations.find(
         (o) =>
@@ -327,11 +408,16 @@ export function StSimulatedSourceViewer({
           o.variable.toUpperCase() === item.variableName.toUpperCase(),
       )
 
+      const prevDisplayValue =
+        prevValuesRef.current.get(cleanVarName.toLowerCase()) ||
+        prevValuesRef.current.get(item.variableId.toLowerCase())
+
       const resolved: ResolvedVariableValue = {
         variableName: cleanVarName,
         fullName: item.variableName,
         observationId: item.variableId,
         displayValue: presentation.displayValue,
+        prevDisplayValue,
         state: presentation.state,
         valid: item.valid,
         quality: item.quality,
@@ -339,6 +425,8 @@ export function StSimulatedSourceViewer({
         value: item.value,
         pointId,
         pointName,
+        unit,
+        connectionPoint,
       }
 
       map.set(cleanVarName.toLowerCase(), resolved)
@@ -349,6 +437,24 @@ export function StSimulatedSourceViewer({
     for (const obs of observations) {
       const cleanVar = obs.variable || obs.observationId
       const key = cleanVar.toLowerCase()
+      const binding = bindings?.find(
+        (b) => b.variableId?.toUpperCase() === cleanVar.toUpperCase(),
+      )
+      const pointId = binding?.point.pointId
+      const catalogEntry = pointId
+        ? pointCatalogItems?.find((p) => p.pointId === pointId)
+        : undefined
+      const pointName = catalogEntry?.name || pointId
+      const unit =
+        catalogEntry?.unit ||
+        inputs?.find(
+          (i) => i.variable === cleanVar || i.observationId === obs.observationId,
+        )?.unit ||
+        undefined
+      const connectionPoint = binding?.point
+        ? `${binding.point.category ? binding.point.category + ': ' : ''}${binding.point.pointId}`
+        : undefined
+
       if (!map.has(key)) {
         const item: StRuntimeOverlayItem = {
           variableId: obs.observationId,
@@ -359,20 +465,16 @@ export function StSimulatedSourceViewer({
           freshness: 'SIMULATION',
         }
         const presentation = presentStRuntimeValue(item)
-        const binding = bindings?.find(
-          (b) => b.variableName?.toUpperCase() === cleanVar.toUpperCase(),
-        )
-        const pointId = binding?.pointId
-        const catalogEntry = pointId
-          ? pointCatalogItems?.find((p) => p.pointId === pointId)
-          : undefined
-        const pointName = catalogEntry?.name || catalogEntry?.tag || pointId
+        const prevDisplayValue =
+          prevValuesRef.current.get(key) ||
+          prevValuesRef.current.get(obs.observationId.toLowerCase())
 
         const resolved: ResolvedVariableValue = {
           variableName: cleanVar,
           fullName: obs.variable || obs.observationId,
           observationId: obs.observationId,
           displayValue: presentation.displayValue,
+          prevDisplayValue,
           state: presentation.state,
           valid: item.valid,
           quality: obs.quality,
@@ -380,14 +482,56 @@ export function StSimulatedSourceViewer({
           value: obs.value,
           pointId,
           pointName,
+          unit,
+          connectionPoint,
         }
         map.set(key, resolved)
         map.set(obs.observationId.toLowerCase(), resolved)
       }
+
+      // Trích xuất struct / FB members từ obs.value dạng Object nếu có (AutoTmr.Q, Ch01.Waiting, ...)
+      if (typeof obs.value === 'object' && obs.value !== null && !Array.isArray(obs.value)) {
+        for (const [propKey, propVal] of Object.entries(obs.value as Record<string, unknown>)) {
+          const propVarName = `${cleanVar}.${propKey}`
+          const propKeyLower = propVarName.toLowerCase()
+          const propDisplay =
+            typeof propVal === 'boolean'
+              ? propVal
+                ? 'TRUE'
+                : 'FALSE'
+              : propVal !== null && propVal !== undefined
+              ? String(propVal)
+              : '—'
+
+          const nestedResolved: ResolvedVariableValue = {
+            variableName: propVarName,
+            fullName: `${obs.variable || obs.observationId}.${propKey}`,
+            observationId: `${obs.observationId}.${propKey}`,
+            displayValue: propDisplay,
+            prevDisplayValue: prevValuesRef.current.get(propKeyLower),
+            state: 'live',
+            valid: propVal !== null && propVal !== undefined,
+            quality: obs.quality,
+            dataType:
+              typeof propVal === 'boolean'
+                ? 'BOOL'
+                : typeof propVal === 'number'
+                ? 'NUMBER'
+                : undefined,
+            value: propVal,
+            pointId,
+            pointName,
+            unit,
+            connectionPoint,
+          }
+          map.set(propKeyLower, nestedResolved)
+          map.set(`${obs.observationId.toLowerCase()}.${propKey.toLowerCase()}`, nestedResolved)
+        }
+      }
     }
 
     return map
-  }, [runtimeItems, observations, bindings, pointCatalogItems])
+  }, [runtimeItems, observations, bindings, pointCatalogItems, inputs])
 
   useEffect(() => {
     const newlyChanged = new Set<string>()
@@ -468,25 +612,66 @@ export function StSimulatedSourceViewer({
   // Dòng thực thi hiện tại trong chế độ Gỡ lỗi
   const currentExecutingLineIndex = executableLineIndices[activeStepIndex] ?? -1
 
-  // Tự động nhảy dòng code theo timer trong chế độ Gỡ lỗi
+  // Tự động nhảy dòng code theo timer trong chế độ Gỡ lỗi (tự dừng khi gặp breakpoint)
   useEffect(() => {
     if (viewMode !== 'debug' || !isAutoPlaying || executableLineIndices.length === 0) return
 
     const timer = setInterval(() => {
       setActiveStepIndex((curr) => {
+        let nextIndex = curr
         if (curr + 1 < executableLineIndices.length) {
-          return curr + 1
+          nextIndex = curr + 1
+        } else if (isLooping) {
+          nextIndex = 0
+        } else {
+          setIsAutoPlaying(false)
+          return curr
         }
-        if (isLooping) {
-          return 0
+
+        const nextLineNumber = executableLineIndices[nextIndex] + 1
+        if (breakpoints.has(nextLineNumber)) {
+          setIsAutoPlaying(false)
         }
-        setIsAutoPlaying(false)
-        return curr
+
+        return nextIndex
       })
     }, stepSpeedMs)
 
     return () => clearInterval(timer)
-  }, [viewMode, isAutoPlaying, executableLineIndices, stepSpeedMs, isLooping])
+  }, [viewMode, isAutoPlaying, executableLineIndices, stepSpeedMs, isLooping, breakpoints])
+
+  // Lắng nghe phím tắt: F10 (Step Over), F5 (Play/Pause), Shift+F5 (Reset)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (e.key === 'F10') {
+        e.preventDefault()
+        if (viewMode !== 'debug') setViewMode('debug')
+        setIsAutoPlaying(false)
+        setActiveStepIndex((curr) => Math.min(executableLineIndices.length - 1, curr + 1))
+      } else if (e.key === 'F5' && e.shiftKey) {
+        e.preventDefault()
+        if (viewMode !== 'debug') setViewMode('debug')
+        setActiveStepIndex(0)
+      } else if (e.key === 'F5' && !e.shiftKey) {
+        e.preventDefault()
+        if (viewMode !== 'debug') setViewMode('debug')
+        setIsAutoPlaying((p) => !p)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [viewMode, executableLineIndices.length])
 
   // Tự động cuộn theo dòng đang chạy trong chế độ Gỡ lỗi
   useEffect(() => {
@@ -515,6 +700,34 @@ export function StSimulatedSourceViewer({
     }
   }
 
+  const astStatements = useMemo(() => {
+    if (!source) return []
+    try {
+      return parseStProgram(source)
+    } catch {
+      return []
+    }
+  }, [source])
+
+  const flattenedStatements = useMemo(() => {
+    const list: StStatement[] = []
+    const walk = (stmts: StStatement[]) => {
+      for (const s of stmts) {
+        list.push(s)
+        if (s.kind === 'if') {
+          walk(s.thenStatements)
+          for (const eb of s.elsifBranches) walk(eb.statements)
+          if (s.elseBranch) walk(s.elseBranch.statements)
+        } else if (s.kind === 'case') {
+          for (const b of s.branches) walk(b.statements)
+          if (s.elseBranch) walk(s.elseBranch.statements)
+        }
+      }
+    }
+    walk(astStatements)
+    return list
+  }, [astStatements])
+
   const analyzeLine = useMemo(() => {
     return (lineIndex: number): {
       badges: LineBadgeItem[]
@@ -531,10 +744,24 @@ export function StSimulatedSourceViewer({
       const badges: LineBadgeItem[] = []
       const seen = new Set<string>()
 
-      const assignMatch = maskedText.match(/^\s*(?:\d+\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*:=/)
+      // 1. Phân tích biểu thức dòng với extractLineExpressions từ stControlFlow
+      const lineExprs = extractLineExpressions(maskedText, lineIndex)
+
+      // 2. Tìm gán trên dòng hoặc gán đa dòng kết thúc tại lineIndex
       let targetVar: string | null = null
+      const assignMatch = maskedText.match(/^\s*(?:\d+\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*:=/)
       if (assignMatch) {
         targetVar = assignMatch[1]
+      } else if (lineExprs.assignments.length > 0) {
+        targetVar = lineExprs.assignments[0].target
+      } else {
+        // Kiểm tra câu lệnh gán đa dòng kết thúc ở dòng này
+        const multilineAssign = flattenedStatements.find(
+          (s) => s.kind === 'assignment' && s.endLine === lineIndex,
+        )
+        if (multilineAssign && multilineAssign.kind === 'assignment') {
+          targetVar = multilineAssign.target
+        }
       }
 
       const declMatch = maskedText.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:;|:=)/)
@@ -543,16 +770,7 @@ export function StSimulatedSourceViewer({
         declVar = declMatch[1]
       }
 
-      const funcCalls: string[] = []
-      const funcRegex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
-      let fm: RegExpExecArray | null
-      while ((fm = funcRegex.exec(maskedText)) !== null) {
-        const name = fm[1]
-        if (!ST_KEYWORDS_SET.has(name.toUpperCase())) {
-          funcCalls.push(name)
-        }
-      }
-
+      // Xử lý biến đích (target variable)
       if (targetVar) {
         const resolved = variableValueMap.get(targetVar.toLowerCase())
         if (resolved) {
@@ -570,6 +788,7 @@ export function StSimulatedSourceViewer({
             isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
         } else {
+          // Tính toán giá trị trực tiếp nếu chưa có trong observation
           const directLiteralMatch = maskedText.match(/\:=\s*(TRUE|FALSE|\d+(?:\.\d+)?|T#[0-9a-zA-Z_]+)\s*;/i)
           if (directLiteralMatch) {
             const litVal = directLiteralMatch[1].toUpperCase()
@@ -585,36 +804,142 @@ export function StSimulatedSourceViewer({
         }
       }
 
-      for (const fn of funcCalls) {
-        let fnVal: string | undefined
-        if (targetVar && badges.length > 0 && badges[0].label === targetVar) {
-          fnVal = badges[0].value
-        } else if (fn.toUpperCase() === 'SEL') {
-          const selArgsMatch = maskedText.match(/SEL\s*\(\s*([A-Za-z0-9_.]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/i)
-          if (selArgsMatch) {
-            const gName = selArgsMatch[1]
-            const in0 = selArgsMatch[2].trim()
-            const in1 = selArgsMatch[3].trim()
-            const gRes = variableValueMap.get(gName.toLowerCase())
-            if (gRes && gRes.valid) {
-              const isGTrue = gRes.value === true || gRes.displayValue.toUpperCase() === 'TRUE'
-              fnVal = isGTrue ? in1 : in0
-            }
-          }
+      // 3. Xử lý Lời gọi Hàm & Function Block (Calls)
+      for (const call of lineExprs.calls) {
+        const callNameLower = call.name.toLowerCase()
+        const callNameUpper = call.name.toUpperCase()
+
+        if (ST_KEYWORDS_SET.has(callNameUpper) && !['SEL', 'LIMIT', 'MIN', 'MAX', 'ABS', 'SQRT'].includes(callNameUpper)) {
+          continue
         }
 
-        if (fnVal && !seen.has(fn.toLowerCase())) {
-          seen.add(fn.toLowerCase())
+        if (call.isFb) {
+          // Lời gọi Function Block: AutoTmr(...), StepClk(...)
+          const fbQ = variableValueMap.get(`${callNameLower}.q`)
+          const fbEt = variableValueMap.get(`${callNameLower}.et`)
+          const fbCv = variableValueMap.get(`${callNameLower}.cv`)
+
+          if (!seen.has(`${callNameLower}()`)) {
+            seen.add(`${callNameLower}()`)
+            badges.push({
+              label: `${call.name}()`,
+              value: fbQ ? (fbQ.value === true || fbQ.displayValue.toUpperCase() === 'TRUE' ? 'ACTIVE' : 'IDLE') : 'CALL',
+              isFunction: true,
+              isBoolTrue: fbQ ? (fbQ.value === true || fbQ.displayValue.toUpperCase() === 'TRUE') : true,
+              isBoolFalse: fbQ ? (fbQ.value === false || fbQ.displayValue.toUpperCase() === 'FALSE') : false,
+            })
+          }
+
+          if (fbQ && !seen.has(`${callNameLower}.q`)) {
+            seen.add(`${callNameLower}.q`)
+            badges.push({
+              label: `${call.name}.Q`,
+              value: fbQ.displayValue,
+              isTarget: true,
+              isBoolTrue: fbQ.value === true || fbQ.displayValue.toUpperCase() === 'TRUE',
+              isBoolFalse: fbQ.value === false || fbQ.displayValue.toUpperCase() === 'FALSE',
+              quality: fbQ.quality,
+            })
+          }
+
+          if (fbEt && !seen.has(`${callNameLower}.et`)) {
+            seen.add(`${callNameLower}.et`)
+            badges.push({
+              label: `${call.name}.ET`,
+              value: fbEt.displayValue,
+              isTarget: true,
+              quality: fbEt.quality,
+            })
+          }
+
+          if (fbCv && !seen.has(`${callNameLower}.cv`)) {
+            seen.add(`${callNameLower}.cv`)
+            badges.push({
+              label: `${call.name}.CV`,
+              value: fbCv.displayValue,
+              isTarget: true,
+              quality: fbCv.quality,
+            })
+          }
+
+          if (!seen.has(callNameLower)) {
+            seen.add(callNameLower)
+            const fbVal = fbQ ? fbQ.displayValue : 'CALLED'
+            badges.push({
+              label: call.name,
+              value: fbVal,
+              isFunction: true,
+              isBoolTrue: fbVal.toUpperCase() === 'TRUE',
+              isBoolFalse: fbVal.toUpperCase() === 'FALSE',
+            })
+          }
+        } else {
+          // Lời gọi hàm: FN_SEC_TO_TIME, FN_MASK_FROM_REAL, FN_FIRST_N, FN_NEXT_STEP, SEL, LIMIT, DEADBAND...
+          let fnVal: string | undefined
+          if (targetVar && badges.length > 0 && badges[0].label === targetVar) {
+            fnVal = badges[0].value
+          } else {
+            const callExpr = `${call.name}(${call.args.map((a) => (a.name ? `${a.name} := ${a.value}` : a.value)).join(', ')})`
+            const evaluated = evaluateStExpression(callExpr, lookupVarForControlFlow)
+            if (evaluated !== null && evaluated !== undefined) {
+              fnVal =
+                typeof evaluated === 'boolean'
+                  ? evaluated
+                    ? 'TRUE'
+                    : 'FALSE'
+                  : String(evaluated)
+            }
+          }
+
+          if (!fnVal && callNameUpper === 'SEL') {
+            const selArgsMatch = maskedText.match(/SEL\s*\(\s*([A-Za-z0-9_.]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/i)
+            if (selArgsMatch) {
+              const gName = selArgsMatch[1]
+              const in0 = selArgsMatch[2].trim()
+              const in1 = selArgsMatch[3].trim()
+              const gRes = variableValueMap.get(gName.toLowerCase())
+              if (gRes && gRes.valid) {
+                const isGTrue = gRes.value === true || gRes.displayValue.toUpperCase() === 'TRUE'
+                fnVal = isGTrue ? in1 : in0
+              }
+            }
+          }
+
+          if (fnVal && !seen.has(callNameLower)) {
+            seen.add(callNameLower)
+            badges.push({
+              label: call.name,
+              value: fnVal,
+              isFunction: true,
+              isBoolTrue: fnVal.toUpperCase() === 'TRUE',
+              isBoolFalse: fnVal.toUpperCase() === 'FALSE',
+            })
+          }
+        }
+      }
+
+      // 4. Xử lý Truy cập thuộc tính FB / Struct (AutoTmr.Q, AutoTmr.ET, TestStep.CV, Ch01.Waiting)
+      for (const ma of lineExprs.memberAccesses) {
+        const maKey = ma.full.toLowerCase()
+        if (seen.has(maKey)) continue
+        const resolved = variableValueMap.get(maKey)
+        if (resolved) {
+          seen.add(maKey)
           badges.push({
-            label: fn,
-            value: fnVal,
-            isFunction: true,
-            isBoolTrue: fnVal.toUpperCase() === 'TRUE',
-            isBoolFalse: fnVal.toUpperCase() === 'FALSE',
+            label: ma.full,
+            value: resolved.displayValue,
+            pointName: resolved.pointName,
+            dataType: resolved.dataType,
+            quality: resolved.quality,
+            isChanged: changedVars.has(resolved.variableName.toLowerCase()),
+            isBoolTrue: resolved.value === true || resolved.displayValue.toUpperCase() === 'TRUE',
+            isBoolFalse: resolved.value === false || resolved.displayValue.toUpperCase() === 'FALSE',
+            isInvalid: !resolved.valid || resolved.state === 'invalid',
           })
         }
       }
 
+      // 5. Khai báo FB trong khối VAR ... END_VAR
       if (declVar && !seen.has(declVar.toLowerCase())) {
         const resolved = variableValueMap.get(declVar.toLowerCase())
         if (resolved) {
@@ -675,6 +1000,7 @@ export function StSimulatedSourceViewer({
         }
       }
 
+      // 6. Các biến/định danh còn lại trên dòng (Identifiers)
       const idMatches = maskedText.match(/\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?\b/g) ?? []
       for (const rawMatch of idMatches) {
         const lower = rawMatch.toLowerCase()
@@ -700,7 +1026,7 @@ export function StSimulatedSourceViewer({
 
       return { badges, tokens }
     }
-  }, [rawLines, maskedLines, variableValueMap, changedVars])
+  }, [rawLines, maskedLines, flattenedStatements, variableValueMap, changedVars, lookupVarForControlFlow])
 
   const copyToClipboard = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -896,7 +1222,11 @@ export function StSimulatedSourceViewer({
             <button
               type="button"
               onClick={() => setIsAutoPlaying((p) => !p)}
-              title={isAutoPlaying ? pick('Tạm dừng chạy mô phỏng từng dòng', 'Pause line debug') : pick('Bắt đầu chạy mô phỏng từng dòng', 'Start line debug')}
+              title={
+                isAutoPlaying
+                  ? pick('Tạm dừng chạy mô phỏng từng dòng (F5)', 'Pause line debug (F5)')
+                  : pick('Bắt đầu chạy mô phỏng từng dòng (F5)', 'Start line debug (F5)')
+              }
               className={`flex h-6.5 items-center gap-1 rounded border px-2.5 text-xs font-semibold shadow-2xs transition-all ${
                 isAutoPlaying
                   ? 'border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)] hover:brightness-105'
@@ -907,18 +1237,34 @@ export function StSimulatedSourceViewer({
               <span>{isAutoPlaying ? pick('Tạm dừng', 'Pause') : pick('Chạy tiếp', 'Run')}</span>
             </button>
 
-            {/* Nút Từng bước (Step Next) */}
+            {/* Nút Từng bước (Step Next / Step Over) */}
             <button
               type="button"
               onClick={() => {
                 setIsAutoPlaying(false)
                 setActiveStepIndex((curr) => Math.min(executableLineIndices.length - 1, curr + 1))
               }}
-              title={pick('Nhảy tới dòng thực thi tiếp theo', 'Step to next line')}
+              title={pick('Nhảy tới dòng thực thi tiếp theo (F10)', 'Step to next line (F10)')}
+              aria-label={pick('Từng bước', 'Step')}
               className="flex h-6.5 items-center gap-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors"
             >
               <SkipForward className="h-3.5 w-3.5 text-[var(--c-accent)]" />
               <span>{pick('Từng bước', 'Step')}</span>
+            </button>
+
+            {/* Nút Bước lùi (Step Back) */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAutoPlaying(false)
+                setActiveStepIndex((curr) => Math.max(0, curr - 1))
+              }}
+              title={pick('Bước lùi lại dòng thực thi trước đó', 'Step back to previous line')}
+              aria-label={pick('Bước lùi', 'Step back')}
+              className="flex h-6.5 items-center gap-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors"
+            >
+              <SkipBack className="h-3.5 w-3.5 text-[var(--c-accent)]" />
+              <span>{pick('Bước lùi', 'Step back')}</span>
             </button>
 
             {/* Nút Về đầu (Reset) */}
@@ -927,7 +1273,7 @@ export function StSimulatedSourceViewer({
               onClick={() => {
                 setActiveStepIndex(0)
               }}
-              title={pick('Quay lại dòng đầu tiên của chương trình', 'Reset to top of program')}
+              title={pick('Quay lại dòng đầu tiên của chương trình (Shift+F5)', 'Reset to top of program (Shift+F5)')}
               className="flex h-6.5 items-center gap-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors"
             >
               <RotateCcw className="h-3.5 w-3.5 text-[var(--c-text-dim)]" />
@@ -936,10 +1282,33 @@ export function StSimulatedSourceViewer({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Bộ chỉnh tốc độ mô phỏng */}
+            {/* Bộ chỉnh tốc độ mô phỏng (Slider + Select) */}
             <div className="flex items-center gap-1 text-[11px] text-[var(--c-text-dim)]">
               <Gauge className="h-3.5 w-3.5 text-[var(--c-accent)]" />
               <span className="hidden sm:inline font-medium">{pick('Tốc độ:', 'Speed:')}</span>
+              <span className="font-mono text-[10px] text-[var(--c-text)] font-semibold w-10 text-right">
+                {stepSpeedMs}ms
+              </span>
+              <input
+                type="range"
+                min="50"
+                max="2000"
+                step="50"
+                value={stepSpeedMs}
+                aria-label={pick('Thanh trượt tốc độ mô phỏng', 'Simulation speed slider')}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10)
+                  setStepSpeedMs(val)
+                  try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                      window.localStorage.setItem('mkddc.programming.sim.stepSpeedMs', String(val))
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="h-1.5 w-14 sm:w-20 accent-[var(--c-accent)] cursor-pointer"
+              />
               <select
                 aria-label={pick('Tốc độ mô phỏng từng dòng', 'Line step simulation speed')}
                 value={stepSpeedMs}
@@ -950,7 +1319,9 @@ export function StSimulatedSourceViewer({
                     if (typeof window !== 'undefined' && window.localStorage) {
                       window.localStorage.setItem('mkddc.programming.sim.stepSpeedMs', String(val))
                     }
-                  } catch { /* ignore */ }
+                  } catch {
+                    // ignore
+                  }
                 }}
                 className="h-6.5 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1.5 text-xs font-mono text-[var(--c-text)] focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]"
               >
@@ -960,6 +1331,7 @@ export function StSimulatedSourceViewer({
                 <option value="600">{pick('0.6 s (Vừa)', '0.6s (Medium)')}</option>
                 <option value="300">{pick('0.3 s (Nhanh)', '0.3s (Fast)')}</option>
                 <option value="100">{pick('0.1 s (Rất nhanh)', '0.1s (Very fast)')}</option>
+                <option value="50">{pick('0.05 s (Tối đa)', '0.05s (Fastest)')}</option>
               </select>
             </div>
 
@@ -1090,14 +1462,46 @@ export function StSimulatedSourceViewer({
                   >
                     {/* Left: Line Number & Code */}
                     <div className="flex items-center min-w-0 pr-4">
-                      <span className={`w-10 shrink-0 text-right pr-3 select-none text-[11px] font-mono flex items-center justify-end ${
-                        isCurrentExecuting
-                          ? 'text-[var(--c-accent)] font-bold'
-                          : 'text-[var(--c-text-dim)]/50'
-                      }`}>
-                        {isCurrentExecuting && <span className="text-[var(--c-accent)] mr-1 font-bold animate-pulse">▶</span>}
-                        {lineNumber}
-                      </span>
+                      {/* Line Number Gutter with Breakpoint Indicator */}
+                      <div
+                        data-testid={`gutter-${lineNumber}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleBreakpoint(lineNumber)
+                        }}
+                        title={pick(
+                          breakpoints.has(lineNumber)
+                            ? `Xoá điểm dừng dòng ${lineNumber}`
+                            : `Đặt điểm dừng tại dòng ${lineNumber}`,
+                          breakpoints.has(lineNumber)
+                            ? `Remove breakpoint on line ${lineNumber}`
+                            : `Set breakpoint on line ${lineNumber}`,
+                        )}
+                        className="relative flex items-center justify-end w-12 shrink-0 pr-2.5 select-none text-[11px] font-mono cursor-pointer group/gutter"
+                      >
+                        {/* Red dot breakpoint indicator */}
+                        {breakpoints.has(lineNumber) ? (
+                          <span
+                            data-testid={`breakpoint-${lineNumber}`}
+                            className="absolute left-1.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-red-400 shadow-xs"
+                          />
+                        ) : (
+                          <span className="absolute left-1.5 h-2.5 w-2.5 rounded-full bg-red-500/0 group-hover/gutter:bg-red-500/40 transition-colors" />
+                        )}
+                        {isCurrentExecuting && (
+                          <span className="text-[var(--c-accent)] mr-1 font-bold animate-pulse">▶</span>
+                        )}
+                        <span
+                          className={
+                            isCurrentExecuting
+                              ? 'text-[var(--c-accent)] font-bold'
+                              : 'text-[var(--c-text-dim)]/50'
+                          }
+                        >
+                          {lineNumber}
+                        </span>
+                      </div>
+
                       <div className="whitespace-pre overflow-x-hidden text-[var(--c-text)]">
                         {tokens.map((token, tIdx) => {
                           const tokenText = token.text
@@ -1117,14 +1521,33 @@ export function StSimulatedSourceViewer({
                               onMouseEnter={(e) => {
                                 if (!isHoverable) return
                                 const rect = e.currentTarget.getBoundingClientRect()
+                                const isPinned =
+                                  pinnedVariables.includes(tokenText) ||
+                                  pinnedVariables.includes(resolved?.variableName ?? '')
                                 setHoveredSymbol({
                                   name: tokenText,
                                   displayValue: resolved?.displayValue,
-                                  dataType: resolved?.dataType || (isIecFunc ? 'FUNCTION' : isIecFb ? 'FUNCTION_BLOCK' : undefined),
-                                  kind: isIecFunc ? 'Hàm chuẩn IEC' : isIecFb ? 'Khối hàm chuẩn' : resolved?.pointName ? 'Biến gán điểm' : 'Biến chương trình',
+                                  prevDisplayValue: resolved?.prevDisplayValue,
+                                  dataType:
+                                    resolved?.dataType ||
+                                    (isIecFunc ? 'FUNCTION' : isIecFb ? 'FUNCTION_BLOCK' : undefined),
+                                  kind: isIecFunc
+                                    ? 'Hàm chuẩn IEC'
+                                    : isIecFb
+                                    ? 'Khối hàm chuẩn'
+                                    : resolved?.pointName
+                                    ? 'Biến gán điểm'
+                                    : 'Biến chương trình',
                                   quality: resolved?.quality,
                                   pointName: resolved?.pointName,
-                                  description: isIecFunc ? IEC_STANDARD_FUNCTIONS[upper] : isIecFb ? IEC_STANDARD_FBS[upper] : undefined,
+                                  unit: resolved?.unit,
+                                  connectionPoint: resolved?.connectionPoint,
+                                  description: isIecFunc
+                                    ? IEC_STANDARD_FUNCTIONS[upper]
+                                    : isIecFb
+                                    ? IEC_STANDARD_FBS[upper]
+                                    : undefined,
+                                  isPinned,
                                   x: rect.left,
                                   y: rect.bottom + 4,
                                 })
@@ -1192,6 +1615,29 @@ export function StSimulatedSourceViewer({
                                   curr === bItem.label ? null : bItem.label,
                                 )
                               }}
+                              onMouseEnter={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const cleanLabel = bItem.label.toLowerCase()
+                                const resolved = variableValueMap.get(cleanLabel)
+                                const isPinned =
+                                  pinnedVariables.includes(bItem.label) ||
+                                  pinnedVariables.includes(resolved?.variableName ?? '')
+                                setHoveredSymbol({
+                                  name: bItem.label,
+                                  displayValue: bItem.value || resolved?.displayValue,
+                                  prevDisplayValue: resolved?.prevDisplayValue,
+                                  dataType: resolved?.dataType || (bItem.isFunction ? 'FUNCTION' : undefined),
+                                  kind: bItem.isFunction ? 'Hàm ST' : resolved?.pointName ? 'Biến gán điểm' : 'Biến chương trình',
+                                  quality: resolved?.quality,
+                                  pointName: bItem.pointName || resolved?.pointName,
+                                  unit: resolved?.unit,
+                                  connectionPoint: resolved?.connectionPoint,
+                                  isPinned,
+                                  x: rect.left,
+                                  y: rect.bottom + 4,
+                                })
+                              }}
+                              onMouseLeave={() => setHoveredSymbol(null)}
                               title={`${bItem.label} = ${bItem.value}${bItem.pointName ? ` (${bItem.pointName})` : ''}`}
                               className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-mono transition-all hover:brightness-110 ${badgeClasses} ${
                                 selectedVariable === bItem.label
@@ -1254,50 +1700,191 @@ export function StSimulatedSourceViewer({
         </>
       )}
 
+      {/* Bảng Watch / Inspector (Bảng theo dõi biến ghim) */}
+      <div
+        data-testid="st-watch-inspector-panel"
+        className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 shadow-2xs"
+      >
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setIsWatchExpanded((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[var(--c-text)] hover:text-[var(--c-accent)] transition-colors"
+          >
+            <Pin className="h-3.5 w-3.5 text-[var(--c-accent)]" />
+            <span>{pick('Bảng theo dõi biến (Watch)', 'Variable Watch')}</span>
+            <span className="font-mono text-[10px] text-[var(--c-text-dim)] font-normal">
+              ({pinnedVariables.length})
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsWatchExpanded((v) => !v)}
+            className="text-xs text-[var(--c-text-dim)] hover:text-[var(--c-text)]"
+          >
+            {isWatchExpanded ? pick('Thu gọn', 'Collapse') : pick('Mở rộng', 'Expand')}
+          </button>
+        </div>
+
+        {isWatchExpanded && (
+          <div className="mt-2">
+            {pinnedVariables.length === 0 ? (
+              <p className="text-[11px] text-[var(--c-text-dim)] italic">
+                {pick(
+                  'Chưa có biến nào được ghim. Rê chuột vào biến và bấm "Ghim theo dõi (Pin to Watch)".',
+                  'No variables pinned. Hover over a variable and click "Pin to Watch".',
+                )}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {pinnedVariables.map((vName) => {
+                  const resolved = variableValueMap.get(vName.toLowerCase())
+                  return (
+                    <div
+                      key={vName}
+                      className="flex items-center justify-between rounded border border-[var(--c-border)]/60 bg-[var(--c-surface-2)] px-2 py-1 text-xs font-mono"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-[var(--c-text)] truncate" title={vName}>
+                            {vName}
+                          </span>
+                          {resolved?.dataType && (
+                            <span className="rounded bg-[var(--c-surface-3)] px-1 text-[9px] text-[var(--c-accent)] font-semibold shrink-0">
+                              {resolved.dataType}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-semibold text-[var(--c-good-fg)] truncate">
+                          {resolved?.displayValue ?? '—'}
+                          {resolved?.unit && (
+                            <span className="text-[10px] text-[var(--c-text-dim)] ml-1 font-normal">
+                              {resolved.unit}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => togglePinVariable(vName)}
+                        title={pick(`Bỏ ghim ${vName}`, `Unpin ${vName}`)}
+                        className="text-[var(--c-text-dim)] hover:text-[var(--c-danger-fg)] shrink-0 ml-1 p-0.5 rounded transition-colors"
+                      >
+                        <PinOff className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Floating Hover Card */}
       {hoveredSymbol && (
         <div
           role="tooltip"
-          className="fixed z-50 max-w-sm rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 shadow-xl text-xs pointer-events-none"
+          data-testid="st-hover-card"
+          className="fixed z-50 max-w-sm rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2.5 shadow-xl text-xs pointer-events-auto"
           style={{
-            top: `${Math.min(hoveredSymbol.y, typeof window !== 'undefined' ? window.innerHeight - 150 : 300)}px`,
+            top: `${Math.min(hoveredSymbol.y, typeof window !== 'undefined' ? window.innerHeight - 200 : 300)}px`,
             left: `${Math.min(hoveredSymbol.x, typeof window !== 'undefined' ? window.innerWidth - 280 : 300)}px`,
           }}
+          onMouseLeave={() => setHoveredSymbol(null)}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-[var(--c-border)]/50 pb-1">
-            <span className="font-mono font-bold text-[var(--c-text)]">
-              {hoveredSymbol.name}
-            </span>
-            {hoveredSymbol.dataType && (
-              <span className="rounded bg-[var(--c-surface-2)] px-1 font-mono text-[10px] text-[var(--c-accent)] font-semibold">
-                {hoveredSymbol.dataType}
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--c-border)]/50 pb-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-mono font-bold text-[var(--c-text)] truncate">
+                {hoveredSymbol.name}
               </span>
+              {hoveredSymbol.dataType && (
+                <span className="rounded bg-[var(--c-surface-2)] px-1 font-mono text-[10px] text-[var(--c-accent)] font-semibold shrink-0">
+                  {hoveredSymbol.dataType}
+                </span>
+              )}
+            </div>
+            {/* Nút Ghim vào Watch */}
+            {hoveredSymbol.name && (
+              <button
+                type="button"
+                onClick={() => {
+                  togglePinVariable(hoveredSymbol.name)
+                  setHoveredSymbol((curr) =>
+                    curr ? { ...curr, isPinned: !curr.isPinned } : null,
+                  )
+                }}
+                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border transition-colors shrink-0 ${
+                  hoveredSymbol.isPinned
+                    ? 'border-[var(--c-accent)] bg-[var(--c-accent)]/15 text-[var(--c-accent)] font-semibold'
+                    : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+                }`}
+                title={
+                  hoveredSymbol.isPinned
+                    ? pick('Bỏ ghim khỏi Watch', 'Unpin from Watch')
+                    : pick('Ghim vào bảng Watch', 'Pin to Watch')
+                }
+              >
+                {hoveredSymbol.isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                <span>
+                  {hoveredSymbol.isPinned ? pick('Đã ghim', 'Pinned') : pick('Ghim', 'Pin')}
+                </span>
+              </button>
             )}
           </div>
 
-          <div className="mt-1.5 space-y-1">
+          <div className="mt-2 space-y-1 font-mono text-[11px]">
             {hoveredSymbol.displayValue !== undefined && (
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--c-text-dim)]">{pick('Giá trị chạy:', 'Runtime value:')}</span>
-                <span className="font-mono font-bold text-[var(--c-good-fg)]">
+                <span className="text-[var(--c-text-dim)]">{pick('Giá trị hiện tại:', 'Current Value:')}</span>
+                <span className="font-bold text-[var(--c-good-fg)]">
                   {hoveredSymbol.displayValue}
+                  {hoveredSymbol.unit && (
+                    <span className="ml-1 text-[10px] text-[var(--c-text-dim)] font-normal">
+                      {hoveredSymbol.unit}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+            {hoveredSymbol.prevDisplayValue !== undefined &&
+              hoveredSymbol.prevDisplayValue !== hoveredSymbol.displayValue && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[var(--c-text-dim)]">{pick('Giá trị chu kỳ trước:', 'Previous Value:')}</span>
+                  <span className="font-semibold text-[var(--c-text-dim)]">
+                    {hoveredSymbol.prevDisplayValue}
+                    {hoveredSymbol.unit && (
+                      <span className="ml-1 text-[10px] font-normal">{hoveredSymbol.unit}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+            {hoveredSymbol.unit && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[var(--c-text-dim)]">{pick('Đơn vị đo:', 'Unit:')}</span>
+                <span className="font-medium text-[var(--c-text)]">{hoveredSymbol.unit}</span>
+              </div>
+            )}
+            {hoveredSymbol.connectionPoint && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[var(--c-text-dim)]">{pick('Điểm kết nối:', 'Connection Point:')}</span>
+                <span className="font-medium text-[var(--c-accent)]">
+                  {hoveredSymbol.connectionPoint}
+                </span>
+              </div>
+            )}
+            {hoveredSymbol.pointName && hoveredSymbol.pointName !== hoveredSymbol.name && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[var(--c-text-dim)]">{pick('Tên điểm:', 'Point Name:')}</span>
+                <span className="font-medium text-[var(--c-text)]">
+                  {hoveredSymbol.pointName}
                 </span>
               </div>
             )}
             {hoveredSymbol.quality && (
-              <div className="flex items-center justify-between gap-3 text-[11px]">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-[var(--c-text-dim)]">{pick('Chất lượng:', 'Quality:')}</span>
-                <span className="font-mono text-[var(--c-text-dim)]">
-                  {hoveredSymbol.quality}
-                </span>
-              </div>
-            )}
-            {hoveredSymbol.pointName && (
-              <div className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-[var(--c-text-dim)]">{pick('Điểm liên kết:', 'Bound point:')}</span>
-                <span className="font-mono font-medium text-[var(--c-text)]">
-                  {hoveredSymbol.pointName}
-                </span>
+                <span className="text-[var(--c-text-dim)]">{hoveredSymbol.quality}</span>
               </div>
             )}
             {hoveredSymbol.kind && (
@@ -1306,7 +1893,7 @@ export function StSimulatedSourceViewer({
               </div>
             )}
             {hoveredSymbol.description && (
-              <div className="mt-1 rounded bg-[var(--c-surface-2)] p-1 font-mono text-[11px] text-[var(--c-text-dim)]">
+              <div className="mt-1 rounded bg-[var(--c-surface-2)] p-1.5 text-[10px] text-[var(--c-text-dim)] whitespace-pre-wrap">
                 {hoveredSymbol.description}
               </div>
             )}
